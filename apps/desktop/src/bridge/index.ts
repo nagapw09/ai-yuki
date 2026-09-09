@@ -10,6 +10,9 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
+import { emit } from '@tauri-apps/api/event'
+
+import type { OrbState } from '../state/types'
 
 // ── Типы, зеркалящие yuki-system ────────────────────────────────────────────────
 
@@ -163,8 +166,25 @@ export const clipboardWrite = (text: string) => invoke<void>('clipboard_write', 
 
 // ── Экран (ТЗ §6) ───────────────────────────────────────────────────────────────
 
-export const screenCapture = (displayIndex?: number) =>
-  invoke<ScreenCapture>('screen_capture', { displayIndex: displayIndex ?? null })
+/** Прямоугольник в координатах монитора. */
+export interface CaptureRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export const screenCapture = (options?: {
+  displayIndex?: number
+  region?: CaptureRegion
+  /** Ограничение ширины; 0 — без ограничения. */
+  maxWidth?: number
+}) =>
+  invoke<ScreenCapture>('screen_capture', {
+    displayIndex: options?.displayIndex ?? null,
+    region: options?.region ?? null,
+    maxWidth: options?.maxWidth ?? null,
+  })
 export const screenCaptureWindow = (windowId: number) =>
   invoke<ScreenCapture>('screen_capture_window', { windowId })
 export const accessibilityTree = (windowId?: number) =>
@@ -333,6 +353,48 @@ export interface CalendarEvent {
 }
 
 export const calendarAccounts = () => invoke<CalendarAccount[]>('calendar_accounts')
+
+// ── Аватар (ТЗ §12) ────────────────────────────────────────────
+
+export interface AvatarStatus {
+  enabled: boolean
+  /** Путь к модели; пустая строка — модель не выбрана. */
+  model: string
+  /** Существует ли файл модели прямо сейчас. */
+  modelPresent: boolean
+  clickThrough: boolean
+  alwaysOnTop: boolean
+  open: boolean
+}
+
+/** Состояние, которое главное окно транслирует аватару. */
+export interface AvatarSignal {
+  state: OrbState
+  /** Громкость 0…1, когда она известна. */
+  audioLevel: number
+}
+
+/** Имя события состояния аватара. */
+export const AVATAR_EVENT = 'yuki://avatar-state'
+
+export const avatarStatus = () => invoke<AvatarStatus>('avatar_status')
+export const avatarOpen = () => invoke<AvatarStatus>('avatar_open')
+export const avatarClose = () => invoke<void>('avatar_close')
+export const avatarSetModel = (path: string) =>
+  invoke<AvatarStatus>('avatar_set_model', { path })
+export const avatarSetClickThrough = (enabled: boolean) =>
+  invoke<void>('avatar_set_click_through', { enabled })
+export const avatarSetAlwaysOnTop = (enabled: boolean) =>
+  invoke<void>('avatar_set_always_on_top', { enabled })
+export const avatarRememberPlacement = () => invoke<void>('avatar_remember_placement')
+
+/** Файл модели байтами: его читает Rust, а не WebView. */
+export const avatarModelBytes = () => invoke<ArrayBuffer>('avatar_model_bytes')
+
+/** Трансляция состояния во все окна (ТЗ §12). */
+export const avatarBroadcast = (signal: AvatarSignal) => emit(AVATAR_EVENT, signal)
+
+
 
 export const calendarSetClient = (
   provider: string,

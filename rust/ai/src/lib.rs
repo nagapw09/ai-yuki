@@ -12,6 +12,7 @@
 //! Агентный цикл при этом остаётся в TypeScript: он оркестрирует, а не ходит в сеть.
 
 pub mod anthropic;
+pub mod embeddings;
 pub mod gemini;
 pub mod openai;
 pub mod provider;

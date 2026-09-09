@@ -3,6 +3,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { startVoice, stopVoice } from '../agent/voice'
 import { useUiStore } from '../state/store'
 import {
+  avatarClose,
+  avatarOpen,
+  avatarSetAlwaysOnTop,
+  avatarSetClickThrough,
+  avatarSetModel,
+  avatarStatus,
   calendarAccounts,
   calendarConnect,
   calendarDisconnect,
@@ -25,6 +31,7 @@ import {
   voiceConfigureStt,
   voiceSetVoice,
   voiceStatus,
+  type AvatarStatus,
   type CalendarAccount,
   type PermissionStatus,
   type PrivacyStatus,
@@ -56,6 +63,7 @@ export function Settings() {
         <Providers />
         <Voice />
         <Calendar />
+        <Avatar />
         <Hotkey />
         <Permissions />
       </div>
@@ -364,6 +372,145 @@ function CalendarRow({
         {status && <span className="provider__status">{status}</span>}
       </div>
     </div>
+  )
+}
+
+// ── Аватар (ТЗ §12) ─────────────────────────────────────────────
+
+/**
+ * Окно аватара.
+ *
+ * Модель приносит пользователь: у VRM свои лицензии, и класть чужую
+ * в дистрибутив нельзя. Без модели окно всё равно работает и показывает
+ * те же восемь состояний свечением.
+ */
+function Avatar() {
+  const [status, setStatus] = useState<AvatarStatus | null>(null)
+  const [model, setModel] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(async () => {
+    try {
+      const next = await avatarStatus()
+      setStatus(next)
+      setModel(next.model)
+      setNote(null)
+    } catch (e) {
+      setNote(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  const run = (action: () => Promise<string | null>) => {
+    setBusy(true)
+    action()
+      .then((message) => {
+        setNote(message)
+        return reload()
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  if (!status) {
+    return null
+  }
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Аватар</h3>
+      <p className="settings__hint">
+        Отдельное окно без рамки поверх остальных. Модель — файл .vrm; в поставке
+        её нет, потому что у моделей свои лицензии. Без модели окно покажет
+        свечение в тех же восьми состояниях.
+      </p>
+
+      <div className="provider__row">
+        <input
+          className="settings__input"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder="Путь к файлу .vrm"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              await avatarSetModel(model)
+              return model.trim() === '' ? 'модель убрана' : 'модель сохранена'
+            })
+          }
+        >
+          Сохранить
+        </button>
+      </div>
+
+      <div className="provider__row">
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              if (status.open) {
+                await avatarClose()
+                return 'закрыт'
+              }
+              await avatarOpen()
+              return 'открыт'
+            })
+          }
+        >
+          {status.open ? 'Закрыть аватар' : 'Показать аватар'}
+        </button>
+
+        <label className="hub__checkbox">
+          <input
+            type="checkbox"
+            checked={status.alwaysOnTop}
+            disabled={busy}
+            onChange={(e) =>
+              run(async () => {
+                await avatarSetAlwaysOnTop(e.target.checked)
+                return null
+              })
+            }
+          />
+          поверх всех окон
+        </label>
+
+        <label className="hub__checkbox">
+          <input
+            type="checkbox"
+            checked={status.clickThrough}
+            disabled={busy}
+            onChange={(e) =>
+              run(async () => {
+                await avatarSetClickThrough(e.target.checked)
+                return null
+              })
+            }
+          />
+          {/* Сквозной режим забирает у окна все клики — включая перетаскивание. */}
+          пропускать клики насквозь
+        </label>
+
+        {note && <span className="provider__status">{note}</span>}
+      </div>
+
+      {status.model !== '' && !status.modelPresent && (
+        <p className="settings__error">
+          Файл модели не найден по сохранённому пути — возможно, его переместили.
+        </p>
+      )}
+    </section>
   )
 }
 

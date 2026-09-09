@@ -203,12 +203,32 @@ pub fn clipboard_write(state: State<'_, AppState>, text: String) -> Result<(), S
 
 // ── Экран (ТЗ §6, §30) ──────────────────────────────────────────────────────────
 
+/// Сколько пикселей в ширину уходит модели по умолчанию.
+///
+/// Снимок 2560×1440 в PNG весит около мегабайта, и это мегабайт на каждом
+/// шаге агента. 1280 пикселей — это всё ещё читаемый интерфейс и вчетверо
+/// меньше данных. Когда нужен мелкий текст, есть область — она даёт
+/// полное разрешение без лишнего экрана вокруг.
+const DEFAULT_MAX_WIDTH: u32 = 1280;
+
 #[tauri::command]
 pub fn screen_capture(
     state: State<'_, AppState>,
     display_index: Option<usize>,
+    region: Option<yuki_system::Rect>,
+    max_width: Option<u32>,
 ) -> Result<ScreenCapture, String> {
-    state.adapters.screen.capture(display_index).map_err(err)
+    state
+        .adapters
+        .screen
+        .capture_with(&yuki_system::CaptureOptions {
+            display_index,
+            region,
+            // Ноль от вызывающего — это явное «без ограничения»: бывает нужно
+            // прочитать мелкий текст целиком.
+            max_width: Some(max_width.unwrap_or(DEFAULT_MAX_WIDTH)).filter(|w| *w > 0),
+        })
+        .map_err(err)
 }
 
 #[tauri::command]

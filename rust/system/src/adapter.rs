@@ -73,7 +73,15 @@ pub trait InputAdapter: Send + Sync {
 /// Экран: снимок и accessibility-дерево (ТЗ §6, §30).
 pub trait ScreenAdapter: Send + Sync {
     /// Снимок монитора. `display_index = None` — основной монитор.
-    fn capture(&self, display_index: Option<usize>) -> SystemResult<ScreenCapture>;
+    fn capture(&self, display_index: Option<usize>) -> SystemResult<ScreenCapture> {
+        self.capture_with(&CaptureOptions {
+            display_index,
+            ..Default::default()
+        })
+    }
+
+    /// Снимок с областью и ограничением размера (ТЗ §6).
+    fn capture_with(&self, options: &CaptureOptions) -> SystemResult<ScreenCapture>;
 
     /// Снимок конкретного окна.
     fn capture_window(&self, window_id: u64) -> SystemResult<ScreenCapture>;

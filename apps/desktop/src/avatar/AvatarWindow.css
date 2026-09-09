@@ -1,0 +1,106 @@
+/* Окно аватара (ТЗ §12): без рамки, прозрачное, поверх всех. */
+
+/* Общая с главным окном базовая стилизация красит фон в цвет поверхности.
+   Здесь это означало бы чёрный прямоугольник поверх всех окон. */
+:root[data-window='avatar'],
+:root[data-window='avatar'] body,
+:root[data-window='avatar'] #root {
+  background: transparent !important;
+}
+
+.avatar {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  /* Ни фона, ни полей: всё, что не нарисовано моделью, должно пропускать
+     то, что под окном. */
+  background: transparent;
+  overflow: hidden;
+}
+
+/* Полоса для перетаскивания сверху. Узкая: она забирает клики у аватара,
+   и делать её на всё окно значило бы лишить его любой другой реакции. */
+.avatar__drag {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 28px;
+  z-index: 2;
+}
+
+.avatar__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar__fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  text-align: center;
+}
+
+/* Тот же автомат состояний без модели: свечение, меняющее цвет и темп. */
+.avatar__orb {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #cfe3ff, #4d7fd6 55%, #1b2b4a);
+  box-shadow: 0 0 40px rgba(90, 140, 230, 0.55);
+  animation: avatar-breathe 4s ease-in-out infinite;
+}
+
+.avatar[data-state='listening'] .avatar__orb {
+  animation-duration: 2.4s;
+  box-shadow: 0 0 48px rgba(120, 200, 255, 0.7);
+}
+
+.avatar[data-state='thinking'] .avatar__orb {
+  animation-duration: 6s;
+}
+
+.avatar[data-state='working'] .avatar__orb {
+  animation-duration: 1.4s;
+}
+
+.avatar[data-state='speaking'] .avatar__orb {
+  animation-duration: 1s;
+}
+
+.avatar[data-state='success'] .avatar__orb {
+  background: radial-gradient(circle at 35% 30%, #d8ffe6, #4dd68f 55%, #1b4a30);
+  box-shadow: 0 0 48px rgba(90, 230, 150, 0.65);
+}
+
+.avatar[data-state='error'] .avatar__orb {
+  background: radial-gradient(circle at 35% 30%, #ffd8d8, #d66a6a 55%, #4a1b1b);
+  box-shadow: 0 0 40px rgba(230, 110, 110, 0.6);
+}
+
+.avatar[data-state='sleeping'] .avatar__orb {
+  animation-duration: 9s;
+  opacity: 0.55;
+}
+
+@keyframes avatar-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.avatar__note {
+  margin: 0;
+  max-width: 26ch;
+  color: rgba(235, 240, 250, 0.75);
+  font: 12px/1.5 system-ui, sans-serif;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}

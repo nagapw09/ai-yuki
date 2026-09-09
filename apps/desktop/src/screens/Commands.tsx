@@ -295,6 +295,38 @@ function StepList({
 
   const add = (step: Step) => onChange([...steps, step])
 
+  /**
+   * Перестановка шага.
+   *
+   * Порядок в автоматизации — это смысл, а не оформление: скопировать
+   * текст надо до вставки, а не после. Без перестановки единственный
+   * способ вставить шаг в середину — стереть хвост и набрать заново.
+   */
+  const move = (index: number, delta: number) => {
+    const target = index + delta
+    if (target < 0 || target >= steps.length) return
+
+    const step = steps[index]
+    if (!step) return
+
+    const next = [...steps]
+    next.splice(index, 1)
+    next.splice(target, 0, step)
+    onChange(next)
+  }
+
+  /** Копия шага рядом: чаще всего следующий шаг — почти такой же. */
+  const duplicate = (index: number) => {
+    const step = steps[index]
+    if (!step) return
+
+    const next = [...steps]
+    // Глубокая копия: у ветвления внутри свои шаги, и общий массив
+    // превратил бы правку копии в правку оригинала.
+    next.splice(index + 1, 0, structuredClone(step))
+    onChange(next)
+  }
+
   return (
     <div className="steps" data-depth={depth}>
       {steps.map((step, index) => (
@@ -354,6 +386,32 @@ function StepList({
               />
             )}
 
+            <button
+              type="button"
+              className="commands__link"
+              disabled={index === 0}
+              title="выше"
+              onClick={() => move(index, -1)}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="commands__link"
+              disabled={index === steps.length - 1}
+              title="ниже"
+              onClick={() => move(index, 1)}
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              className="commands__link"
+              title="дублировать"
+              onClick={() => duplicate(index)}
+            >
+              ⧉
+            </button>
             <button
               type="button"
               className="commands__link commands__link--danger"

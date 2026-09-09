@@ -26,7 +26,7 @@ pub struct WindowInfo {
     pub is_minimized: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Rect {
     pub x: i32,
@@ -133,6 +133,23 @@ pub struct ScreenCapture {
     pub png_base64: String,
     /// Индекс монитора, с которого сделан снимок.
     pub display_index: usize,
+}
+
+/// Что и как снимать (ТЗ §6).
+///
+/// Отдельной структурой, а не тремя аргументами: снимок всего экрана в полном
+/// разрешении стоит сотни килобайт на каждый шаг агента, и параметры, которые
+/// это уменьшают, должны быть видны в одном месте, а не разъезжаться по
+/// вызовам.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptureOptions {
+    /// Монитор; `None` — основной.
+    pub display_index: Option<usize>,
+    /// Прямоугольник в координатах монитора; `None` — весь экран.
+    pub region: Option<Rect>,
+    /// Ограничение ширины: кадр уменьшается пропорционально, если шире.
+    pub max_width: Option<u32>,
 }
 
 /// Узел accessibility-дерева (ТЗ §6).

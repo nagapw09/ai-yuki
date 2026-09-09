@@ -18,7 +18,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# macos-private-api нужен ради прозрачного окна аватара на macOS (ТЗ §12):
+# без него Tauri отказывается создавать transparent-окно.
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-notification = "2"
 tokio = { workspace = true }
 serde = { workspace = true }

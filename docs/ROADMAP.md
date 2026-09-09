@@ -107,12 +107,20 @@ AppUserModelID, которого нет у запуска из `target/debug` �
 
 ## Фаза 4 — MVP-2 (ТЗ §39)
 
-- [ ] Visual Command Builder, advanced automation
-- [ ] Ollama + LM Studio, Local Only режим (§29)
-- [ ] Plugin SDK и self-extension workflow (§20, §18)
-- [ ] Calendar: Google, Outlook (§25)
-- [ ] VRM avatar со всеми состояниями и lip-sync (§12)
-- [ ] Advanced memory, advanced computer vision
+- [x] Ollama + LM Studio, Local Only режим (§29)
+- [x] Plugin SDK и self-extension workflow (§20, §18)
+- [x] Calendar: Google, Outlook (§25)
+- [~] VRM avatar: восемь состояний, blink, мимика, idle-анимации, прозрачное
+      окно поверх всех, click-through, resize и запоминание места. Lip-sync —
+      приближение по фазе речи, а не по звуку: системный синтез (SAPI,
+      AVSpeechSynthesizer) не отдаёт звуковой буфер, анализировать нечего
+- [~] Advanced memory: семантический поиск на эмбеддингах поверх текстового.
+      Консолидация эпизодов в долгосрочные факты не сделана
+- [~] Advanced computer vision: область снимка и уменьшение до 1280 px.
+      OCR не добавлен — тянуть tesseract в оба дистрибутива дорого, а
+      accessibility-дерево закрывает большинство случаев точнее
+- [~] Visual Command Builder: перестановка и дублирование шагов, ветвления,
+      прогон с показом каждого шага. Полотна с перетаскиванием мышью нет
 
 ## Фаза 5 — Version 2 (ТЗ §40)
 

@@ -5,6 +5,7 @@
 
 pub mod ai;
 pub mod automation;
+pub mod avatar;
 pub mod calendar;
 pub mod capabilities;
 pub mod catalog;
@@ -55,6 +56,8 @@ pub fn run() {
             hotkeys::init(app.handle());
             reminders::spawn_scheduler(app.handle().clone());
             capabilities::connect_enabled(app.handle().clone());
+            // Окно аватара возвращается туда же, где его оставили (ТЗ §12).
+            avatar::restore(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -153,6 +156,15 @@ pub fn run() {
             capabilities::mcp_test,
             capabilities::mcp_tools,
             capabilities::mcp_call,
+            // аватар (ТЗ §12)
+            avatar::avatar_status,
+            avatar::avatar_open,
+            avatar::avatar_close,
+            avatar::avatar_set_click_through,
+            avatar::avatar_set_always_on_top,
+            avatar::avatar_set_model,
+            avatar::avatar_model_bytes,
+            avatar::avatar_remember_placement,
             // календари (ТЗ §25)
             calendar::calendar_accounts,
             calendar::calendar_set_client,
@@ -175,7 +187,9 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Микрофон и синтезатор держат устройства ОС: закрыть их надо явно,
             // иначе процесс уходит, а индикатор записи у пользователя остаётся.
-            if matches!(event, tauri::WindowEvent::Destroyed) {
+            if matches!(event, tauri::WindowEvent::Destroyed)
+                && window.label() != avatar::WINDOW_LABEL
+            {
                 voice::shutdown(window.app_handle());
             }
         })

@@ -3,6 +3,7 @@ import { useCallback, useEffect } from 'react'
 import { initTriggers } from './agent/commands'
 import { sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
+import { startAvatarBroadcast } from './avatar/broadcast'
 import { isTauri, providerList, systemInfo } from './bridge'
 import { ConfirmDialog } from './design-system/components/ConfirmDialog'
 import { Rail } from './design-system/components/Rail'
@@ -30,6 +31,9 @@ export function App() {
     // приложению работать: без триггеров команды остаются доступны вручную.
     if (isTauri()) void initTriggers().catch(() => undefined)
   }, [])
+
+  // Аватар живёт в соседнем окне и состояние знает только отсюда (ТЗ §12).
+  useEffect(() => startAvatarBroadcast(), [])
 
   const handleSubmit = useCallback(
     (text: string) => {

@@ -181,6 +181,9 @@ pub fn memory_save(
                    content    = excluded.content,
                    source     = excluded.source,
                    expires_at = excluded.expires_at,
+                   -- Старый вектор описывает прежний текст. Оставить его — значит
+                   -- искать по тому, чего в памяти больше нет.
+                   embedding  = NULL,
                    updated_at = unixepoch()",
                 rusqlite::params![id, kind, key, content.trim(), source, expires_at],
             )
@@ -215,33 +218,113 @@ pub fn memory_save(
         .map_err(err)
 }
 
-/// Поиск по подстроке.
+/// Поиск по памяти: смысл плюс подстрока (ТЗ §9).
 ///
-/// Векторный поиск отложен в фазу 4 вместе с эмбеддингами (колонка `embedding`
-/// в схеме уже есть). Подстрока — честная замена на текущем объёме: локальная
-/// память измеряется десятками записей, а не тысячами.
+/// # Почему два способа, а не один
+///
+/// Подстрока находит точное слово и не находит перефразированное: «как меня
+/// зовут» не совпадёт с «Алексей». Эмбеддинги находят близкое по смыслу, но
+/// проваливают редкие имена собственные и куски путей, где важна буква в букву.
+/// Поэтому берётся лучшее из двух: точное попадание получает гарантированный
+/// вес, смысловое — свою близость, и побеждает большее.
+///
+/// Если подключения с эмбеддингами нет, поиск остаётся текстовым — молча
+/// деградировать здесь можно: результат хуже, но правильный.
 #[tauri::command]
-pub fn memory_search(
+pub async fn memory_search(
     state: State<'_, AppState>,
     query: String,
     limit: Option<u32>,
 ) -> Result<Vec<MemoryRecord>, String> {
     prune_expired(&state.storage).map_err(err)?;
-    let limit = limit.unwrap_or(20).min(200);
-    let needle = format!("%{}%", query.trim().to_lowercase());
 
+    let limit = limit.unwrap_or(20).min(200) as usize;
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        // Пустой запрос — это «покажи всё», а не «ничего не найдено».
+        let mut all = memory_list(state, None)?;
+        all.truncate(limit);
+        return Ok(all);
+    }
+
+    let candidates = load_all(&state)?;
+
+    // Индексируем то, что ещё не проиндексировано, и заодно получаем вектор
+    // запроса. Оба шага — один поход к сервису.
+    let query_vector = index_missing(&state, &candidates, &query).await;
+
+    let needle = query.to_lowercase();
+    let mut scored: Vec<(f32, MemoryRecord)> = candidates
+        .into_iter()
+        .map(|(record, embedding)| {
+            let text_hit = record.content.to_lowercase().contains(&needle)
+                || record
+                    .key
+                    .as_deref()
+                    .is_some_and(|k| k.to_lowercase().contains(&needle));
+
+            let semantic = match (&query_vector, &embedding) {
+                (Some(q), Some(e)) => yuki_ai::embeddings::cosine(q, e),
+                _ => 0.0,
+            };
+
+            (
+                if text_hit {
+                    semantic.max(TEXT_HIT_SCORE)
+                } else {
+                    semantic
+                },
+                record,
+            )
+        })
+        .filter(|(score, _)| *score >= RELEVANCE_FLOOR)
+        .collect();
+
+    // При равном счёте выигрывает более свежая запись: одинаково подходящие
+    // воспоминания различаются только временем.
+    scored.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(b.1.updated_at.cmp(&a.1.updated_at))
+    });
+
+    Ok(scored
+        .into_iter()
+        .take(limit)
+        .map(|(_, record)| record)
+        .collect())
+}
+
+/// Счёт точного текстового совпадения.
+///
+/// Ниже единицы: очень близкое по смыслу совпадение должно уметь его обойти.
+/// Выше порога отсечения — точное вхождение слова всегда достойно показа.
+const TEXT_HIT_SCORE: f32 = 0.75;
+
+/// Ниже этой близости запись считается посторонней.
+///
+/// Значение выбрано по свойству косинусной близости коротких текстов: пары
+/// несвязанных фраз держатся около 0.1–0.2, связанные начинаются с 0.3.
+const RELEVANCE_FLOOR: f32 = 0.28;
+
+/// Сколько записей индексируется за один заход.
+///
+/// Ограничение бережёт и время, и деньги: память индексируется по мере
+/// обращений, а не вся сразу при первом поиске.
+const INDEX_BATCH: usize = 64;
+
+/// Читает всю память вместе с сохранёнными векторами.
+fn load_all(state: &AppState) -> Result<Vec<(MemoryRecord, Option<Vec<f32>>)>, String> {
     state
         .storage
         .with_conn(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, kind, key, content, source, confidence, expires_at,
-                        created_at, updated_at
-                 FROM memories
-                 WHERE lower(content) LIKE ?1 OR lower(coalesce(key, '')) LIKE ?1
-                 ORDER BY updated_at DESC LIMIT ?2",
+                        created_at, updated_at, embedding
+                 FROM memories ORDER BY updated_at DESC",
             )?;
-            let rows = stmt.query_map(rusqlite::params![needle, limit], |r| {
-                Ok(MemoryRecord {
+            let rows = stmt.query_map([], |r| {
+                let record = MemoryRecord {
                     id: r.get(0)?,
                     kind: r.get(1)?,
                     key: r.get(2)?,
@@ -251,11 +334,130 @@ pub fn memory_search(
                     expires_at: r.get(6)?,
                     created_at: r.get(7)?,
                     updated_at: r.get(8)?,
-                })
+                };
+                let blob: Option<Vec<u8>> = r.get(9)?;
+                Ok((
+                    record,
+                    blob.as_deref().and_then(yuki_ai::embeddings::from_bytes),
+                ))
             })?;
             rows.collect()
         })
         .map_err(err)
+}
+
+/// Куда обращаться за эмбеддингами.
+///
+/// Тот же принцип, что и у распознавания речи: подходит любое подключение
+/// протокола OpenAI, включая локальные Ollama и LM Studio, — а Anthropic и
+/// Gemini сюда не годятся, потому что такого эндпоинта у них нет.
+fn embedding_endpoint(state: &AppState) -> Option<(String, Option<String>, String)> {
+    let chosen = setting(state, "memory.embedding.provider");
+
+    let row: Option<(String, Option<String>)> = state
+        .storage
+        .with_conn(|conn| {
+            let result = match &chosen {
+                Some(id) => conn.query_row(
+                    "SELECT base_url, secret_ref FROM providers WHERE id = ?1 AND enabled = 1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                ),
+                None => conn.query_row(
+                    "SELECT base_url, secret_ref FROM providers
+                     WHERE enabled = 1
+                       AND kind IN ('openai', 'openrouter', 'ollama', 'lmstudio', 'custom')
+                     ORDER BY is_default DESC LIMIT 1",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                ),
+            };
+            result.map(Some).or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other),
+            })
+        })
+        .ok()
+        .flatten();
+
+    let (base_url, secret_ref) = row?;
+
+    // Режим Local Only распространяется и на память: эмбеддинг несёт в себе
+    // содержание записи, и отправить его в облако — та же утечка (ТЗ §29).
+    crate::privacy::ensure_allowed(&state.storage, &base_url, "эмбеддинги").ok()?;
+
+    Some((
+        base_url,
+        secret_ref
+            .as_deref()
+            .and_then(|r| crate::secrets::get(r).ok().flatten()),
+        setting(state, "memory.embedding.model")
+            .unwrap_or_else(|| yuki_ai::embeddings::DEFAULT_MODEL.to_string()),
+    ))
+}
+
+fn setting(state: &AppState, key: &str) -> Option<String> {
+    state
+        .storage
+        .with_conn(|conn| {
+            conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get::<_, String>(0)
+            })
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other),
+            })
+        })
+        .ok()
+        .flatten()
+}
+
+/// Индексирует непроиндексированные записи и возвращает вектор запроса.
+///
+/// Сбой сервиса эмбеддингов не должен ломать поиск: возвращается `None`, и
+/// поиск остаётся текстовым.
+async fn index_missing(
+    state: &AppState,
+    candidates: &[(MemoryRecord, Option<Vec<f32>>)],
+    query: &str,
+) -> Option<Vec<f32>> {
+    let (base_url, api_key, model) = embedding_endpoint(state)?;
+
+    // Первым в пакете идёт запрос, дальше — записи без вектора.
+    let pending: Vec<&MemoryRecord> = candidates
+        .iter()
+        .filter(|(_, embedding)| embedding.is_none())
+        .map(|(record, _)| record)
+        .take(INDEX_BATCH)
+        .collect();
+
+    let mut texts = Vec::with_capacity(pending.len() + 1);
+    texts.push(query.to_string());
+    for record in &pending {
+        // Ключ входит в текст: «имя пользователя» рядом с «Алексей» делает
+        // запись находимой по вопросу, а не только по ответу.
+        texts.push(match &record.key {
+            Some(key) => format!("{key}: {}", record.content),
+            None => record.content.clone(),
+        });
+    }
+
+    let vectors = yuki_ai::embeddings::embed(&state.http, &base_url, api_key.as_deref(), &model, &texts)
+        .await
+        .ok()?;
+
+    for (record, vector) in pending.iter().zip(vectors.iter().skip(1)) {
+        let bytes = yuki_ai::embeddings::to_bytes(vector);
+        let _ = state.storage.with_conn(|conn| {
+            conn.execute(
+                "UPDATE memories SET embedding = ?2 WHERE id = ?1",
+                rusqlite::params![record.id, bytes],
+            )
+        });
+    }
+
+    vectors.into_iter().next()
 }
 
 #[tauri::command]

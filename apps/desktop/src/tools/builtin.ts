@@ -438,24 +438,51 @@ const screenCapture: Tool = {
     'Делает снимок монитора и показывает его тебе. Это запасной путь: сперва ' +
     'пробуй read_ui — дерево интерфейса точнее, дешевле и содержит готовые ' +
     'действия. Снимок нужен там, где важна графика: изображения, диаграммы, ' +
-    'приложения без accessibility. Описывай только то, что действительно видишь.',
+    'приложения без accessibility. Описывай только то, что действительно видишь. ' +
+    'Снимок уменьшается до 1280 пикселей в ширину. Если надо разобрать мелкий текст, ' +
+    'бери region — область в координатах экрана: она приходит в полном разрешении ' +
+    'и весит меньше целого экрана. Координаты элементов есть в ответе read_ui.',
   permissions: ['screen_recording'],
   risk: 'medium',
   idempotent: true,
   inputSchema: {
     type: 'object',
-    properties: { displayIndex: { type: 'number' } },
+    properties: {
+      displayIndex: { type: 'number' },
+      region: {
+        type: 'object',
+        description: 'Область экрана: x, y, width, height в пикселях',
+        properties: {
+          x: { type: 'number' },
+          y: { type: 'number' },
+          width: { type: 'number' },
+          height: { type: 'number' },
+        },
+        required: ['x', 'y', 'width', 'height'],
+      },
+      maxWidth: {
+        type: 'number',
+        description: 'Ограничение ширины в пикселях; 0 — без уменьшения',
+      },
+    },
     additionalProperties: false,
   },
   execute: async (input, ctx) => {
-    const { displayIndex } = input as { displayIndex?: number }
-    const shot = await bridge.screenCapture(displayIndex)
+    const options = input as {
+      displayIndex?: number
+      region?: bridge.CaptureRegion
+      maxWidth?: number
+    }
+    const shot = await bridge.screenCapture(options)
 
     // Картинка уходит модели отдельным каналом, а в результат и журнал
     // попадают только размеры: PNG весит сотни килобайт, и хранить его
     // в журнале активности (ТЗ §23) незачем.
     ctx.attach({ mediaType: 'image/png', data: shot.pngBase64 })
 
+    // Размер возвращается фактический, после кадрирования и уменьшения:
+    // по нему модель пересчитывает координаты, и обещанный размер вместо реального
+    // увёл бы клик мимо.
     return { width: shot.width, height: shot.height, displayIndex: shot.displayIndex }
   },
 }
