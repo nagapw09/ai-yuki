@@ -105,6 +105,16 @@ export const useUiStore = create<UiState>((set, get) => ({
   setNextEvent: (nextEvent) => set({ nextEvent }),
 }))
 
-/** Активные задачи — то, что показывает нижняя полоса Orbital-экрана (ТЗ §13). */
-export const selectActiveTasks = (s: UiState): Task[] =>
-  s.tasks.filter((t) => t.status === 'running' || t.status === 'queued' || t.status === 'waiting_user')
+/**
+ * Активные задачи — то, что показывает нижняя полоса Orbital-экрана (ТЗ §13).
+ *
+ * Функция принимает массив, а не состояние целиком, и применяется через `useMemo`
+ * в компоненте. Отдавать её напрямую в `useUiStore` нельзя: `filter` создаёт новый
+ * массив на каждый вызов, а `useSyncExternalStore` сравнивает снимки по ссылке —
+ * это бесконечный цикл перерисовки, а не просто лишний рендер.
+ */
+export function activeTasks(tasks: readonly Task[]): Task[] {
+  return tasks.filter(
+    (t) => t.status === 'running' || t.status === 'queued' || t.status === 'waiting_user',
+  )
+}

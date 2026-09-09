@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App'
+import { ErrorBoundary } from './design-system/components/ErrorBoundary'
 import { I18nProvider } from './i18n'
 import './design-system/tokens.css'
 import './design-system/base.css'
@@ -11,8 +12,10 @@ if (!root) throw new Error('Корневой элемент #root не найд�
 
 createRoot(root).render(
   <StrictMode>
-    <I18nProvider>
-      <App />
-    </I18nProvider>
+    <ErrorBoundary>
+      <I18nProvider>
+        <App />
+      </I18nProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )

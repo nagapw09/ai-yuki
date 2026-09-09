@@ -4,7 +4,7 @@ import { CommandBar } from '../design-system/components/CommandBar'
 import { Orb } from '../design-system/components/Orb'
 import { ActivityChip, StatusPill } from '../design-system/components/Pills'
 import { useI18n, useT } from '../i18n'
-import { selectActiveTasks, useUiStore } from '../state/store'
+import { activeTasks, useUiStore } from '../state/store'
 import type { OrbState } from '../state/types'
 import './Orbital.css'
 
@@ -32,7 +32,9 @@ export function Orbital({ onSubmit, onToggleVoice }: OrbitalProps) {
   const headline = useUiStore((s) => s.headline)
   const connection = useUiStore((s) => s.connection)
   const nextEvent = useUiStore((s) => s.nextEvent)
-  const activeTasks = useUiStore(selectActiveTasks)
+  const tasks = useUiStore((s) => s.tasks)
+
+  const running = useMemo(() => activeTasks(tasks), [tasks])
 
   const now = useClock()
 
@@ -77,11 +79,11 @@ export function Orbital({ onSubmit, onToggleVoice }: OrbitalProps) {
         <ActivityChip
           label={t('orbital.tasks')}
           value={
-            activeTasks.length > 0
-              ? t('orbital.tasksCount', { count: activeTasks.length })
+            running.length > 0
+              ? t('orbital.tasksCount', { count: running.length })
               : t('orbital.noTasks')
           }
-          empty={activeTasks.length === 0}
+          empty={running.length === 0}
         />
         <ActivityChip
           label={t('orbital.nextEvent')}
