@@ -115,6 +115,17 @@ fn resolve(state: &AppState, id: Option<&str>) -> Result<(ProviderConfig, String
     let kind = ProviderKind::from_str(&raw_kind)
         .ok_or_else(|| format!("неизвестный тип провайдера: {raw_kind}"))?;
 
+    let base_url = if base_url.trim().is_empty() {
+        kind.default_base_url().to_string()
+    } else {
+        base_url
+    };
+
+    // Local Only (ТЗ §29) проверяется здесь, а не при выборе провайдера: через эту
+    // функцию проходят все обращения к модели, и оставить проверку выше значило бы
+    // оставить путь в обход.
+    crate::privacy::ensure_allowed(&state.storage, &base_url, "провайдер")?;
+
     let api_key = secret_ref
         .as_deref()
         .and_then(|r| crate::secrets::get(r).ok().flatten());
@@ -123,11 +134,7 @@ fn resolve(state: &AppState, id: Option<&str>) -> Result<(ProviderConfig, String
         ProviderConfig {
             kind,
             requires_key: yuki_ai::requires_key(&raw_kind),
-            base_url: if base_url.trim().is_empty() {
-                kind.default_base_url().to_string()
-            } else {
-                base_url
-            },
+            base_url,
             api_key,
         },
         model,

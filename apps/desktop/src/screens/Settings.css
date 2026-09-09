@@ -39,6 +39,22 @@
   gap: var(--space-3);
 }
 
+/* Список помех режима Local Only (ТЗ §29). */
+.settings__blockers {
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.settings__blocker {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
 .settings__error {
   margin: 0 0 var(--space-4);
   color: var(--accent-error);

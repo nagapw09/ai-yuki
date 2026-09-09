@@ -11,6 +11,8 @@ pub mod commands;
 pub mod hotkeys;
 pub mod memory;
 pub mod permissions;
+pub mod plugins;
+pub mod privacy;
 pub mod reminders;
 pub mod secrets;
 pub mod state;
@@ -112,6 +114,9 @@ pub fn run() {
             ai::provider_set_default,
             ai::provider_test,
             ai::chat_send,
+            // приватность (ТЗ §29)
+            privacy::privacy_status,
+            privacy::privacy_set_local_only,
             // память (ТЗ §9)
             memory::memory_list,
             memory::memory_save,
@@ -147,6 +152,12 @@ pub fn run() {
             capabilities::mcp_test,
             capabilities::mcp_tools,
             capabilities::mcp_call,
+            // плагины (ТЗ §18, §20)
+            plugins::plugin_list,
+            plugins::plugin_review,
+            plugins::plugin_install,
+            plugins::plugin_remove,
+            plugins::plugin_scaffold,
             // автоматизации (ТЗ §16)
             automation::command_list,
             automation::command_save,

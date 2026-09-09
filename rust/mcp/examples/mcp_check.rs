@@ -26,6 +26,7 @@ async fn main() {
         command,
         args: rest,
         env: HashMap::new(),
+        cwd: None,
     };
 
     let http = reqwest::Client::new();

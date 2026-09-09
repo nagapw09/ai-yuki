@@ -54,8 +54,16 @@ impl StdioTransport {
         command: &str,
         args: &[String],
         env: &HashMap<String, String>,
+        cwd: Option<&str>,
     ) -> McpResult<Self> {
-        let mut child = Command::new(command)
+        let mut builder = Command::new(command);
+        // Без явного каталога процесс наследует каталог Yuki — для плагина
+        // это чужое место, где нет ни его файлов, ни его зависимостей.
+        if let Some(directory) = cwd {
+            builder.current_dir(directory);
+        }
+
+        let mut child = builder
             .args(args)
             .envs(env)
             .stdin(Stdio::piped())

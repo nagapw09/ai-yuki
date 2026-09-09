@@ -31,6 +31,7 @@ import { speakIfVoice } from './voice'
 import { CAPABILITY_TOOLS, mcpTools } from '../tools/capabilities'
 import { COMMAND_TOOLS } from '../tools/commands'
 import { MEMORY_TOOLS } from '../tools/memory'
+import { PLUGIN_TOOLS } from '../tools/plugins'
 
 /** Реестр создаётся один раз: инструменты не меняются в течение сессии. */
 const registry = new ToolRegistry()
@@ -38,6 +39,7 @@ const registry = new ToolRegistry()
   .registerAll(MEMORY_TOOLS)
   .registerAll(CAPABILITY_TOOLS)
   .registerAll(COMMAND_TOOLS)
+  .registerAll(PLUGIN_TOOLS)
 
 /**
  * Подтягивает инструменты подключённых MCP-серверов (ТЗ §19).

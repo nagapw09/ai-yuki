@@ -157,6 +157,10 @@ fn stt_config(state: &AppState) -> Result<SttConfig, String> {
         ));
     }
 
+    // Распознавание увозит звук голоса целиком — в режиме Local Only (ТЗ §29) это
+    // точно такая же утечка, как и отправка реплики в облачную модель.
+    crate::privacy::ensure_allowed(&state.storage, &base_url, "распознавание речи")?;
+
     Ok(SttConfig {
         base_url,
         api_key: secret_ref

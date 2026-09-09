@@ -19,6 +19,12 @@ pub enum Transport {
         command: String,
         args: Vec<String>,
         env: HashMap<String, String>,
+        /// Рабочий каталог процесса.
+        ///
+        /// Нужен плагинам (ТЗ §20): их сервер запускается из своей папки
+        /// и ищет соседние файлы относительно неё, а не относительно того,
+        /// где оказался запущен сам ассистент.
+        cwd: Option<String>,
     },
     /// Удалённый сервер по HTTP.
     Http {
@@ -45,6 +51,7 @@ impl Transport {
                 })?,
                 args,
                 env,
+                cwd: None,
             }),
             // sse и http различаются формой ответа, а не запросом: клиент
             // объявляет, что принимает оба, и разбирает то, что пришло.
@@ -53,6 +60,25 @@ impl Transport {
                 authorization,
             }),
             other => Err(McpError::UnknownTransport(other.to_string())),
+        }
+    }
+
+    /// Задаёт рабочий каталог для stdio.
+    ///
+    /// Отдельным методом, а не ещё одним аргументом [`Transport::from_parts`]:
+    /// каталог есть только у плагинов, а у остальных серверов его нет,
+    /// и добавлять всем вызовам `None` ради одного случая — шум.
+    pub fn with_cwd(self, directory: Option<String>) -> Self {
+        match self {
+            Transport::Stdio {
+                command, args, env, ..
+            } => Transport::Stdio {
+                command,
+                args,
+                env,
+                cwd: directory,
+            },
+            other => other,
         }
     }
 }
@@ -80,11 +106,16 @@ impl McpClient {
     /// отображать в UI и объяснять пользователю.
     pub async fn connect(transport: Transport, http: reqwest::Client) -> McpResult<Self> {
         let channel = match transport {
-            Transport::Stdio { command, args, env } => {
+            Transport::Stdio {
+                command,
+                args,
+                env,
+                cwd,
+            } => {
                 // Запуск процесса блокирует, поэтому уводим его с исполнителя
                 // асинхронных задач.
                 let spawned = tokio_spawn_blocking(move || {
-                    StdioTransport::spawn(&command, &args, &env)
+                    StdioTransport::spawn(&command, &args, &env, cwd.as_deref())
                 })
                 .await?;
                 Channel::Stdio(Arc::new(spawned?))

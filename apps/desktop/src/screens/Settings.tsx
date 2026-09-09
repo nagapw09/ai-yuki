@@ -8,6 +8,8 @@ import {
   permissionHint,
   permissionSet,
   permissionsList,
+  privacySetLocalOnly,
+  privacyStatus,
   providerClearKey,
   providerList,
   providerSave,
@@ -19,6 +21,7 @@ import {
   voiceSetVoice,
   voiceStatus,
   type PermissionStatus,
+  type PrivacyStatus,
   type ProviderRecord,
   type VoiceStatus as VoiceStatusRecord,
 } from '../bridge'
@@ -43,6 +46,7 @@ export function Settings() {
     <div className="settings">
       <div className="settings__inner">
         <CapabilitiesEntry />
+        <Privacy />
         <Providers />
         <Voice />
         <Hotkey />
@@ -295,6 +299,94 @@ function Hotkey() {
 }
 
 // ── Провайдеры (ТЗ §4) ──────────────────────────────────────────────────────────
+
+// ── Local Only (ТЗ §29) ────────────────────────────────────────────────────
+
+/**
+ * Режим «только локально».
+ *
+ * Секция говорит две вещи и не больше: что режим гарантирует и что ему
+ * мешает сейчас. Включённый режим при облачном провайдере — это не
+ * ошибка настройки, а блокировка запросов, и человек должен видеть это
+ * до того, как получит отказ в ответ на реплику.
+ */
+function Privacy() {
+  const [status, setStatus] = useState<PrivacyStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(async () => {
+    try {
+      setStatus(await privacyStatus())
+      setError(null)
+    } catch (e) {
+      setError(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  const toggle = () => {
+    if (!status) return
+    setBusy(true)
+    privacySetLocalOnly(!status.localOnly)
+      .then(setStatus)
+      .catch((e: unknown) => setError(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Приватность</h3>
+      <p className="settings__hint">
+        В режиме Local Only ни одна реплика и ни одна запись голоса не уходят
+        с машины: разрешены только модель и распознавание на localhost —
+        например Ollama или LM Studio. Память и синтез речи локальны всегда.
+        Режим не отключает сеть целиком: включённые вами MCP-серверы и
+        открытие ссылок продолжают работать.
+      </p>
+
+      {error && <p className="settings__error">{error}</p>}
+
+      {status && (
+        <>
+          <div className="provider__row">
+            <button type="button" className="settings__button" disabled={busy} onClick={toggle}>
+              {status.localOnly ? 'Выключить Local Only' : 'Включить Local Only'}
+            </button>
+            <span className="provider__status">
+              {status.localOnly ? 'режим включён' : 'режим выключен'}
+            </span>
+          </div>
+
+          {status.blockers.length > 0 && (
+            /* Помехи показываются и при выключенном режиме: так видно
+               заранее, что придётся поменять, а не после первого отказа. */
+            <ul className="settings__blockers">
+              {status.blockers.map((blocker) => (
+                <li key={blocker} className="settings__blocker">
+                  {status.localOnly ? 'заблокировано: ' : 'помешает: '}
+                  {blocker}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {status.localOnly && status.blockers.length === 0 && (
+            <p className="settings__hint">
+              Всё локально: {status.providerLabel ?? 'модель'}
+              {status.sttUrl === null ? '' : ', распознавание на ' + status.sttUrl}.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+// ── Провайдеры (ТЗ §4) ────────────────────────────────────────────────────
 
 function Providers() {
   const [providers, setProviders] = useState<ProviderRecord[]>([])

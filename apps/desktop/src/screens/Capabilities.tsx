@@ -8,8 +8,14 @@ import {
   integrationsList,
   mcpAdd,
   mcpTest,
+  pluginInstall,
+  pluginList,
+  pluginRemove,
+  pluginReview,
   type CapabilityRecord,
   type Integration,
+  type PluginRecord,
+  type PluginReview,
 } from '../bridge'
 import { useUiStore } from '../state/store'
 import './Capabilities.css'
@@ -29,13 +35,19 @@ export function Capabilities() {
   const setScreen = useUiStore((s) => s.setScreen)
   const [installed, setInstalled] = useState<CapabilityRecord[]>([])
   const [available, setAvailable] = useState<Integration[]>([])
+  const [plugins, setPlugins] = useState<PluginRecord[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     try {
-      const [caps, list] = await Promise.all([capabilityList(), integrationsList()])
+      const [caps, list, installedPlugins] = await Promise.all([
+        capabilityList(),
+        integrationsList(),
+        pluginList(),
+      ])
       setInstalled(caps)
       setAvailable(list)
+      setPlugins(installedPlugins)
       setError(null)
     } catch (e) {
       setError(describe(e))
@@ -96,6 +108,8 @@ export function Capabilities() {
               ))}
           </div>
         </section>
+
+        <Plugins plugins={plugins} onChanged={reload} />
 
         <AddServer onChanged={reload} />
       </div>
@@ -288,6 +302,217 @@ function AvailableRow({
       </div>
     </div>
   )
+}
+
+/**
+ * Плагины (ТЗ §20).
+ *
+ * Установка в два шага и никак иначе: сначала чтение манифеста и
+ * показ того, что будет запущено, потом согласие. Кнопки «просто
+ * установить» здесь нет: плагин — это чужая программа с правами
+ * пользователя, и соглашаться на неё вслепую не на что.
+ */
+function Plugins({
+  plugins,
+  onChanged,
+}: {
+  plugins: PluginRecord[]
+  onChanged: () => Promise<void>
+}) {
+  const [path, setPath] = useState('')
+  const [url, setUrl] = useState('')
+  const [dev, setDev] = useState(false)
+  const [review, setReview] = useState<PluginReview | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const check = () => {
+    setBusy(true)
+    setNote(null)
+    pluginReview(path.trim())
+      .then(setReview)
+      .catch((e: unknown) => {
+        setReview(null)
+        setNote(describe(e))
+      })
+      .finally(() => setBusy(false))
+  }
+
+  const install = (origin: 'local' | 'dev_folder' | 'git') => {
+    setBusy(true)
+    setNote(null)
+    pluginInstall(
+      origin === 'git'
+        ? { origin, url: url.trim() }
+        : { origin, path: path.trim() },
+    )
+      .then((capability) => {
+        setReview(null)
+        setPath('')
+        setUrl('')
+        setNote(
+          capability.health === 'ok'
+            ? `установлен · инструментов: ${capability.tools.length}`
+            : capability.healthNote ?? 'установлен с замечаниями',
+        )
+        return onChanged()
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <section className="hub__section">
+      <h3 className="hub__section-title">Плагины</h3>
+      <p className="hub__hint">
+        Плагин — это папка с файлом yuki-plugin.json и программой, которая
+        говорит по MCP. Он запускается отдельным процессом с вашими правами —
+        ставьте только то, чему доверяете. Его инструменты всё равно проходят
+        через разрешения и подтверждения.
+      </p>
+
+      <div className="hub__list">
+        {plugins.map((plugin) => (
+          <div className="capability" key={plugin.id}>
+            <div className="capability__head">
+              <span className="capability__name">{plugin.name}</span>
+              <span className="capability__source">{ORIGIN_LABEL[plugin.origin] ?? plugin.origin}</span>
+              <span className="capability__health">{plugin.version}</span>
+            </div>
+            <p className="capability__note" data-selectable>
+              {plugin.location}
+            </p>
+            {plugin.permissions.length > 0 && (
+              <p className="capability__tools">
+                Разрешения: {permissionNames(plugin.permissions)}
+              </p>
+            )}
+            {plugin.tools.length > 0 && (
+              <p className="capability__tools">Инструменты: {plugin.tools.join(', ')}</p>
+            )}
+            <div className="capability__actions">
+              <button
+                type="button"
+                className="hub__link hub__link--danger"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true)
+                  pluginRemove(plugin.id)
+                    .then(() => onChanged())
+                    .catch((e: unknown) => setNote(describe(e)))
+                    .finally(() => setBusy(false))
+                }}
+              >
+                удалить
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hub__form">
+        <input
+          className="hub__input"
+          value={path}
+          onChange={(e) => {
+            setPath(e.target.value)
+            setReview(null)
+          }}
+          placeholder="Папка с yuki-plugin.json"
+          spellCheck={false}
+        />
+        <label className="hub__checkbox">
+          <input type="checkbox" checked={dev} onChange={(e) => setDev(e.target.checked)} />
+          {/* Режим разработки: папка не копируется, правки видны сразу. */}
+          работать прямо из этой папки
+        </label>
+        <input
+          className="hub__input"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Или адрес git-репозитория"
+          spellCheck={false}
+        />
+      </div>
+
+      <div className="capability__actions">
+        <button
+          type="button"
+          className="hub__button"
+          disabled={busy || path.trim() === ''}
+          onClick={check}
+        >
+          Проверить папку
+        </button>
+        <button
+          type="button"
+          className="hub__button"
+          disabled={busy || url.trim() === ''}
+          onClick={() => install('git')}
+        >
+          Склонировать и установить
+        </button>
+        {note && <span className="capability__status">{note}</span>}
+      </div>
+
+      {review && (
+        /* Permission review (ТЗ §18): что за плагин, что он запустит и к
+           чему получит доступ — до того, как его код будет выполнен. */
+        <div className="capability" data-health={review.problems.length > 0 ? 'failed' : 'unknown'}>
+          <div className="capability__head">
+            <span className="capability__name">
+              {review.name} {review.version}
+            </span>
+            <span className="capability__source">{review.id}</span>
+          </div>
+
+          {review.description && <p className="capability__description">{review.description}</p>}
+
+          <p className="capability__tools">
+            Запустит: <code>{review.commandLine}</code>
+          </p>
+          <p className="capability__permissions">
+            Запрашивает:{' '}
+            {review.permissions.length > 0
+              ? permissionNames(review.permissions)
+              : 'ничего сверх базового'}
+          </p>
+          {review.tools.length > 0 && (
+            <p className="capability__tools">Обещает инструменты: {review.tools.join(', ')}</p>
+          )}
+
+          {review.problems.length > 0 ? (
+            <ul className="settings__blockers">
+              {review.problems.map((problem) => (
+                <li className="settings__blocker" key={problem}>
+                  {problem}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="capability__actions">
+              <button
+                type="button"
+                className="hub__button"
+                disabled={busy}
+                onClick={() => install(dev ? 'dev_folder' : 'local')}
+              >
+                {dev ? 'Подключить из папки' : 'Установить'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Откуда взялся плагин (ТЗ §20). */
+const ORIGIN_LABEL: Record<string, string> = {
+  local: 'локальный пакет',
+  git: 'git',
+  dev_folder: 'папка разработки',
+  generated: 'создан Юки',
 }
 
 /** Добавление произвольного сервера (ТЗ §19: Add Server). */

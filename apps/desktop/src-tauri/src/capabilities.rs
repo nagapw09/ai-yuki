@@ -417,7 +417,7 @@ pub async fn mcp_call(
 }
 
 /// Подключается к серверу и записывает результат в здоровье возможности.
-async fn connect_server(state: &AppState, id: &str) -> Result<(), String> {
+pub(crate) async fn connect_server(state: &AppState, id: &str) -> Result<(), String> {
     let row: (String, Option<String>, String, Option<String>, String, Option<String>) = state
         .storage
         .with_conn(|conn| {
@@ -431,6 +431,22 @@ async fn connect_server(state: &AppState, id: &str) -> Result<(), String> {
         .map_err(|_| format!("сервер «{id}» не найден"))?;
 
     let (transport, command, args, url, env, secret_ref) = row;
+
+    // Плагины (ТЗ §20) живут в своих папках и запускаются относительно них:
+    // без этого `python server.py` ищет файл там, откуда запущена сама Yuki.
+    let cwd: Option<String> = state
+        .storage
+        .with_conn(|conn| {
+            conn.query_row("SELECT location FROM plugins WHERE id = ?1", [id], |r| {
+                r.get::<_, String>(0)
+            })
+            .map(Some)
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other),
+            })
+        })
+        .unwrap_or(None);
 
     let mut env: HashMap<String, String> = serde_json::from_str(&env).unwrap_or_default();
     let args: Vec<String> = serde_json::from_str(&args).unwrap_or_default();
@@ -466,7 +482,8 @@ async fn connect_server(state: &AppState, id: &str) -> Result<(), String> {
         url,
         authorization,
     )
-    .map_err(err)?;
+    .map_err(err)?
+    .with_cwd(cwd);
 
     let outcome = McpClient::connect(descriptor, state.http.clone()).await;
 
@@ -487,7 +504,12 @@ async fn connect_server(state: &AppState, id: &str) -> Result<(), String> {
                 .with_conn(|conn| {
                     conn.execute(
                         "UPDATE capabilities SET health = 'ok', health_note = NULL,
-                             manifest = ?2, version = ?3 WHERE id = ?1",
+                             manifest = json_set(
+                                 ?2,
+                                 '$.permissions',
+                                 COALESCE(json_extract(manifest, '$.permissions'), json('[]'))
+                             ),
+                             version = ?3 WHERE id = ?1",
                         rusqlite::params![id, manifest.to_string(), info.version],
                     )?;
                     conn.execute(
@@ -521,7 +543,7 @@ async fn connect_server(state: &AppState, id: &str) -> Result<(), String> {
     }
 }
 
-fn single_capability(state: &AppState, id: &str) -> Result<CapabilityRecord, String> {
+pub(crate) fn single_capability(state: &AppState, id: &str) -> Result<CapabilityRecord, String> {
     capability_list_inner(state)?
         .into_iter()
         .find(|c| c.id == id)

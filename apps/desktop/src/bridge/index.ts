@@ -258,6 +258,86 @@ export const providerSetDefault = (id: string) => invoke<void>('provider_set_def
 /** Test Connection: проверяет ключ и возвращает список моделей (ТЗ §17, §19). */
 export const providerTest = (id: string) => invoke<string[]>('provider_test', { id })
 
+// ── Приватность: Local Only (ТЗ §29) ───────────────────────────────
+
+export interface PrivacyStatus {
+  localOnly: boolean
+  /** Провайдер по умолчанию и то, локален ли он. */
+  providerLabel: string | null
+  providerLocal: boolean
+  /** Адрес распознавания речи и то, локален ли он. */
+  sttUrl: string | null
+  sttLocal: boolean
+  /** Что мешает режиму работать прямо сейчас. */
+  blockers: string[]
+}
+
+export const privacyStatus = () => invoke<PrivacyStatus>('privacy_status')
+export const privacySetLocalOnly = (enabled: boolean) =>
+  invoke<PrivacyStatus>('privacy_set_local_only', { enabled })
+
+// ── Плагины (ТЗ §18, §20) ───────────────────────────────────────
+
+/** Что будет установлено — показывается до запуска чужого кода. */
+export interface PluginReview {
+  id: string
+  name: string
+  version: string
+  description: string
+  permissions: string[]
+  tools: string[]
+  /** Командная строка целиком. */
+  commandLine: string
+  location: string
+  /** Непустой список означает отказ в установке. */
+  problems: string[]
+}
+
+export interface PluginRecord {
+  id: string
+  name: string
+  version: string
+  /** `local` · `git` · `dev_folder` · `generated` */
+  origin: string
+  location: string
+  permissions: string[]
+  tools: string[]
+  enabled: boolean
+  installedAt: number
+}
+
+export const pluginList = () => invoke<PluginRecord[]>('plugin_list')
+
+/** Проверка папки до установки (ТЗ §18: permission review). */
+export const pluginReview = (path: string) => invoke<PluginReview>('plugin_review', { path })
+
+export const pluginInstall = (args: {
+  origin: 'local' | 'dev_folder' | 'git' | 'generated'
+  path?: string
+  url?: string
+}) =>
+  invoke<CapabilityRecord>('plugin_install', {
+    args: { origin: args.origin, path: args.path ?? null, url: args.url ?? null },
+  })
+
+export const pluginRemove = (id: string) => invoke<void>('plugin_remove', { id })
+
+/** Создаёт заготовку плагина и возвращает путь к ней (ТЗ §18). */
+export const pluginScaffold = (args: {
+  id: string
+  name: string
+  description?: string
+  permissions?: string[]
+}) =>
+  invoke<string>('plugin_scaffold', {
+    args: {
+      id: args.id,
+      name: args.name,
+      description: args.description ?? '',
+      permissions: args.permissions ?? [],
+    },
+  })
+
 /** Где выдать разрешение вручную; null — на этой ОС выдавать нечего (ТЗ §21). */
 export const permissionHint = (category: string) =>
   invoke<string | null>('permission_hint', { category })
