@@ -283,6 +283,15 @@ pub fn permission_set(
         .map_err(err)
 }
 
+/// Где пользователю выдать разрешение вручную (ТЗ §21).
+///
+/// `None` означает, что категория не требует отдельной выдачи на этой ОС —
+/// UI в этом случае не должен звать человека в системные настройки впустую.
+#[tauri::command]
+pub fn permission_hint(category: String) -> Option<String> {
+    crate::permissions::how_to_grant(&category).map(str::to_string)
+}
+
 // ── Настройки (ТЗ §31) ──────────────────────────────────────────────────────────
 
 #[tauri::command]

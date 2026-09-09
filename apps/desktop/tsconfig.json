@@ -5,8 +5,8 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
     "noEmit": true,
-    "composite": false,
-    "rootDir": "src"
+    "paths": { "@yuki/core": ["../../core/src/index.ts"] },
+    "composite": false
   },
   "include": ["src"]
 }

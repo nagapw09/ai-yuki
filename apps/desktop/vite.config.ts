@@ -1,3 +1,5 @@
+import { fileURLToPath, URL } from 'node:url'
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -6,6 +8,13 @@ const DEV_PORT = 1420
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // Явный алиас, а не разрешение через node_modules: ядро подключается
+      // исходниками, и так оно попадает под тот же transform, что и остальной код.
+      '@yuki/core': fileURLToPath(new URL('../../core/src/index.ts', import.meta.url)),
+    },
+  },
   clearScreen: false,
   server: {
     port: DEV_PORT,

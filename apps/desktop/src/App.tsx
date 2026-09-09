@@ -1,10 +1,15 @@
 import { useCallback, useEffect } from 'react'
 
-import { isTauri, settingGet, systemInfo } from './bridge'
+import { sendMessage } from './agent/session'
+import { isTauri, providerList, systemInfo } from './bridge'
+import { ConfirmDialog } from './design-system/components/ConfirmDialog'
 import { Rail } from './design-system/components/Rail'
 import { useT } from './i18n'
+import { Activity } from './screens/Activity'
+import { Chat } from './screens/Chat'
 import { Orbital } from './screens/Orbital'
 import { Placeholder } from './screens/Placeholder'
+import { Settings } from './screens/Settings'
 import { useUiStore } from './state/store'
 import './App.css'
 
@@ -20,13 +25,12 @@ export function App() {
 
   const handleSubmit = useCallback(
     (text: string) => {
-      // Agent Loop (ТЗ §5) появляется в фазе 1. До этого Yuki честно показывает,
-      // что приняла команду, и не изображает выполнение: инвариант «не рапортовать
-      // об успехе без подтверждения инструмента» действует и на заглушку.
-      setOrbState('thinking')
-      setHeadline(text)
+      // Разговор ведётся в чате, а Orbital остаётся экраном состояния (ТЗ §13):
+      // как только появляется что обсуждать, переключаемся туда.
+      setScreen('chat')
+      void sendMessage(text)
     },
-    [setOrbState, setHeadline],
+    [setScreen],
   )
 
   const handleToggleVoice = useCallback(() => {
@@ -40,24 +44,30 @@ export function App() {
     <div className="app">
       <Rail current={screen} onNavigate={setScreen} />
       <div className="app__content">
-        {screen === 'orbital' ? (
+        {screen === 'orbital' && (
           <Orbital onSubmit={handleSubmit} onToggleVoice={handleToggleVoice} />
-        ) : (
+        )}
+        {screen === 'chat' && <Chat />}
+        {screen === 'activity' && <Activity />}
+        {screen === 'settings' && <Settings />}
+        {(screen === 'commands' || screen === 'memory') && (
           <Placeholder title={t(`rail.${screen}`)} />
         )}
       </div>
+      <ConfirmDialog />
     </div>
   )
 }
 
 /**
- * Определяет, настроен ли AI-провайдер, и показывает это в статусе (ТЗ §13).
+ * Показывает в статусе, настроен ли провайдер (ТЗ §13).
  *
- * До настройки провайдера Yuki не может выполнить ни одной задачи, поэтому статус
- * «не настроен провайдер» — это не украшение, а единственная честная подпись.
+ * До настройки Yuki не может выполнить ни одной задачи, поэтому «не настроен
+ * провайдер» — это не украшение, а единственная честная подпись.
  */
 function useProviderStatus() {
   const setConnection = useUiStore((s) => s.setConnection)
+  const screen = useUiStore((s) => s.screen)
 
   useEffect(() => {
     if (!isTauri()) {
@@ -69,12 +79,15 @@ function useProviderStatus() {
 
     void (async () => {
       try {
-        const provider = await settingGet('provider.default')
-        // Системную информацию запрашиваем заодно: это заодно проверка того,
-        // что мост до Rust-слоя вообще работает.
+        // Заодно проверяем, что мост до Rust-слоя вообще работает.
         await systemInfo()
+        const providers = await providerList()
+        const active = providers.find((p) => p.isDefault && p.enabled)
         if (cancelled) return
-        setConnection({ online: Boolean(provider), providerLabel: provider ?? '' })
+        setConnection({
+          online: Boolean(active),
+          providerLabel: active?.label ?? '',
+        })
       } catch {
         if (!cancelled) setConnection({ online: false, providerLabel: '' })
       }
@@ -83,5 +96,7 @@ function useProviderStatus() {
     return () => {
       cancelled = true
     }
-  }, [setConnection])
+    // Перечитываем при возврате с настроек: пользователь мог только что
+    // ввести ключ, и статус должен это отразить без перезапуска.
+  }, [setConnection, screen])
 }

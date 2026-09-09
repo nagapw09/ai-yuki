@@ -62,6 +62,8 @@ export interface ToolError {
   readonly message: string
 }
 
+export type { ToolSpec } from './protocol'
+
 /** Инструмент в реестре (ТЗ §4 Tool Registry). */
 export interface Tool<Input = unknown, Output = unknown> {
   readonly id: string

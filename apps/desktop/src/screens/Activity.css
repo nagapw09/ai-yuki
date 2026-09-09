@@ -1,0 +1,103 @@
+/* Журнал активности (ТЗ §23). */
+
+.activity {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.activity__inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.activity__title {
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.activity__empty,
+.activity__error {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.activity__error {
+  color: var(--accent-error);
+}
+
+.activity__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity__row {
+  display: grid;
+  grid-template-columns: 88px 160px 108px 1fr 72px;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line-subtle);
+  font-size: var(--text-xs);
+}
+
+.activity__row:hover {
+  background: var(--surface-raised);
+}
+
+.activity__time,
+.activity__duration {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity__duration {
+  text-align: right;
+}
+
+.activity__tool {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.activity__status {
+  color: var(--text-muted);
+}
+
+.activity__row[data-status='ok'] .activity__status {
+  color: var(--accent-success);
+}
+
+.activity__row[data-status='error'] .activity__status {
+  color: var(--accent-error);
+}
+
+.activity__row[data-status='denied'] .activity__status,
+.activity__row[data-status='cancelled'] .activity__status {
+  color: var(--accent-warning);
+}
+
+.activity__result {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 780px) {
+  /* На узком окне колонка результата уходит: время, инструмент и статус
+     важнее для беглого просмотра. */
+  .activity__row {
+    grid-template-columns: 78px 1fr 96px;
+  }
+
+  .activity__result,
+  .activity__duration {
+    display: none;
+  }
+}

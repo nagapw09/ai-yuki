@@ -3,7 +3,9 @@
 //! Здесь соединяются три вещи и больше ничего: платформенные адаптеры (ТЗ §30),
 //! локальное хранилище (ТЗ §31) и список команд, доступных Agent Core на TypeScript.
 
+pub mod ai;
 pub mod commands;
+pub mod permissions;
 pub mod secrets;
 pub mod state;
 pub mod storage;
@@ -27,9 +29,13 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let storage = Storage::open(data_dir.join(DB_FILE))?;
+            // Разрешение могли выдать или отозвать в системных настройках между
+            // запусками, поэтому статус ОС пересчитывается на каждом старте.
+            permissions::sync_os(&storage)?;
             let adapters = system::build()?;
+            let http = yuki_ai::http_client()?;
 
-            app.manage(AppState::new(adapters, storage));
+            app.manage(AppState::new(adapters, storage, http));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -74,11 +80,20 @@ pub fn run() {
             // разрешения (ТЗ §21)
             commands::permissions_list,
             commands::permission_set,
+            commands::permission_hint,
             // настройки и журнал (ТЗ §23, §31)
             commands::setting_get,
             commands::setting_set,
             commands::activity_log,
             commands::activity_record,
+            // AI-провайдеры (ТЗ §4)
+            ai::provider_list,
+            ai::provider_save,
+            ai::provider_set_key,
+            ai::provider_clear_key,
+            ai::provider_set_default,
+            ai::provider_test,
+            ai::chat_send,
         ])
         .run(tauri::generate_context!())
         .expect("не удалось запустить окно Yuki");

@@ -216,3 +216,43 @@ export const activityRecord = (entry: {
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
+
+// ── AI-провайдеры (ТЗ §4) ───────────────────────────────────────────────────────
+
+export interface ProviderRecord {
+  id: string
+  kind: string
+  label: string
+  baseUrl: string
+  defaultModel: string
+  isDefault: boolean
+  enabled: boolean
+  /** Нужен ли ключ: локальные серверы работают без него. */
+  requiresKey: boolean
+  /** Задан ли ключ. Значение ключа наружу не отдаётся никогда. */
+  hasKey: boolean
+}
+
+export const providerList = () => invoke<ProviderRecord[]>('provider_list')
+
+export const providerSave = (
+  id: string,
+  patch: { baseUrl?: string; defaultModel?: string; enabled?: boolean },
+) =>
+  invoke<void>('provider_save', {
+    id,
+    baseUrl: patch.baseUrl ?? null,
+    defaultModel: patch.defaultModel ?? null,
+    enabled: patch.enabled ?? null,
+  })
+
+export const providerSetKey = (id: string, key: string) =>
+  invoke<void>('provider_set_key', { id, key })
+export const providerClearKey = (id: string) => invoke<void>('provider_clear_key', { id })
+export const providerSetDefault = (id: string) => invoke<void>('provider_set_default', { id })
+/** Test Connection: проверяет ключ и возвращает список моделей (ТЗ §17, §19). */
+export const providerTest = (id: string) => invoke<string[]>('provider_test', { id })
+
+/** Где выдать разрешение вручную; null — на этой ОС выдавать нечего (ТЗ §21). */
+export const permissionHint = (category: string) =>
+  invoke<string | null>('permission_hint', { category })

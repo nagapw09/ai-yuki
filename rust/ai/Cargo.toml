@@ -1,0 +1,30 @@
+[package]
+name = "yuki-ai"
+description = "AI Provider Layer: OpenAI · Claude · Gemini · совместимые (ТЗ §4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+# rustls вместо системного TLS: иначе сборка тянет OpenSSL и ломается ровно на той
+# машине, где его нет — а нам нужно собираться и на Windows, и на macOS (ТЗ §2).
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "stream",
+  "rustls-tls",
+] }
+
+[dev-dependencies]
+tokio = { workspace = true }
+# Позволяет собрать reqwest::Response из готового тела и протестировать
+# разбор SSE без сети.
+http = "1"

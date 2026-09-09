@@ -9,10 +9,14 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 /// Версия схемы. Инкрементируется вместе с добавлением шага в [`MIGRATIONS`].
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 3;
 
 /// Шаги миграции. Индекс в массиве + 1 = версия, до которой шаг поднимает базу.
-const MIGRATIONS: &[&str] = &[include_str!("schema.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("schema.sql"),
+    include_str!("002_providers.sql"),
+    include_str!("003_permission_defaults.sql"),
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -176,6 +180,47 @@ mod tests {
             .with_conn(|c| c.query_row("SELECT count(*) FROM permissions", [], |r| r.get(0)))
             .expect("запрос должен выполниться");
         assert_eq!(count, 10);
+    }
+
+    #[test]
+    fn seeds_provider_presets_from_spec_section_4() {
+        let storage = Storage::in_memory().expect("база должна открыться");
+        let count: i64 = storage
+            .with_conn(|c| c.query_row("SELECT count(*) FROM providers", [], |r| r.get(0)))
+            .expect("запрос должен выполниться");
+        assert_eq!(count, 7);
+
+        // Заготовки обязаны быть выключены: включение — осознанное действие
+        // пользователя после ввода ключа.
+        let enabled: i64 = storage
+            .with_conn(|c| {
+                c.query_row("SELECT count(*) FROM providers WHERE enabled = 1", [], |r| r.get(0))
+            })
+            .expect("запрос должен выполниться");
+        assert_eq!(enabled, 0);
+    }
+
+    #[test]
+    fn grants_only_the_non_invasive_permission_categories_by_default() {
+        let storage = Storage::in_memory().expect("база должна открыться");
+        let granted: Vec<String> = storage
+            .with_conn(|c| {
+                let mut stmt =
+                    c.prepare("SELECT category FROM permissions WHERE granted = 1 ORDER BY category")?;
+                let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+                rows.collect()
+            })
+            .expect("запрос должен выполниться");
+
+        assert_eq!(granted, ["browser", "files", "network", "notifications"]);
+
+        // Категории, дающие качественно новый доступ, обязаны остаться выключенными.
+        for invasive in ["shell", "accessibility", "screen_recording", "microphone", "camera"] {
+            assert!(
+                !granted.iter().any(|c| c == invasive),
+                "категория {invasive} не должна быть выдана без участия пользователя"
+            );
+        }
     }
 
     #[test]

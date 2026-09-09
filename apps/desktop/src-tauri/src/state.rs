@@ -12,10 +12,18 @@ use crate::storage::Storage;
 pub struct AppState {
     pub adapters: PlatformAdapters,
     pub storage: Storage,
+    /// Один HTTP-клиент на всё приложение: он держит пул соединений и
+    /// переиспользует TLS-сессии, что срезает задержку второго и последующих
+    /// запросов к провайдеру — а бюджет первого токена задан в ТЗ §37.
+    pub http: reqwest::Client,
 }
 
 impl AppState {
-    pub fn new(adapters: PlatformAdapters, storage: Storage) -> Self {
-        Self { adapters, storage }
+    pub fn new(adapters: PlatformAdapters, storage: Storage, http: reqwest::Client) -> Self {
+        Self {
+            adapters,
+            storage,
+            http,
+        }
     }
 }

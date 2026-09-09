@@ -26,7 +26,9 @@ tracing = { workspace = true }
 
 rusqlite = { version = "0.32", features = ["bundled"] }
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
+reqwest = { version = "0.12", default-features = false }
 
+yuki-ai = { workspace = true }
 yuki-system = { workspace = true }
 yuki-filesystem = { workspace = true }
 yuki-input = { workspace = true }

@@ -1,0 +1,122 @@
+/* Модалка подтверждения (ТЗ §22). */
+
+.confirm__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: rgb(4 5 7 / 62%);
+  backdrop-filter: blur(6px);
+  animation: confirm-fade var(--duration-normal) var(--ease-out);
+}
+
+.confirm {
+  width: min(520px, 100%);
+  padding: var(--space-6);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: confirm-rise var(--duration-slow) var(--ease-spring);
+}
+
+.confirm__risk {
+  display: inline-block;
+  margin-bottom: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.confirm__risk[data-risk='high'] {
+  background: color-mix(in srgb, var(--accent-error) 16%, transparent);
+  color: var(--accent-error);
+}
+
+.confirm__risk[data-risk='medium'] {
+  background: color-mix(in srgb, var(--accent-warning) 14%, transparent);
+  color: var(--accent-warning);
+}
+
+.confirm__title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.confirm__plan {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4);
+  max-height: 240px;
+  overflow: auto;
+  background: var(--surface-abyss);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font: var(--text-sm) / var(--leading-relaxed) var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.confirm__button {
+  padding: var(--space-2) var(--space-5);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.confirm__button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/* Разрешающая кнопка не спрятана, но и не приглашает нажать её не глядя:
+   заливки нет, цвет соответствует уровню риска. */
+.confirm__button--approve[data-risk='high'] {
+  border-color: color-mix(in srgb, var(--accent-error) 45%, transparent);
+  color: var(--accent-error);
+}
+
+.confirm__button--approve[data-risk='high']:hover {
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+  color: var(--accent-error);
+}
+
+.confirm__button--approve[data-risk='medium'] {
+  border-color: color-mix(in srgb, var(--accent-warning) 45%, transparent);
+  color: var(--accent-warning);
+}
+
+.confirm__button--approve[data-risk='medium']:hover {
+  background: color-mix(in srgb, var(--accent-warning) 14%, transparent);
+  color: var(--accent-warning);
+}
+
+@keyframes confirm-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}

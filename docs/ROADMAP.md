@@ -16,14 +16,20 @@
 
 ## Фаза 1 — MVP-ядро (ТЗ §38)
 
-- [ ] AI Provider Layer: OpenAI, Claude, Gemini + streaming (§4)
-- [ ] Agent Loop целиком: PLAN → EXECUTE → OBSERVE → VERIFY (§5)
-- [ ] Chat как вторичный экран: markdown, code blocks, tool status (§15)
-- [ ] Tools: apps, filesystem, clipboard, keyboard, mouse (§6, §8)
-- [ ] Permission Gate + Confirmation modal с показом плана (§21, §22)
-- [ ] Activity Log с редактированием секретов (§23)
+- [x] AI Provider Layer: Claude, OpenAI, Gemini + всё, что говорит на протоколе
+      OpenAI — OpenRouter, xAI, Ollama, LM Studio, Custom API. Стриминг SSE,
+      вызовы инструментов, `Test Connection` (§4)
+- [x] Agent Loop целиком: PLAN → EXECUTE → OBSERVE → VERIFY (§5)
+- [x] Chat как вторичный экран: markdown, блоки кода, статусы инструментов (§15)
+- [x] Tools: приложения, окна, файлы, буфер обмена, клавиатура, мышь, экран (§6, §8)
+- [x] Permission Gate + Confirmation modal с показом плана (§21, §22)
+- [x] Activity Log (§23)
 - [ ] Memory: short-term / session / long-term / episodic + UI управления (§9)
 - [ ] Hotkeys, Notifications, Reminders (§25)
+
+Проверено на Windows 11 сквозным прогоном через локальный мок-провайдер:
+стрим, сборка вызова инструмента из фрагментов SSE, выполнение в Rust, возврат
+результата модели, подтверждение опасного действия — и отказ, и разрешение.
 
 ## Фаза 2 — Голос и зрение (ТЗ §38)
 
