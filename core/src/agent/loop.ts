@@ -15,7 +15,7 @@ import type { GateDecision } from '../permissions/gate'
 import type { ChatFn, ContentBlock, Message } from './protocol'
 import { responseText, toolUses } from './protocol'
 import type { ToolRegistry } from './registry'
-import type { Tool, ToolError } from './types'
+import type { Tool, ToolAttachment, ToolError } from './types'
 
 /**
  * Потолок числа обращений к модели за один запрос пользователя.
@@ -158,6 +158,9 @@ export async function runAgent(
     // Разбивать их на несколько — значит ломать протокол и отучать модель
     // запрашивать инструменты параллельно.
     const results: ContentBlock[] = []
+    // Картинки идут после всех результатов: протокол требует, чтобы блоки
+    // tool_result шли первыми, иначе провайдер отвергнет сообщение.
+    const attachments: ContentBlock[] = []
 
     for (const call of calls) {
       const tool = deps.registry.get(call.name)
@@ -218,6 +221,12 @@ export async function runAgent(
           signal: deps.signal ?? new AbortController().signal,
           report: (status) =>
             deps.onEvent({ kind: 'tool_started', toolId: tool.id, summary: status }),
+          attach: (attachment: ToolAttachment) =>
+            attachments.push({
+              type: 'image',
+              mediaType: attachment.mediaType,
+              data: attachment.data,
+            }),
         })
         const durationMs = Math.round(performance.now() - started)
         const detail = summarise(value)
@@ -243,7 +252,7 @@ export async function runAgent(
       }
     }
 
-    messages.push({ role: 'user', content: results })
+    messages.push({ role: 'user', content: [...results, ...attachments] })
   }
 
   const message =

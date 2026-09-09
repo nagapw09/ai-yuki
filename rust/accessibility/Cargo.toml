@@ -10,3 +10,8 @@ repository.workspace = true
 
 [dependencies]
 yuki-system = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+# UI Automation — родной для Windows способ прочитать чужой интерфейс.
+uiautomation = "0.16"

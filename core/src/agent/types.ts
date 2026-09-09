@@ -83,11 +83,27 @@ export interface Tool<Input = unknown, Output = unknown> {
   execute(input: Input, ctx: ToolContext): Promise<Output>
 }
 
+/** Картинка, которую инструмент отдаёт модели вместе с результатом. */
+export interface ToolAttachment {
+  readonly mediaType: string
+  /** Содержимое в base64. */
+  readonly data: string
+}
+
 export interface ToolContext {
   /** Отмена задачи пользователем (ТЗ §32). */
   readonly signal: AbortSignal
   /** Сообщает UI безопасный статус вида «Ищу файл…» (ТЗ §15). */
   report(status: string): void
+  /**
+   * Прикладывает изображение к результату инструмента (ТЗ §6).
+   *
+   * Отдельный канал, а не возвращаемое значение: снимок экрана весит сотни
+   * килобайт, и ему нечего делать ни в журнале активности (ТЗ §23), ни в
+   * тексте, который увидит пользователь. Модель получит его блоком, а журнал —
+   * только размеры.
+   */
+  attach(attachment: ToolAttachment): void
 }
 
 /** Шаг плана, построенного агентом (ТЗ §5). */

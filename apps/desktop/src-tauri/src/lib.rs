@@ -101,6 +101,7 @@ pub fn run() {
             commands::screen_capture,
             commands::screen_capture_window,
             commands::accessibility_tree,
+            commands::accessibility_text,
             commands::display_count,
             // секреты (ТЗ §29)
             commands::secret_set,

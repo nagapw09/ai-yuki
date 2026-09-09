@@ -59,6 +59,10 @@ fn block_to_wire(block: &ContentBlock) -> Value {
             "content": content,
             "is_error": is_error,
         }),
+        ContentBlock::Image { media_type, data } => json!({
+            "type": "image",
+            "source": { "type": "base64", "media_type": media_type, "data": data },
+        }),
         ContentBlock::Thinking { text, signature } => {
             let mut obj = Map::new();
             obj.insert("type".into(), json!("thinking"));

@@ -167,6 +167,9 @@ export const screenCaptureWindow = (windowId: number) =>
   invoke<ScreenCapture>('screen_capture_window', { windowId })
 export const accessibilityTree = (windowId?: number) =>
   invoke<AccessibilityNode>('accessibility_tree', { windowId: windowId ?? null })
+/** Дерево интерфейса в компактном текстовом виде (ТЗ §6). */
+export const accessibilityText = (windowId?: number) =>
+  invoke<string>('accessibility_text', { windowId: windowId ?? null })
 export const displayCount = () => invoke<number>('display_count')
 
 // ── Секреты (ТЗ §29) ────────────────────────────────────────────────────────────

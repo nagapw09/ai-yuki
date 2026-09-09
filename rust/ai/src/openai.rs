@@ -58,6 +58,7 @@ fn message_to_wire(message: &Message) -> Vec<Value> {
     let mut out = Vec::new();
     let mut text = String::new();
     let mut tool_calls = Vec::new();
+    let mut images: Vec<Value> = Vec::new();
 
     for block in &message.content {
         match block {
@@ -76,17 +77,37 @@ fn message_to_wire(message: &Message) -> Vec<Value> {
                 "tool_call_id": tool_use_id,
                 "content": content,
             })),
+            ContentBlock::Image { media_type, data } => images.push(json!({
+                "type": "image_url",
+                // Диалект принимает картинку только как data-URL, отдельного
+                // поля для base64 в нём нет.
+                "image_url": { "url": format!("data:{media_type};base64,{data}") },
+            })),
             // Рассуждения — часть протокола Anthropic; здесь их отправлять некуда.
             ContentBlock::Thinking { .. } => {}
         }
     }
 
-    if !text.is_empty() || !tool_calls.is_empty() {
+    if !text.is_empty() || !tool_calls.is_empty() || !images.is_empty() {
         let role = match message.role {
             Role::User => "user",
             Role::Assistant => "assistant",
         };
-        let mut msg = json!({ "role": role, "content": text });
+
+        // Со строкой в `content` картинку передать нельзя: как только она
+        // появляется, поле обязано стать массивом частей.
+        let content = if images.is_empty() {
+            json!(text)
+        } else {
+            let mut parts = Vec::new();
+            if !text.is_empty() {
+                parts.push(json!({ "type": "text", "text": text }));
+            }
+            parts.extend(images);
+            json!(parts)
+        };
+
+        let mut msg = json!({ "role": role, "content": content });
         if !tool_calls.is_empty() {
             msg["tool_calls"] = Value::Array(tool_calls);
         }
@@ -338,6 +359,39 @@ mod tests {
             }],
         };
         assert!(message_to_wire(&message).is_empty());
+    }
+
+    #[test]
+    fn sends_images_as_data_urls_inside_a_parts_array() {
+        let message = Message {
+            role: Role::User,
+            content: vec![
+                ContentBlock::text("что на экране?"),
+                ContentBlock::Image {
+                    media_type: "image/png".into(),
+                    data: "QUJD".into(),
+                },
+            ],
+        };
+
+        let wire = message_to_wire(&message);
+        assert_eq!(wire.len(), 1);
+
+        let parts = wire[0]["content"].as_array().expect("должен быть массив частей");
+        assert_eq!(parts[0]["type"], "text");
+        assert_eq!(parts[1]["type"], "image_url");
+        assert_eq!(parts[1]["image_url"]["url"], "data:image/png;base64,QUJD");
+    }
+
+    #[test]
+    fn keeps_plain_text_as_a_string_when_there_are_no_images() {
+        // Без картинок поле остаётся строкой: часть серверов этого диалекта
+        // массив для простого текста не принимает.
+        let message = Message {
+            role: Role::User,
+            content: vec![ContentBlock::text("привет")],
+        };
+        assert!(message_to_wire(&message)[0]["content"].is_string());
     }
 
     #[test]

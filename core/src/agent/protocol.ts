@@ -23,6 +23,13 @@ export type ContentBlock =
       readonly content: string
       readonly isError: boolean
     }
+  /** Изображение — снимок экрана или окна (ТЗ §6). */
+  | {
+      readonly type: 'image'
+      readonly mediaType: string
+      /** Содержимое в base64. */
+      readonly data: string
+    }
   /**
    * Блок рассуждений модели. Пользователю не показывается (ТЗ §15), но обязан
    * вернуться провайдеру без изменений на следующем шаге цикла.

@@ -99,6 +99,9 @@ fn messages_to_contents(messages: &[Message]) -> Vec<Value> {
                         "functionResponse": { "name": name, "response": payload }
                     }));
                 }
+                ContentBlock::Image { media_type, data } => parts.push(json!({
+                    "inlineData": { "mimeType": media_type, "data": data }
+                })),
                 ContentBlock::Thinking { .. } => {}
             }
         }

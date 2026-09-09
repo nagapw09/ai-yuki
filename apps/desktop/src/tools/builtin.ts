@@ -382,12 +382,40 @@ const mouseScroll: Tool = {
 
 // ── Экран (ТЗ §6) ───────────────────────────────────────────────────────────────
 
+const readUi: Tool = {
+  id: 'read_ui',
+  name: 'Прочитать интерфейс',
+  description:
+    'Возвращает дерево элементов активного окна: роли, подписи, значения, ' +
+    'доступные действия и координаты. Это основной способ понять, что на экране, ' +
+    'и найти, на что нажать — бери его прежде снимка экрана. ' +
+    'Действие press означает, что элемент можно нажать; set_value — что в него ' +
+    'можно ввести текст. Если у элемента нет нужного действия, используй его ' +
+    'координаты и mouse_click по центру.',
+  permissions: ['accessibility'],
+  risk: 'low',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      windowId: { type: 'number', description: 'Из list_windows; по умолчанию активное окно' },
+    },
+    additionalProperties: false,
+  },
+  execute: (input) => {
+    const { windowId } = input as { windowId?: number }
+    return bridge.accessibilityText(windowId)
+  },
+}
+
 const screenCapture: Tool = {
   id: 'screen_capture',
   name: 'Снимок экрана',
   description:
-    'Делает снимок монитора. Бери его, только когда задачу нельзя решить через ' +
-    'list_windows и чтение файлов: снимок дорог и требует разрешения на запись экрана.',
+    'Делает снимок монитора и показывает его тебе. Это запасной путь: сперва ' +
+    'пробуй read_ui — дерево интерфейса точнее, дешевле и содержит готовые ' +
+    'действия. Снимок нужен там, где важна графика: изображения, диаграммы, ' +
+    'приложения без accessibility. Описывай только то, что действительно видишь.',
   permissions: ['screen_recording'],
   risk: 'medium',
   idempotent: true,
@@ -396,11 +424,15 @@ const screenCapture: Tool = {
     properties: { displayIndex: { type: 'number' } },
     additionalProperties: false,
   },
-  execute: async (input) => {
+  execute: async (input, ctx) => {
     const { displayIndex } = input as { displayIndex?: number }
     const shot = await bridge.screenCapture(displayIndex)
-    // Сам PNG наверх не поднимаем: он весит сотни килобайт и в журнал попадать
-    // не должен. Vision-модель получит его отдельным каналом в фазе 2.
+
+    // Картинка уходит модели отдельным каналом, а в результат и журнал
+    // попадают только размеры: PNG весит сотни килобайт, и хранить его
+    // в журнале активности (ТЗ §23) незачем.
+    ctx.attach({ mediaType: 'image/png', data: shot.pngBase64 })
+
     return { width: shot.width, height: shot.height, displayIndex: shot.displayIndex }
   },
 }
@@ -425,5 +457,6 @@ export const BUILTIN_TOOLS: readonly Tool[] = [
   pressKey,
   mouseClick,
   mouseScroll,
+  readUi,
   screenCapture,
 ]

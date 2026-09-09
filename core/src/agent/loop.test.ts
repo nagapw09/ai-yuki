@@ -216,6 +216,31 @@ describe('agent loop', () => {
     expect(events.at(-1)).toMatchObject({ kind: 'error' })
   })
 
+  it('прикладывает картинку инструмента после результатов, а не вместо них', async () => {
+    const registry = new ToolRegistry().register(
+      makeTool({
+        id: 'screen_capture',
+        execute: async (_input, ctx) => {
+          ctx.attach({ mediaType: 'image/png', data: 'QUJD' })
+          return { width: 1920, height: 1080 }
+        },
+      }),
+    )
+    const chat = scriptedChat([toolResponse('screen_capture'), textResponse('Вижу рабочий стол')])
+
+    const { deps: d } = deps({ chat, registry })
+    await runAgent(ASK, d)
+
+    const content = chat.mock.calls[1]?.[0].messages.at(-1)?.content ?? []
+    // Порядок обязателен: провайдер отвергнет сообщение, если tool_result
+    // окажется не первым.
+    expect(content[0]).toMatchObject({ type: 'tool_result' })
+    expect(content[1]).toMatchObject({ type: 'image', mediaType: 'image/png', data: 'QUJD' })
+
+    // Сама картинка не должна попасть в текстовый результат и журнал.
+    expect((content[0] as { content: string }).content).not.toContain('QUJD')
+  })
+
   it('пишет в журнал каждый вызов инструмента (ТЗ §23)', async () => {
     const registry = new ToolRegistry().register(makeTool())
     const log = vi.fn()

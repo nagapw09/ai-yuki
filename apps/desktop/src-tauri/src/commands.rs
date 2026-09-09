@@ -205,6 +205,24 @@ pub fn accessibility_tree(
         .map_err(err)
 }
 
+/// Дерево интерфейса в компактном текстовом виде (ТЗ §6).
+///
+/// Отдельно от [`accessibility_tree`], который возвращает структуру: модели нужен
+/// текст, и собирать его лучше здесь, чем гонять через мост дерево объектов,
+/// чтобы тут же склеить его в строку.
+#[tauri::command]
+pub fn accessibility_text(
+    state: State<'_, AppState>,
+    window_id: Option<u64>,
+) -> Result<String, String> {
+    let tree = state
+        .adapters
+        .screen
+        .accessibility_tree(window_id)
+        .map_err(err)?;
+    Ok(yuki_accessibility::render(&tree))
+}
+
 #[tauri::command]
 pub fn display_count(state: State<'_, AppState>) -> Result<usize, String> {
     state.adapters.screen.display_count().map_err(err)
