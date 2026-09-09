@@ -3,8 +3,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { startVoice, stopVoice } from '../agent/voice'
 import { useUiStore } from '../state/store'
 import {
+  calendarAccounts,
+  calendarConnect,
+  calendarDisconnect,
+  calendarSetClient,
   hotkeyGet,
   hotkeySet,
+  openUrl,
   permissionHint,
   permissionSet,
   permissionsList,
@@ -20,6 +25,7 @@ import {
   voiceConfigureStt,
   voiceSetVoice,
   voiceStatus,
+  type CalendarAccount,
   type PermissionStatus,
   type PrivacyStatus,
   type ProviderRecord,
@@ -49,6 +55,7 @@ export function Settings() {
         <Privacy />
         <Providers />
         <Voice />
+        <Calendar />
         <Hotkey />
         <Permissions />
       </div>
@@ -205,6 +212,161 @@ function Voice() {
   )
 }
 
+// ── Календари (ТЗ §25) ──────────────────────────────────────────
+
+/**
+ * Подключение Google Calendar и Outlook.
+ *
+ * Два шага, и первый нельзя пропустить: человек заводит своё
+ * приложение в консоли сервиса и вставляет сюда client_id, потом входит
+ * через браузер. Вшить учётные данные в открытое приложение нельзя —
+ * они мгновенно перестают быть его учётными данными.
+ */
+function Calendar() {
+  const [accounts, setAccounts] = useState<CalendarAccount[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  const reload = useCallback(async () => {
+    try {
+      setAccounts(await calendarAccounts())
+      setError(null)
+    } catch (e) {
+      setError(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Календарь</h3>
+      <p className="settings__hint">
+        Чтобы Юки видела ваши встречи и могла их создавать, нужно своё
+        приложение в консоли сервиса — типа «Desktop» или «Mobile and desktop».
+        Вход откроется в обычном браузере: форма входа внутри чужого окна
+        неотличима от подделки, и сервисы её запрещают.
+      </p>
+
+      {error && <p className="settings__error">{error}</p>}
+
+      <div className="settings__list">
+        {accounts.map((account) => (
+          <CalendarRow key={account.provider} account={account} onChanged={reload} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function CalendarRow({
+  account,
+  onChanged,
+}: {
+  account: CalendarAccount
+  onChanged: () => Promise<void>
+}) {
+  const [clientId, setClientId] = useState(account.clientId)
+  const [clientSecret, setClientSecret] = useState('')
+  const [status, setStatus] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const run = async (action: () => Promise<string | null>) => {
+    setBusy(true)
+    try {
+      setStatus(await action())
+      await onChanged()
+    } catch (e) {
+      setStatus(describe(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="provider" data-default={account.connected}>
+      <div className="provider__head">
+        <span className="provider__label">{account.label}</span>
+        {account.connected && <span className="provider__badge">подключён</span>}
+        <button
+          type="button"
+          className="settings__link"
+          onClick={() => void openUrl(account.consoleUrl)}
+        >
+          консоль сервиса
+        </button>
+      </div>
+
+      <div className="provider__row">
+        <input
+          className="settings__input"
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          placeholder="client_id"
+          spellCheck={false}
+        />
+        <input
+          className="settings__input"
+          type="password"
+          value={clientSecret}
+          onChange={(e) => setClientSecret(e.target.value)}
+          placeholder="client_secret, если выдан"
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy || clientId.trim() === ''}
+          onClick={() =>
+            void run(async () => {
+              await calendarSetClient(account.provider, clientId, clientSecret || undefined)
+              setClientSecret('')
+              return 'сохранено'
+            })
+          }
+        >
+          Сохранить
+        </button>
+      </div>
+
+      <div className="provider__row">
+        {account.connected ? (
+          <button
+            type="button"
+            className="settings__button"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await calendarDisconnect(account.provider)
+                return 'отключён'
+              })
+            }
+          >
+            Отключить
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="settings__button"
+            disabled={busy || account.clientId === ''}
+            onClick={() =>
+              void run(async () => {
+                await calendarConnect(account.provider)
+                return 'вход выполнен'
+              })
+            }
+          >
+            {busy ? 'Жду браузер…' : 'Войти через браузер'}
+          </button>
+        )}
+        {status && <span className="provider__status">{status}</span>}
+      </div>
+    </div>
+  )
+}
+
 // ── Глобальный хоткей (ТЗ §16, §38) ─────────────────────────────────────────────
 
 /**
@@ -297,8 +459,6 @@ function Hotkey() {
     </section>
   )
 }
-
-// ── Провайдеры (ТЗ §4) ──────────────────────────────────────────────────────────
 
 // ── Local Only (ТЗ §29) ────────────────────────────────────────────────────
 

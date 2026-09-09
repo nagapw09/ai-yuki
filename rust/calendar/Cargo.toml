@@ -1,0 +1,29 @@
+[package]
+name = "yuki-calendar"
+description = "Календари: Google Calendar и Outlook через OAuth 2.0 (ТЗ §25)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
+
+# PKCE (RFC 7636) требует SHA-256 от verifier и base64url без выравнивания.
+sha2 = "0.10"
+base64 = "0.22"
+# Источник случайности для verifier и state: подделка state — это подмена
+# ответа авторизации, поэтому предсказуемого генератора здесь быть не может.
+rand = "0.8"
+
+[dev-dependencies]
+tokio = { workspace = true }

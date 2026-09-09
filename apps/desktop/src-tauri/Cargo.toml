@@ -32,6 +32,7 @@ keyring = { version = "3", features = ["apple-native", "windows-native"] }
 reqwest = { version = "0.12", default-features = false }
 
 yuki-ai = { workspace = true }
+yuki-calendar = { workspace = true }
 yuki-voice = { workspace = true }
 yuki-mcp = { workspace = true }
 yuki-system = { workspace = true }

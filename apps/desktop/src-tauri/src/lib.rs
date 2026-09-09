@@ -5,6 +5,7 @@
 
 pub mod ai;
 pub mod automation;
+pub mod calendar;
 pub mod capabilities;
 pub mod catalog;
 pub mod commands;
@@ -152,6 +153,14 @@ pub fn run() {
             capabilities::mcp_test,
             capabilities::mcp_tools,
             capabilities::mcp_call,
+            // календари (ТЗ §25)
+            calendar::calendar_accounts,
+            calendar::calendar_set_client,
+            calendar::calendar_connect,
+            calendar::calendar_disconnect,
+            calendar::calendar_events,
+            calendar::calendar_create_event,
+            calendar::calendar_delete_event,
             // плагины (ТЗ §18, §20)
             plugins::plugin_list,
             plugins::plugin_review,

@@ -306,6 +306,79 @@ export interface PluginRecord {
   installedAt: number
 }
 
+
+// ── Календари (ТЗ §25) ────────────────────────────────────────
+
+export interface CalendarAccount {
+  /** `google` · `microsoft` */
+  provider: string
+  label: string
+  /** Где завести приложение и взять client_id. */
+  consoleUrl: string
+  clientId: string
+  connected: boolean
+  connectedAt: number | null
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  /** RFC 3339 либо ГГГГ-ММ-ДД для события на весь день. */
+  start: string
+  end: string
+  allDay: boolean
+  location: string | null
+  description: string | null
+  link: string | null
+}
+
+export const calendarAccounts = () => invoke<CalendarAccount[]>('calendar_accounts')
+
+export const calendarSetClient = (
+  provider: string,
+  clientId: string,
+  clientSecret?: string,
+) =>
+  invoke<void>('calendar_set_client', {
+    provider,
+    clientId,
+    clientSecret: clientSecret ?? null,
+  })
+
+/** Вход через браузер; ждёт возврата на loopback (ТЗ §25). */
+export const calendarConnect = (provider: string) =>
+  invoke<CalendarAccount>('calendar_connect', { provider })
+
+export const calendarDisconnect = (provider: string) =>
+  invoke<void>('calendar_disconnect', { provider })
+
+export const calendarEvents = (provider: string, from: string, to: string) =>
+  invoke<CalendarEvent[]>('calendar_events', { provider, from, to })
+
+export const calendarCreateEvent = (
+  provider: string,
+  draft: {
+    title: string
+    start: string
+    end: string
+    location?: string
+    description?: string
+  },
+) =>
+  invoke<CalendarEvent>('calendar_create_event', {
+    provider,
+    draft: {
+      title: draft.title,
+      start: draft.start,
+      end: draft.end,
+      location: draft.location ?? null,
+      description: draft.description ?? null,
+    },
+  })
+
+export const calendarDeleteEvent = (provider: string, id: string) =>
+  invoke<void>('calendar_delete_event', { provider, id })
+
 export const pluginList = () => invoke<PluginRecord[]>('plugin_list')
 
 /** Проверка папки до установки (ТЗ §18: permission review). */

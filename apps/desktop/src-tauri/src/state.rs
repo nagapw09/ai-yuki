@@ -2,6 +2,7 @@
 
 use yuki_system::PlatformAdapters;
 
+use crate::calendar::TokenCache;
 use crate::capabilities::McpRegistry;
 use crate::storage::Storage;
 use crate::voice::VoiceState;
@@ -22,6 +23,9 @@ pub struct AppState {
     pub voice: VoiceState,
     /// Подключённые MCP-серверы (ТЗ §19).
     pub mcp: McpRegistry,
+    /// Access-токены календарей (ТЗ §25). Только в памяти: они живут
+    /// час, и записывать их на диск ради экономии одного обновления не стоит.
+    pub calendar: TokenCache,
 }
 
 impl AppState {
@@ -32,6 +36,7 @@ impl AppState {
             http,
             voice: VoiceState::default(),
             mcp: McpRegistry::default(),
+            calendar: TokenCache::default(),
         }
     }
 }

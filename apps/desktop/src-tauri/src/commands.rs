@@ -134,6 +134,13 @@ pub fn file_open(state: State<'_, AppState>, path: String) -> Result<(), String>
 /// через `file://` или зарегистрированный в системе протокол.
 #[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {
+    open_external(&url)
+}
+
+/// То же самое для внутренних вызовов — например для страницы согласия
+/// календаря (ТЗ §25). Проверка схемы одна на всех: второй путь открытия
+/// ссылки быстро стал бы путём в обход проверки.
+pub(crate) fn open_external(url: &str) -> Result<(), String> {
     let trimmed = url.trim();
     let allowed = trimmed.starts_with("https://") || trimmed.starts_with("http://");
 

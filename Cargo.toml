@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "apps/desktop/src-tauri",
   "rust/ai",
+  "rust/calendar",
   "rust/system",
   "rust/voice",
   "rust/windows",
@@ -32,6 +33,7 @@ tracing = "0.1"
 async-trait = "0.1"
 
 yuki-ai = { path = "rust/ai" }
+yuki-calendar = { path = "rust/calendar" }
 yuki-system = { path = "rust/system" }
 yuki-windows = { path = "rust/windows" }
 yuki-macos = { path = "rust/macos" }

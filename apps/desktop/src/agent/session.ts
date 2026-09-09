@@ -28,6 +28,7 @@ import { useUiStore } from '../state/store'
 import { BUILTIN_TOOLS } from '../tools/builtin'
 import { tryRun } from './commands'
 import { speakIfVoice } from './voice'
+import { CALENDAR_TOOLS } from '../tools/calendar'
 import { CAPABILITY_TOOLS, mcpTools } from '../tools/capabilities'
 import { COMMAND_TOOLS } from '../tools/commands'
 import { MEMORY_TOOLS } from '../tools/memory'
@@ -40,6 +41,7 @@ const registry = new ToolRegistry()
   .registerAll(CAPABILITY_TOOLS)
   .registerAll(COMMAND_TOOLS)
   .registerAll(PLUGIN_TOOLS)
+  .registerAll(CALENDAR_TOOLS)
 
 /**
  * Подтягивает инструменты подключённых MCP-серверов (ТЗ §19).
