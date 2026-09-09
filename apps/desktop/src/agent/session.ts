@@ -27,10 +27,25 @@ import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { BUILTIN_TOOLS } from '../tools/builtin'
 import { speakIfVoice } from './voice'
+import { CAPABILITY_TOOLS, mcpTools } from '../tools/capabilities'
 import { MEMORY_TOOLS } from '../tools/memory'
 
 /** Реестр создаётся один раз: инструменты не меняются в течение сессии. */
-const registry = new ToolRegistry().registerAll(BUILTIN_TOOLS).registerAll(MEMORY_TOOLS)
+const registry = new ToolRegistry()
+  .registerAll(BUILTIN_TOOLS)
+  .registerAll(MEMORY_TOOLS)
+  .registerAll(CAPABILITY_TOOLS)
+
+/**
+ * Подтягивает инструменты подключённых MCP-серверов (ТЗ §19).
+ *
+ * Перед каждым запросом, а не один раз при старте: пользователь мог подключить
+ * или выключить сервер прямо в разговоре — именно этого и требует сценарий
+ * самораcширения из ТЗ §17, где Yuki добавляет возможность и тут же ей пользуется.
+ */
+async function syncMcpTools(): Promise<void> {
+  registry.replacePrefixed('mcp__', await mcpTools())
+}
 
 export function toolRegistry(): ToolRegistry {
   return registry
@@ -166,6 +181,7 @@ export async function sendMessage(text: string): Promise<void> {
   }
 
   const systemExtra = await buildSystemExtra()
+  await syncMcpTools()
 
   try {
     const outcome = await runAgent(history, {

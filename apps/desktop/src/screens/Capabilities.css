@@ -1,0 +1,232 @@
+/* Personal Capability Hub (ТЗ §17). */
+
+.hub {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.hub__inner {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.hub__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.hub__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.hub__hint {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.hub__error {
+  margin: 0 0 var(--space-4);
+  color: var(--accent-error);
+  font-size: var(--text-sm);
+}
+
+.hub__empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.hub__section {
+  margin-bottom: var(--space-7);
+}
+
+.hub__section-title {
+  margin: 0 0 var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.hub__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.hub__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.hub__input {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-abyss);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.hub__input:focus {
+  border-color: color-mix(in srgb, var(--accent-cool) 50%, transparent);
+}
+
+.hub__input::placeholder {
+  color: var(--text-muted);
+}
+
+.hub__button {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.hub__button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.hub__button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hub__link {
+  color: var(--accent-cool);
+  font-size: var(--text-xs);
+}
+
+.hub__link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.hub__link:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hub__link--danger {
+  color: var(--accent-error);
+}
+
+/* ── Карточка возможности ───────────────────────────────────────────────────── */
+
+.capability {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+}
+
+/* Сломанная возможность выделяется рамкой: в списке из десятка строк
+   текстовый статус легко пропустить. */
+.capability[data-health='failed'] {
+  border-color: color-mix(in srgb, var(--accent-error) 35%, transparent);
+}
+
+.capability[data-health='ok'] {
+  border-color: color-mix(in srgb, var(--accent-success) 22%, transparent);
+}
+
+.capability__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.capability__name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.capability__source,
+.capability__badge {
+  padding: 2px var(--space-2);
+  background: var(--surface-overlay);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.capability__badge {
+  background: color-mix(in srgb, var(--accent-warning) 14%, transparent);
+  color: var(--accent-warning);
+}
+
+.capability__health {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.capability[data-health='ok'] .capability__health {
+  color: var(--accent-success);
+}
+
+.capability[data-health='failed'] .capability__health {
+  color: var(--accent-error);
+}
+
+.capability__note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-abyss);
+  border-radius: var(--radius-sm);
+  color: var(--accent-error);
+  font: var(--text-xs) / var(--leading-relaxed) var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.capability__description,
+.capability__tools {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.capability__tools {
+  font-size: var(--text-xs);
+}
+
+.capability__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.capability__status {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}

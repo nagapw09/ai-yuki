@@ -7,6 +7,7 @@ import { ConfirmDialog } from './design-system/components/ConfirmDialog'
 import { Rail } from './design-system/components/Rail'
 import { useT } from './i18n'
 import { Activity } from './screens/Activity'
+import { Capabilities } from './screens/Capabilities'
 import { Chat } from './screens/Chat'
 import { Memory } from './screens/Memory'
 import { Orbital } from './screens/Orbital'
@@ -56,6 +57,7 @@ export function App() {
         {screen === 'chat' && <Chat />}
         {screen === 'activity' && <Activity />}
         {screen === 'memory' && <Memory />}
+        {screen === 'capabilities' && <Capabilities />}
         {screen === 'settings' && <Settings />}
         {screen === 'commands' && <Placeholder title={t('rail.commands')} />}
       </div>

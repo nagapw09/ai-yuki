@@ -10,6 +10,7 @@ members = [
   "rust/filesystem",
   "rust/accessibility",
   "rust/input",
+  "rust/mcp",
   "rust/screen",
 ]
 
@@ -37,6 +38,7 @@ yuki-macos = { path = "rust/macos" }
 yuki-filesystem = { path = "rust/filesystem" }
 yuki-accessibility = { path = "rust/accessibility" }
 yuki-input = { path = "rust/input" }
+yuki-mcp = { path = "rust/mcp" }
 yuki-screen = { path = "rust/screen" }
 yuki-voice = { path = "rust/voice" }
 

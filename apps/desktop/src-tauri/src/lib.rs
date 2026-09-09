@@ -4,6 +4,8 @@
 //! локальное хранилище (ТЗ §31) и список команд, доступных Agent Core на TypeScript.
 
 pub mod ai;
+pub mod capabilities;
+pub mod catalog;
 pub mod commands;
 pub mod hotkeys;
 pub mod memory;
@@ -65,6 +67,7 @@ pub fn run() {
 
             hotkeys::init(app.handle(), saved_hotkey);
             reminders::spawn_scheduler(app.handle().clone());
+            capabilities::connect_enabled(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -149,6 +152,16 @@ pub fn run() {
             voice::voice_stop_speaking,
             voice::voice_set_voice,
             voice::voice_configure_stt,
+            // возможности и MCP (ТЗ §17, §18, §19)
+            capabilities::integrations_list,
+            capabilities::integration_install,
+            capabilities::capability_list,
+            capabilities::capability_set_enabled,
+            capabilities::capability_remove,
+            capabilities::mcp_add,
+            capabilities::mcp_test,
+            capabilities::mcp_tools,
+            capabilities::mcp_call,
         ])
         .on_window_event(|window, event| {
             // Микрофон и синтезатор держат устройства ОС: закрыть их надо явно,

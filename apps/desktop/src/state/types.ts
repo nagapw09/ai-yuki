@@ -10,7 +10,18 @@ export type OrbState =
   | 'sleeping'
 
 /** Разделы навигационной рейки (ТЗ §13). */
-export type ScreenId = 'orbital' | 'chat' | 'commands' | 'memory' | 'activity' | 'settings'
+export type ScreenId =
+  | 'orbital'
+  | 'chat'
+  | 'commands'
+  | 'memory'
+  | 'activity'
+  | 'settings'
+  /**
+   * Capability Hub. В рейке его нет намеренно: ТЗ §13 задаёт её состав, а ТЗ §17
+   * помещает Hub в настройки — оттуда он и открывается.
+   */
+  | 'capabilities'
 
 /** Статусы задачи (ТЗ §32). */
 export type TaskStatus =

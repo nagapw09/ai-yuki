@@ -70,12 +70,26 @@ AppUserModelID, которого нет у запуска из `target/debug` �
 
 ## Фаза 3 — Расширяемость (ТЗ §17–§20, §38)
 
-- [ ] Capability Manager: манифест, health status, sandbox, validation (§18)
-- [ ] Capability Hub UI: Installed / Available / Add Tool / Add MCP / Add API (§17)
-- [ ] MCP Manager: транспорты, auth, Test Connection (§19)
-- [ ] Сценарий «Юки, добавь возможность управлять Spotify» целиком (§17, §41.8)
+- [x] MCP Manager: оба транспорта (stdio и HTTP), авторизация, Test Connection,
+      рукопожатие, список и вызов инструментов (§19)
+- [x] Capability Manager: манифест, health status, включение и удаление,
+      проверка настоящим подключением (§18)
+- [x] Capability Hub UI: Installed / Available Integrations / Add MCP (§17)
+- [x] Инструменты самораcширения: Yuki сама ищет интеграцию, ставит её,
+      проверяет и докладывает результат (§17, §42)
+- [~] Сценарий «Юки, добавь возможность управлять Spotify» — механика готова
+      и проверена на живом MCP-сервере, но запись Spotify в каталоге ведёт на
+      сервер сообщества, который я не проверял. Установка это обнаружит сама:
+      не поднялся — `health = failed` с причиной, а не «установлено» (§41.8)
 - [ ] Browser Agent на Playwright (§7)
 - [ ] Basic automation: triggers, actions, if/else (§16)
+- [ ] Sandbox и validation для плагинов: пока проверка — это факт успешного
+      подключения, а не разбор манифеста в песочнице (§18, §20)
+
+Проверено сквозным прогоном: `cargo run -p yuki-mcp --example mcp_check` на
+настоящем stdio-сервере, затем добавление того же сервера через Hub (подключился,
+инструменты видны), затем вызов его инструмента агентом — через Permission Gate
+и подтверждение, 12 мс.
 
 ## Фаза 4 — MVP-2 (ТЗ §39)
 

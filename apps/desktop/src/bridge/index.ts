@@ -362,3 +362,82 @@ export const voiceConfigureStt = (settings: {
       language: settings.language ?? null,
     },
   })
+
+// ── Возможности и MCP (ТЗ §17, §18, §19) ────────────────────────────────────────
+
+export interface Integration {
+  id: string
+  label: string
+  description: string
+  transport: string
+  command: string
+  args: string[]
+  secretEnv: string | null
+  secretHint: string | null
+  permissions: string[]
+  /** Поддерживается сообществом, а не авторами протокола. */
+  community: boolean
+}
+
+export interface CapabilityRecord {
+  id: string
+  name: string
+  description: string
+  version: string
+  source: 'builtin' | 'mcp' | 'plugin' | 'user_script' | 'api'
+  enabled: boolean
+  health: 'ok' | 'degraded' | 'failed' | 'unknown'
+  healthNote: string | null
+  tools: string[]
+  permissions: string[]
+  installedAt: number
+}
+
+export interface McpToolSpec {
+  id: string
+  serverId: string
+  toolName: string
+  description: string
+  inputSchema: Record<string, unknown>
+}
+
+export const integrationsList = (query?: string) =>
+  invoke<Integration[]>('integrations_list', { query: query ?? null })
+export const integrationInstall = (id: string, secret?: string) =>
+  invoke<CapabilityRecord>('integration_install', { id, secret: secret ?? null })
+
+export const capabilityList = () => invoke<CapabilityRecord[]>('capability_list')
+export const capabilitySetEnabled = (id: string, enabled: boolean) =>
+  invoke<void>('capability_set_enabled', { id, enabled })
+export const capabilityRemove = (id: string) => invoke<void>('capability_remove', { id })
+
+export const mcpAdd = (server: {
+  id: string
+  label: string
+  transport: 'stdio' | 'http' | 'sse'
+  command?: string
+  args?: string[]
+  url?: string
+  env?: Record<string, string>
+  secret?: string
+  secretEnv?: string
+}) =>
+  invoke<CapabilityRecord>('mcp_add', {
+    server: {
+      id: server.id,
+      label: server.label,
+      transport: server.transport,
+      command: server.command ?? null,
+      args: server.args ?? [],
+      url: server.url ?? null,
+      env: server.env ?? {},
+      secret: server.secret ?? null,
+      secretEnv: server.secretEnv ?? null,
+    },
+  })
+
+/** Test Connection: подключается заново и возвращает список инструментов (ТЗ §19). */
+export const mcpTest = (id: string) => invoke<string[]>('mcp_test', { id })
+export const mcpTools = () => invoke<McpToolSpec[]>('mcp_tools')
+export const mcpCall = (serverId: string, tool: string, args: unknown) =>
+  invoke<string>('mcp_call', { serverId, tool, arguments: args })

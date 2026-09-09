@@ -275,6 +275,30 @@ describe('tool registry', () => {
     ])
   })
 
+  it('заменяет набор инструментов одного источника, не трогая остальные', () => {
+    const registry = new ToolRegistry()
+      .register(makeTool())
+      .register(makeTool({ id: 'mcp__old__a' }))
+      .register(makeTool({ id: 'mcp__old__b' }))
+
+    registry.replacePrefixed('mcp__', [makeTool({ id: 'mcp__new__c' })])
+
+    // Инструменты отключённого сервера обязаны исчезнуть: иначе модель будет
+    // предлагать то, чего уже нет.
+    expect(registry.has('mcp__old__a')).toBe(false)
+    expect(registry.has('mcp__old__b')).toBe(false)
+    expect(registry.has('mcp__new__c')).toBe(true)
+    // Встроенные не должны пострадать.
+    expect(registry.has('open_app')).toBe(true)
+  })
+
+  it('снимает инструмент с регистрации', () => {
+    const registry = new ToolRegistry().register(makeTool())
+    expect(registry.unregister('open_app')).toBe(true)
+    expect(registry.unregister('open_app')).toBe(false)
+    expect(registry.size).toBe(0)
+  })
+
   it('не позволяет молча подменить инструмент', () => {
     const registry = new ToolRegistry().register(makeTool())
     expect(() => registry.register(makeTool())).toThrow(/уже зарегистрирован/)

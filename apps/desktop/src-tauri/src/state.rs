@@ -2,6 +2,7 @@
 
 use yuki_system::PlatformAdapters;
 
+use crate::capabilities::McpRegistry;
 use crate::storage::Storage;
 use crate::voice::VoiceState;
 
@@ -19,6 +20,8 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Голосовой режим (ТЗ §10). Пустой, пока пользователь его не включил.
     pub voice: VoiceState,
+    /// Подключённые MCP-серверы (ТЗ §19).
+    pub mcp: McpRegistry,
 }
 
 impl AppState {
@@ -28,6 +31,7 @@ impl AppState {
             storage,
             http,
             voice: VoiceState::default(),
+            mcp: McpRegistry::default(),
         }
     }
 }

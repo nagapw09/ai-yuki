@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { startVoice, stopVoice } from '../agent/voice'
+import { useUiStore } from '../state/store'
 import {
   hotkeyGet,
   hotkeySet,
@@ -41,12 +42,38 @@ export function Settings() {
   return (
     <div className="settings">
       <div className="settings__inner">
+        <CapabilitiesEntry />
         <Providers />
         <Voice />
         <Hotkey />
         <Permissions />
       </div>
     </div>
+  )
+}
+
+// ── Вход в Capability Hub (ТЗ §17) ──────────────────────────────────────────────
+
+function CapabilitiesEntry() {
+  const setScreen = useUiStore((s) => s.setScreen)
+
+  return (
+    <section className="settings__section">
+      <header className="settings__header">
+        <h2 className="settings__title">Возможности</h2>
+        <p className="settings__hint">
+          Интеграции и MCP-серверы, которые расширяют то, что Yuki умеет.
+          Можно просто попросить её: «добавь возможность управлять…».
+        </p>
+      </header>
+      <button
+        type="button"
+        className="settings__button"
+        onClick={() => setScreen('capabilities')}
+      >
+        Открыть Capability Hub
+      </button>
+    </section>
   )
 }
 

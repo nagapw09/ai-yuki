@@ -7136,6 +7136,7 @@ dependencies = [
  "yuki-filesystem",
  "yuki-input",
  "yuki-macos",
+ "yuki-mcp",
  "yuki-screen",
  "yuki-system",
  "yuki-voice",
@@ -7167,6 +7168,19 @@ version = "0.1.0"
 dependencies = [
  "sysinfo 0.33.1",
  "yuki-system",
+]
+
+[[package]]
+name = "yuki-mcp"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

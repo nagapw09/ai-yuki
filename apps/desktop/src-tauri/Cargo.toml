@@ -32,6 +32,7 @@ reqwest = { version = "0.12", default-features = false }
 
 yuki-ai = { workspace = true }
 yuki-voice = { workspace = true }
+yuki-mcp = { workspace = true }
 yuki-system = { workspace = true }
 yuki-filesystem = { workspace = true }
 yuki-input = { workspace = true }

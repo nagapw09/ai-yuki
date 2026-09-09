@@ -25,6 +25,31 @@ export class ToolRegistry {
     return this
   }
 
+  /**
+   * Снимает инструмент с регистрации.
+   *
+   * Нужен для возможностей, которые приходят и уходят вместе с подключением:
+   * инструмент выключенного MCP-сервера обязан исчезнуть из списка, который
+   * видит модель, иначе она будет предлагать то, чего уже нет.
+   */
+  unregister(id: string): boolean {
+    return this.#tools.delete(id)
+  }
+
+  /**
+   * Заменяет весь набор инструментов с общим префиксом.
+   *
+   * Разом, а не по одному: список инструментов сервера меняется целиком, и
+   * сравнивать его поэлементно значило бы оставлять расхождения при каждой
+   * пропущенной ветке.
+   */
+  replacePrefixed(prefix: string, tools: readonly Tool[]): void {
+    for (const id of [...this.#tools.keys()]) {
+      if (id.startsWith(prefix)) this.#tools.delete(id)
+    }
+    for (const tool of tools) this.#tools.set(tool.id, tool)
+  }
+
   get(id: string): Tool | undefined {
     return this.#tools.get(id)
   }
