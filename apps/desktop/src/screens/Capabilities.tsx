@@ -103,6 +103,24 @@ export function Capabilities() {
   )
 }
 
+/** Подписи категорий разрешений из ТЗ §21. */
+const PERMISSION_LABEL: Record<string, string> = {
+  microphone: 'микрофон',
+  screen_recording: 'запись экрана',
+  accessibility: 'управление интерфейсом',
+  files: 'файлы',
+  network: 'сеть',
+  shell: 'терминал',
+  camera: 'камера',
+  notifications: 'уведомления',
+  browser: 'браузер',
+  external_services: 'внешние сервисы',
+}
+
+function permissionNames(permissions: readonly string[]): string {
+  return permissions.map((p) => PERMISSION_LABEL[p] ?? p).join(', ')
+}
+
 const HEALTH_LABEL: Record<CapabilityRecord['health'], string> = {
   ok: 'работает',
   degraded: 'работает частично',
@@ -152,6 +170,12 @@ function InstalledRow({
       {capability.tools.length > 0 && (
         <p className="capability__tools">
           Инструменты: {capability.tools.join(', ')}
+        </p>
+      )}
+
+      {capability.permissions.length > 0 && (
+        <p className="capability__tools">
+          Разрешения: {permissionNames(capability.permissions)}
         </p>
       )}
 
@@ -236,6 +260,14 @@ function AvailableRow({
       </div>
 
       <p className="capability__description">{integration.description}</p>
+
+      {integration.permissions.length > 0 && (
+        // Permission review до установки (ТЗ §18): человек должен видеть,
+        // к чему получит доступ чужой сервер, до того как согласится.
+        <p className="capability__permissions">
+          Получит доступ: {permissionNames(integration.permissions)}
+        </p>
+      )}
 
       <div className="capability__actions">
         {integration.secretEnv && (

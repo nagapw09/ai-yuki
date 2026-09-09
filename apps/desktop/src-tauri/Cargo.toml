@@ -27,6 +27,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 rusqlite = { version = "0.32", features = ["bundled"] }
+opener = "0.7"
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 reqwest = { version = "0.12", default-features = false }
 

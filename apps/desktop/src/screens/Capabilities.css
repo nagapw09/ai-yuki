@@ -230,3 +230,13 @@
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
+
+/* Разрешения показываются до установки: согласие вслепую — не согласие. */
+.capability__permissions {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--accent-warning) 8%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--accent-warning);
+  font-size: var(--text-xs);
+}

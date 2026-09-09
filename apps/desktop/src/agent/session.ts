@@ -26,8 +26,10 @@ import { activityRecord, memoryContext, permissionsList, settingGet } from '../b
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { BUILTIN_TOOLS } from '../tools/builtin'
+import { tryRun } from './commands'
 import { speakIfVoice } from './voice'
 import { CAPABILITY_TOOLS, mcpTools } from '../tools/capabilities'
+import { COMMAND_TOOLS } from '../tools/commands'
 import { MEMORY_TOOLS } from '../tools/memory'
 
 /** Реестр создаётся один раз: инструменты не меняются в течение сессии. */
@@ -35,6 +37,7 @@ const registry = new ToolRegistry()
   .registerAll(BUILTIN_TOOLS)
   .registerAll(MEMORY_TOOLS)
   .registerAll(CAPABILITY_TOOLS)
+  .registerAll(COMMAND_TOOLS)
 
 /**
  * Подтягивает инструменты подключённых MCP-серверов (ТЗ §19).
@@ -161,6 +164,10 @@ function describePlan(tool: Tool, input: unknown): string {
  * в состоянии — вызывающему коду ничего доделывать не нужно.
  */
 export async function sendMessage(text: string): Promise<void> {
+  // Сначала команды (ТЗ §16): записанная последовательность выполняется сразу,
+  // без обращения к модели — в этом весь её смысл.
+  if (await tryRun(text).catch(() => false)) return
+
   const chat = useChatStore.getState()
   const ui = useUiStore.getState()
 

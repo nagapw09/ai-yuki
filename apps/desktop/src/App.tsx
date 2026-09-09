@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react'
 
+import { initTriggers } from './agent/commands'
 import { sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { isTauri, providerList, systemInfo } from './bridge'
@@ -9,21 +10,26 @@ import { useT } from './i18n'
 import { Activity } from './screens/Activity'
 import { Capabilities } from './screens/Capabilities'
 import { Chat } from './screens/Chat'
+import { Commands } from './screens/Commands'
 import { Memory } from './screens/Memory'
 import { Orbital } from './screens/Orbital'
-import { Placeholder } from './screens/Placeholder'
 import { Settings } from './screens/Settings'
 import { useUiStore } from './state/store'
 import './App.css'
 
 export function App() {
-  const t = useT()
   const screen = useUiStore((s) => s.screen)
   const setScreen = useUiStore((s) => s.setScreen)
   const setOrbState = useUiStore((s) => s.setOrbState)
   const setHeadline = useUiStore((s) => s.setHeadline)
 
   useProviderStatus()
+
+  useEffect(() => {
+    // Сочетания команд и автозапуск (ТЗ §16). Сбой не должен мешать
+    // приложению работать: без триггеров команды остаются доступны вручную.
+    if (isTauri()) void initTriggers().catch(() => undefined)
+  }, [])
 
   const handleSubmit = useCallback(
     (text: string) => {
@@ -59,7 +65,7 @@ export function App() {
         {screen === 'memory' && <Memory />}
         {screen === 'capabilities' && <Capabilities />}
         {screen === 'settings' && <Settings />}
-        {screen === 'commands' && <Placeholder title={t('rail.commands')} />}
+        {screen === 'commands' && <Commands />}
       </div>
       <ConfirmDialog />
     </div>

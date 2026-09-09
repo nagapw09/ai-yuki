@@ -4,6 +4,7 @@
 //! локальное хранилище (ТЗ §31) и список команд, доступных Agent Core на TypeScript.
 
 pub mod ai;
+pub mod automation;
 pub mod capabilities;
 pub mod catalog;
 pub mod commands;
@@ -43,29 +44,12 @@ pub fn run() {
             let adapters = system::build()?;
             let http = yuki_ai::http_client()?;
 
-            // Хоткей читаем до передачи хранилища в состояние: дальше владение
-            // уходит в AppState.
-            let saved_hotkey = storage
-                .with_conn(|conn| {
-                    conn.query_row(
-                        "SELECT value FROM settings WHERE key = 'hotkey.summon'",
-                        [],
-                        |r| r.get::<_, String>(0),
-                    )
-                    .map(Some)
-                    .or_else(|e| match e {
-                        rusqlite::Error::QueryReturnedNoRows => Ok(None),
-                        other => Err(other),
-                    })
-                })
-                .unwrap_or(None);
-
             // Протухшая краткосрочная память не должна пережить перезапуск.
             let _ = memory::prune_expired(&storage);
 
             app.manage(AppState::new(adapters, storage, http));
 
-            hotkeys::init(app.handle(), saved_hotkey);
+            hotkeys::init(app.handle());
             reminders::spawn_scheduler(app.handle().clone());
             capabilities::connect_enabled(app.handle().clone());
             Ok(())
@@ -90,6 +74,7 @@ pub fn run() {
             commands::file_delete,
             commands::file_stat,
             commands::file_open,
+            commands::open_url,
             // ввод (ТЗ §6)
             commands::type_text,
             commands::press_key,
@@ -162,6 +147,10 @@ pub fn run() {
             capabilities::mcp_test,
             capabilities::mcp_tools,
             capabilities::mcp_call,
+            // автоматизации (ТЗ §16)
+            automation::command_list,
+            automation::command_save,
+            automation::command_delete,
         ])
         .on_window_event(|window, event| {
             // Микрофон и синтезатор держат устройства ОС: закрыть их надо явно,

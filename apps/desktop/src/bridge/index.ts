@@ -143,6 +143,8 @@ export const fileDelete = (path: string, toTrash = true) =>
   invoke<void>('file_delete', { path, toTrash })
 export const fileStat = (path: string) => invoke<FileEntry>('file_stat', { path })
 export const fileOpen = (path: string) => invoke<void>('file_open', { path })
+/** Открывает ссылку в браузере по умолчанию; только http и https (ТЗ §7). */
+export const openUrl = (url: string) => invoke<void>('open_url', { url })
 
 // ── Ввод (ТЗ §6) ────────────────────────────────────────────────────────────────
 
@@ -441,3 +443,21 @@ export const mcpTest = (id: string) => invoke<string[]>('mcp_test', { id })
 export const mcpTools = () => invoke<McpToolSpec[]>('mcp_tools')
 export const mcpCall = (serverId: string, tool: string, args: unknown) =>
   invoke<string>('mcp_call', { serverId, tool, arguments: args })
+
+// ── Команды и автоматизации (ТЗ §16) ────────────────────────────────────────────
+
+export interface CommandRecord {
+  id: string
+  name: string
+  description: string
+  triggerKind: 'phrase' | 'hotkey' | 'startup' | 'manual'
+  phrase: string | null
+  hotkey: string | null
+  enabled: boolean
+  /** Шаги программы; структура описана в @yuki/core. */
+  steps: unknown[]
+}
+
+export const commandList = () => invoke<CommandRecord[]>('command_list')
+export const commandSave = (command: CommandRecord) => invoke<void>('command_save', { command })
+export const commandDelete = (id: string) => invoke<void>('command_delete', { id })

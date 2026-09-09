@@ -333,6 +333,10 @@ pub async fn integration_install(
         ));
     }
 
+    // Разрешения интеграции запоминаем до установки: манифест, который
+    // соберётся после подключения, знает про инструменты, но не про категории.
+    let permissions: Vec<String> = integration.permissions.iter().map(|p| p.to_string()).collect();
+
     let input = McpServerInput {
         id: integration.id.to_string(),
         label: integration.label.to_string(),
@@ -345,7 +349,26 @@ pub async fn integration_install(
         secret_env: integration.secret_env.map(str::to_string),
     };
 
-    mcp_add(state, input).await
+    let record = mcp_add(state.clone(), input).await?;
+
+    state
+        .storage
+        .with_conn(|conn| {
+            conn.execute(
+                "UPDATE capabilities
+                 SET description = ?2,
+                     manifest = json_set(manifest, '$.permissions', json(?3))
+                 WHERE id = ?1",
+                rusqlite::params![
+                    record.id,
+                    integration.description,
+                    serde_json::to_string(&permissions).unwrap_or_else(|_| "[]".into())
+                ],
+            )
+        })
+        .map_err(err)?;
+
+    single_capability(&state, &record.id)
 }
 
 /// Проверяет подключение и обновляет список инструментов (ТЗ §19: Test Connection).

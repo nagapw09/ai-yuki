@@ -256,6 +256,29 @@ const fileOpen: Tool = {
   execute: (input) => bridge.fileOpen((input as { path: string }).path),
 }
 
+// ── Браузер (ТЗ §7) ─────────────────────────────────────────────────────────────
+
+const openUrl: Tool = {
+  id: 'open_url',
+  name: 'Открыть ссылку',
+  description:
+    'Открывает адрес в браузере по умолчанию. Принимает только http и https. ' +
+    'Чтобы потом прочитать страницу, возьми read_ui — дерево интерфейса браузера ' +
+    'содержит текст и ссылки страницы. Для действий внутри страницы — кликов, ' +
+    'ввода в формы, прокрутки — нужна возможность «Браузер (Playwright)» ' +
+    'из Capability Hub; без неё честно скажи, что не можешь.',
+  permissions: ['browser'],
+  risk: 'low',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: { url: { type: 'string' } },
+    required: ['url'],
+    additionalProperties: false,
+  },
+  execute: (input) => bridge.openUrl((input as { url: string }).url),
+}
+
 // ── Буфер обмена и ввод (ТЗ §6, §24) ────────────────────────────────────────────
 
 const clipboardRead: Tool = {
@@ -451,6 +474,7 @@ export const BUILTIN_TOOLS: readonly Tool[] = [
   fileMove,
   fileDelete,
   fileOpen,
+  openUrl,
   clipboardRead,
   clipboardWrite,
   typeText,

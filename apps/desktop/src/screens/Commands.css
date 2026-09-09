@@ -1,0 +1,250 @@
+/* Команды и автоматизации (ТЗ §16). */
+
+.commands {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.commands__inner {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.commands__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.commands__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.commands__hint {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.commands__empty {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.commands__error {
+  margin: 0 0 var(--space-4);
+  color: var(--accent-error);
+  font-size: var(--text-sm);
+}
+
+.commands__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.commands__input {
+  min-width: 0;
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-abyss);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.commands__input--narrow {
+  flex: 0 0 140px;
+}
+
+.commands__input:focus {
+  border-color: color-mix(in srgb, var(--accent-cool) 50%, transparent);
+}
+
+.commands__input::placeholder {
+  color: var(--text-muted);
+}
+
+.commands__button {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.commands__button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.commands__button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.commands__link {
+  color: var(--accent-cool);
+  font-size: var(--text-xs);
+}
+
+.commands__link:hover {
+  text-decoration: underline;
+}
+
+.commands__link--danger {
+  color: var(--accent-error);
+}
+
+/* ── Карточка команды ───────────────────────────────────────────────────────── */
+
+.command {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+}
+
+/* Выключенная команда гасится: в списке из десятка строк текстовый статус
+   легко пропустить, а перепутать включённую с выключенной — обидно. */
+.command[data-enabled='false'] {
+  opacity: 0.55;
+}
+
+.command__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.command__name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+
+.command__trigger {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.command__steps {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.command__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.command__note {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* ── Редактор ───────────────────────────────────────────────────────────────── */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+}
+
+.editor__row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-abyss);
+  border-radius: var(--radius-md);
+}
+
+/* Вложенные ветки отступают и слабее по фону: иначе на третьем уровне
+   перестаёт быть видно, где чей шаг. */
+.steps[data-depth='1'],
+.steps[data-depth='2'] {
+  background: var(--surface-base);
+  border: 1px solid var(--line-subtle);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.step__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.step__index {
+  flex-shrink: 0;
+  width: 20px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.step__branches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  padding-left: var(--space-5);
+}
+
+.step__branch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.step__branch-title {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.steps__add {
+  display: flex;
+  gap: var(--space-3);
+  padding-left: 28px;
+}

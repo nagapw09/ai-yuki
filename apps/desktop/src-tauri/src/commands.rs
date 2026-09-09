@@ -127,6 +127,25 @@ pub fn file_open(state: State<'_, AppState>, path: String) -> Result<(), String>
     state.adapters.files.open(&path).map_err(err)
 }
 
+/// Открывает ссылку в браузере по умолчанию (ТЗ §7).
+///
+/// Схема проверяется явно: `opener` умеет открывать не только веб-адреса, и без
+/// проверки инструмент «открой ссылку» стал бы способом запустить что угодно
+/// через `file://` или зарегистрированный в системе протокол.
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    let allowed = trimmed.starts_with("https://") || trimmed.starts_with("http://");
+
+    if !allowed {
+        return Err(format!(
+            "открывать можно только http и https, получено «{trimmed}»"
+        ));
+    }
+
+    opener::open(trimmed).map_err(err)
+}
+
 // ── Ввод (ТЗ §6, §30) ───────────────────────────────────────────────────────────
 
 #[tauri::command]

@@ -56,6 +56,23 @@ pub const INTEGRATIONS: &[Integration] = &[
         community: false,
     },
     Integration {
+        id: "playwright",
+        label: "Браузер (Playwright)",
+        description: concat!(
+            "Полноценное управление браузером: переходы, клики, ввод, прокрутка, ",
+            "формы и извлечение данных со страниц. Yuki и без него умеет открыть ",
+            "ссылку и прочитать страницу через дерево интерфейса — этот сервер ",
+            "нужен, когда нужны действия внутри самой страницы."
+        ),
+        transport: "stdio",
+        command: "npx",
+        args: &["-y", "@playwright/mcp@latest"],
+        secret_env: None,
+        secret_hint: None,
+        permissions: &["browser", "network"],
+        community: false,
+    },
+    Integration {
         id: "github",
         label: "GitHub",
         description: "Репозитории, issue, pull request и поиск по коду.",
