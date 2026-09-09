@@ -4,6 +4,7 @@ members = [
   "apps/desktop/src-tauri",
   "rust/ai",
   "rust/system",
+  "rust/voice",
   "rust/windows",
   "rust/macos",
   "rust/filesystem",
@@ -37,6 +38,7 @@ yuki-filesystem = { path = "rust/filesystem" }
 yuki-accessibility = { path = "rust/accessibility" }
 yuki-input = { path = "rust/input" }
 yuki-screen = { path = "rust/screen" }
+yuki-voice = { path = "rust/voice" }
 
 [profile.release]
 opt-level = "s"

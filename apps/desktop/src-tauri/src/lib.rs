@@ -13,6 +13,7 @@ pub mod secrets;
 pub mod state;
 pub mod storage;
 pub mod system;
+pub mod voice;
 
 use tauri::Manager;
 
@@ -138,7 +139,23 @@ pub fn run() {
             // хоткеи (ТЗ §16, §38)
             hotkeys::hotkey_get,
             hotkeys::hotkey_set,
+            // голос (ТЗ §10)
+            voice::voice_status,
+            voice::voice_start,
+            voice::voice_stop,
+            voice::voice_finish_utterance,
+            voice::voice_speak,
+            voice::voice_stop_speaking,
+            voice::voice_set_voice,
+            voice::voice_configure_stt,
         ])
+        .on_window_event(|window, event| {
+            // Микрофон и синтезатор держат устройства ОС: закрыть их надо явно,
+            // иначе процесс уходит, а индикатор записи у пользователя остаётся.
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                voice::shutdown(window.app_handle());
+            }
+        })
         .run(tauri::generate_context!())
         .expect("не удалось запустить окно Yuki");
 }

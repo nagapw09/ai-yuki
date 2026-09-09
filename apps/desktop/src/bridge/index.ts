@@ -322,3 +322,40 @@ export const notify = (title: string, body: string) => invoke<void>('notify', { 
 
 export const hotkeyGet = () => invoke<string>('hotkey_get')
 export const hotkeySet = (shortcut: string) => invoke<void>('hotkey_set', { shortcut })
+
+// ── Голос (ТЗ §10) ──────────────────────────────────────────────────────────────
+
+export type ListenMode = 'push_to_talk' | 'wake_word'
+
+export interface VoiceStatus {
+  listening: boolean
+  mode: ListenMode | null
+  speaking: boolean
+  inputDevice: string | null
+  devices: string[]
+  voices: string[]
+  /** Настроено ли распознавание: без него голосовой ввод невозможен. */
+  sttReady: boolean
+}
+
+export const voiceStatus = () => invoke<VoiceStatus>('voice_status')
+export const voiceStart = (mode: ListenMode) => invoke<void>('voice_start', { mode })
+export const voiceStop = () => invoke<void>('voice_stop')
+/** Отпущена кнопка push-to-talk: отдать накопленное, не дожидаясь паузы. */
+export const voiceFinishUtterance = () => invoke<void>('voice_finish_utterance')
+export const voiceSpeak = (text: string) => invoke<void>('voice_speak', { text })
+/** Замолчать немедленно — перебивание из ТЗ §10. */
+export const voiceStopSpeaking = () => invoke<void>('voice_stop_speaking')
+export const voiceSetVoice = (name: string) => invoke<void>('voice_set_voice', { name })
+export const voiceConfigureStt = (settings: {
+  providerId?: string
+  model?: string
+  language?: string
+}) =>
+  invoke<void>('voice_configure_stt', {
+    settings: {
+      providerId: settings.providerId ?? null,
+      model: settings.model ?? null,
+      language: settings.language ?? null,
+    },
+  })

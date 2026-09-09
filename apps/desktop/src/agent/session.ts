@@ -26,6 +26,7 @@ import { activityRecord, memoryContext, permissionsList, settingGet } from '../b
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { BUILTIN_TOOLS } from '../tools/builtin'
+import { speakIfVoice } from './voice'
 import { MEMORY_TOOLS } from '../tools/memory'
 
 /** Реестр создаётся один раз: инструменты не меняются в течение сессии. */
@@ -231,6 +232,9 @@ export async function sendMessage(text: string): Promise<void> {
 
     chat.finishTurn(outcome.reply, outcome.messages)
     ui.flashResult('success')
+    // Озвучивание не должно задерживать возврат: ход уже закрыт, а Orb
+    // переключится в SPEAKING сам.
+    void speakIfVoice(outcome.reply)
   } catch (error) {
     const message = describeError(error)
     useChatStore.getState().failTurn(message)

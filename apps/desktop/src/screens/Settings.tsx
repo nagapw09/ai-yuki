@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import { startVoice, stopVoice } from '../agent/voice'
 import {
   hotkeyGet,
   hotkeySet,
@@ -12,8 +13,13 @@ import {
   providerSetDefault,
   providerSetKey,
   providerTest,
+  settingGet,
+  voiceConfigureStt,
+  voiceSetVoice,
+  voiceStatus,
   type PermissionStatus,
   type ProviderRecord,
+  type VoiceStatus as VoiceStatusRecord,
 } from '../bridge'
 import './Settings.css'
 
@@ -36,10 +42,135 @@ export function Settings() {
     <div className="settings">
       <div className="settings__inner">
         <Providers />
+        <Voice />
         <Hotkey />
         <Permissions />
       </div>
     </div>
+  )
+}
+
+// ── Голос (ТЗ §10) ──────────────────────────────────────────────────────────────
+
+function Voice() {
+  const [status, setStatus] = useState<VoiceStatusRecord | null>(null)
+  const [model, setModel] = useState('')
+  const [language, setLanguage] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+
+  const reload = useCallback(async () => {
+    try {
+      setStatus(await voiceStatus())
+    } catch (e) {
+      setNote(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+    settingGet('voice.stt.model').then((v) => setModel(v ?? '')).catch(() => undefined)
+    settingGet('voice.language').then((v) => setLanguage(v ?? '')).catch(() => undefined)
+  }, [reload])
+
+  const save = () => {
+    void voiceConfigureStt({ model, language })
+      .then(() => {
+        setNote('сохранено')
+        return reload()
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+  }
+
+  return (
+    <section className="settings__section">
+      <header className="settings__header">
+        <h2 className="settings__title">Голос</h2>
+        <p className="settings__hint">
+          Речь синтезирует сама операционная система — без ключей и без сети.
+          Для распознавания нужен провайдер с протоколом OpenAI: облачный или
+          локальный Whisper на своём порту.
+        </p>
+      </header>
+
+      {status && !status.sttReady && (
+        // Прямая причина вместо молчания: без этого кнопка микрофона просто
+        // не работала бы, и понять почему было бы неоткуда.
+        <p className="settings__error">
+          Распознавание не настроено — включите провайдера протокола OpenAI выше.
+        </p>
+      )}
+
+      <div className="provider__row">
+        <input
+          className="settings__input"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          onBlur={save}
+          placeholder="Модель распознавания (по умолчанию whisper-1)"
+          spellCheck={false}
+        />
+        <input
+          className="settings__input"
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          onBlur={save}
+          placeholder="Язык: ru, en, uk"
+          spellCheck={false}
+          style={{ maxWidth: 160 }}
+        />
+      </div>
+
+      {status && status.voices.length > 0 && (
+        <div className="provider__row">
+          <select
+            className="settings__input"
+            defaultValue=""
+            onChange={(e) => {
+              if (!e.target.value) return
+              void voiceSetVoice(e.target.value)
+                .then(() => setNote('голос выбран'))
+                .catch((err: unknown) => setNote(describe(err)))
+            }}
+          >
+            <option value="">Голос Yuki — выбрать…</option>
+            {status.voices.map((voice) => (
+              <option key={voice} value={voice}>
+                {voice}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="provider__row">
+        <button
+          type="button"
+          className="settings__button"
+          disabled={!status?.sttReady}
+          onClick={() => {
+            // Сообщение прошлой попытки надо убрать до новой: иначе рядом
+            // с успешно включённым микрофоном висит старая причина отказа.
+            setNote(null)
+            const action = status?.listening
+              ? stopVoice()
+              : startVoice('wake_word').catch((e: unknown) => setNote(describe(e)))
+            void Promise.resolve(action).then(reload)
+          }}
+        >
+          {status?.listening ? 'Выключить прослушивание' : 'Слушать постоянно («Юки, …»)'}
+        </button>
+        <span className="provider__status">
+          {status?.inputDevice ? `микрофон: ${status.inputDevice}` : 'микрофон не найден'}
+          {note ? ` · ${note}` : ''}
+        </span>
+      </div>
+
+      <p className="settings__hint" style={{ marginTop: 'var(--space-3)' }}>
+        Постоянное прослушивание распознаёт фразу целиком и только потом ищет
+        в ней обращение, поэтому отзыв наступает после того, как вы договорили.
+        Мгновенная реакция требует отдельной модели пробуждения — она в планах.
+      </p>
+    </section>
   )
 }
 

@@ -3,6 +3,7 @@
 use yuki_system::PlatformAdapters;
 
 use crate::storage::Storage;
+use crate::voice::VoiceState;
 
 /// Всё, что живёт столько же, сколько процесс Yuki.
 ///
@@ -16,6 +17,8 @@ pub struct AppState {
     /// переиспользует TLS-сессии, что срезает задержку второго и последующих
     /// запросов к провайдеру — а бюджет первого токена задан в ТЗ §37.
     pub http: reqwest::Client,
+    /// Голосовой режим (ТЗ §10). Пустой, пока пользователь его не включил.
+    pub voice: VoiceState,
 }
 
 impl AppState {
@@ -24,6 +27,7 @@ impl AppState {
             adapters,
             storage,
             http,
+            voice: VoiceState::default(),
         }
     }
 }

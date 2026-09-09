@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 
 import { sendMessage } from './agent/session'
+import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { isTauri, providerList, systemInfo } from './bridge'
 import { ConfirmDialog } from './design-system/components/ConfirmDialog'
 import { Rail } from './design-system/components/Rail'
@@ -20,7 +21,6 @@ export function App() {
   const setScreen = useUiStore((s) => s.setScreen)
   const setOrbState = useUiStore((s) => s.setOrbState)
   const setHeadline = useUiStore((s) => s.setHeadline)
-  const orbState = useUiStore((s) => s.orbState)
 
   useProviderStatus()
 
@@ -35,11 +35,16 @@ export function App() {
   )
 
   const handleToggleVoice = useCallback(() => {
-    // Голосовой конвейер — фаза 2. Пока переключаем только видимое состояние Orb,
-    // чтобы состояние LISTENING можно было проверить глазами.
-    setOrbState(orbState === 'listening' ? 'idle' : 'listening')
     setHeadline(null)
-  }, [orbState, setOrbState, setHeadline])
+    if (isVoiceActive()) {
+      void stopVoice()
+      return
+    }
+    // Push-to-talk по умолчанию: постоянное прослушивание включается
+    // отдельно в настройках — это осознанное решение, а не побочный эффект
+    // нажатия на микрофон.
+    void startVoice('push_to_talk').catch(() => undefined)
+  }, [setHeadline])
 
   return (
     <div className="app">
