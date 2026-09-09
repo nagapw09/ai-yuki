@@ -1,0 +1,31 @@
+{
+  "name": "yuki",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Yuki — personal AI voice/desktop assistant for Windows and macOS",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/desktop",
+    "core"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @yuki/desktop",
+    "build": "npm run build -w @yuki/desktop",
+    "tauri:dev": "npm run tauri:dev -w @yuki/desktop",
+    "tauri:build": "npm run tauri:build -w @yuki/desktop",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "rust:check": "cargo check --workspace",
+    "rust:fmt": "cargo fmt --all",
+    "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

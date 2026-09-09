@@ -1,0 +1,36 @@
+# deps
+node_modules/
+.pnp.*
+# builds
+dist/
+build/
+target/
+*.tsbuildinfo
+# rust
+**/target/
+# tauri
+apps/desktop/src-tauri/gen/
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+# runtime data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+models/
+# os
+.DS_Store
+Thumbs.db
+desktop.ini
+# editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+# logs
+*.log
+npm-debug.log*

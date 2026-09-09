@@ -1,0 +1,104 @@
+/*
+  Orbital — главный экран (ТЗ §13).
+
+  Композиция ровно из ТЗ: сверху имя, время и статус; в центре Orb с короткой
+  репликой; снизу Command Bar; в самом низу компактные Today / Tasks / Next Event.
+  Постоянных панелей нет: экран отвечает на вопрос «что Yuki делает сейчас»,
+  а не «какие функции есть у приложения».
+*/
+
+.orbital {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  height: 100%;
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  gap: var(--space-5);
+}
+
+/* ── Верх ──────────────────────────────────────────────────────────────────── */
+
+.orbital__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.orbital__wordmark {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.orbital__clock {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-normal);
+  color: var(--text-muted);
+}
+
+/* ── Центр ─────────────────────────────────────────────────────────────────── */
+
+.orbital__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-7);
+  min-height: 0;
+}
+
+.orbital__headline {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-secondary);
+  text-align: center;
+
+  /* Смена реплики — это смена состояния Yuki, поэтому длительность из
+     диапазона состояний, а не из диапазона обычных переходов (ТЗ §14). */
+  animation: headline-in var(--duration-state) var(--ease-out);
+}
+
+@keyframes headline-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Command Bar ───────────────────────────────────────────────────────────── */
+
+.orbital__command {
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Нижняя полоса ─────────────────────────────────────────────────────────── */
+
+.orbital__strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* На узком окне полоса важнее всего в части задач: остальное сжимается первым. */
+@media (max-width: 940px) {
+  .orbital {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+
+  .orbital__stage {
+    gap: var(--space-5);
+  }
+}

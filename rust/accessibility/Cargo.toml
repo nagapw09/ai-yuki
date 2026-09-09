@@ -1,0 +1,12 @@
+[package]
+name = "yuki-accessibility"
+description = "Accessibility/UI tree — приоритетный способ понимания интерфейса (ТЗ §6)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuki-system = { workspace = true }

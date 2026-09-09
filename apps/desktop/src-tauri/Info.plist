@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Строки обоснования доступа для macOS (ТЗ §21).
+
+  Без них macOS не покажет системный запрос, а сразу откажет — приложение просто
+  «не работает» без единого сообщения. Текст виден пользователю в диалоге, поэтому
+  он объясняет пользу, а не называет API.
+
+  Tauri сливает этот файл со сгенерированным Info.plist при сборке бандла.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Микрофон нужен, чтобы Yuki слышала голосовые команды и слово пробуждения.</string>
+
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Распознавание речи превращает вашу реплику в текст команды.</string>
+
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Управление приложениями нужно, чтобы Yuki открывала программы и окна по вашей просьбе.</string>
+
+  <key>NSCameraUsageDescription</key>
+  <string>Камера используется, только если вы явно попросите Yuki о задаче с изображением.</string>
+
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>Доступ к Рабочему столу нужен для поиска и открытия ваших файлов.</string>
+
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>Доступ к Документам нужен для поиска и открытия ваших файлов.</string>
+
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>Доступ к Загрузкам нужен, чтобы находить только что скачанные файлы.</string>
+
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+</dict>
+</plist>

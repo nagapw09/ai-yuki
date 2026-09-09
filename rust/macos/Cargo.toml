@@ -1,0 +1,13 @@
+[package]
+name = "yuki-macos"
+description = "MacOSAdapter — реализация системного слоя для macOS 13+ (ТЗ §2, §30)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuki-system = { workspace = true }
+sysinfo = "0.33"

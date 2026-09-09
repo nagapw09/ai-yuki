@@ -1,0 +1,84 @@
+/*
+  Status pill и activity chip (ТЗ §14).
+
+  Pill сообщает состояние системы, chip — конкретное действие. Оба намеренно
+  тихие: на главном экране они не должны спорить с Orb за внимание.
+*/
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  transition: color var(--duration-normal) var(--ease-out);
+}
+
+.status-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition:
+    background var(--duration-state) var(--ease-in-out),
+    box-shadow var(--duration-state) var(--ease-in-out);
+}
+
+.status-pill[data-tone='online'] .status-pill__dot {
+  background: var(--accent-success);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-success) 60%, transparent);
+}
+
+.status-pill[data-tone='offline'] .status-pill__dot {
+  background: var(--text-muted);
+}
+
+.status-pill[data-tone='warning'] .status-pill__dot {
+  background: var(--accent-warning);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-warning) 60%, transparent);
+}
+
+.status-pill[data-tone='error'] .status-pill__dot {
+  background: var(--accent-error);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-error) 60%, transparent);
+}
+
+.activity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 260px;
+  padding: var(--space-2) var(--space-4);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(var(--glass-blur));
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    color var(--duration-normal) var(--ease-out);
+}
+
+.activity-chip__label {
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  font-size: var(--text-2xs);
+}
+
+.activity-chip__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.activity-chip[data-empty='true'] .activity-chip__value {
+  color: var(--text-muted);
+}

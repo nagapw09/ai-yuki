@@ -1,0 +1,15 @@
+[package]
+name = "yuki-filesystem"
+description = "Кроссплатформенная реализация FileAdapter (ТЗ §8, §30)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuki-system = { workspace = true }
+walkdir = "2.5"
+trash = "5.2"
+opener = "0.7"

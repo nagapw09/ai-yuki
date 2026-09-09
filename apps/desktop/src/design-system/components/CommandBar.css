@@ -1,0 +1,104 @@
+/*
+  Command Bar — единственная точка ввода на главном экране (ТЗ §13).
+
+  Голос и текст живут в одном элементе намеренно: разделять их на две кнопки
+  значит заставлять пользователя выбирать способ до того, как он сформулировал
+  мысль. Здесь он просто начинает — говорит или печатает.
+*/
+
+.command-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(680px, 100%);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  backdrop-filter: blur(var(--glass-blur));
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out),
+    background var(--duration-normal) var(--ease-out);
+}
+
+.command-bar:focus-within {
+  border-color: color-mix(in srgb, var(--accent-cool) 45%, transparent);
+  background: rgb(255 255 255 / 6%);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-cool) 10%, transparent);
+}
+
+.command-bar[data-listening='true'] {
+  border-color: color-mix(in srgb, var(--orb-listening) 55%, transparent);
+  box-shadow: 0 0 32px color-mix(in srgb, var(--orb-listening) 18%, transparent);
+}
+
+.command-bar__input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  padding: var(--space-2) 0;
+}
+
+.command-bar__input::placeholder {
+  color: var(--text-muted);
+}
+
+.command-bar__button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-spring);
+}
+
+.command-bar__button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.command-bar__button:active {
+  transform: scale(0.92);
+}
+
+.command-bar__button--mic[data-active='true'] {
+  background: color-mix(in srgb, var(--orb-listening) 20%, transparent);
+  color: var(--orb-listening);
+}
+
+.command-bar__button--send {
+  background: var(--accent-deep);
+  color: var(--text-primary);
+}
+
+.command-bar__button--send:hover {
+  background: color-mix(in srgb, var(--accent-deep) 80%, white);
+  color: var(--text-primary);
+}
+
+.command-bar__button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  transform: none;
+}
+
+.command-bar__hint {
+  flex-shrink: 0;
+  padding-right: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}

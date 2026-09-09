@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "paths": {
+      "@yuki/core": ["./core/src/index.ts"],
+      "@yuki/core/*": ["./core/src/*"],
+      "@yuki/ai": ["./ai/src/index.ts"],
+      "@yuki/ai/*": ["./ai/src/*"],
+      "@yuki/tools": ["./tools/src/index.ts"],
+      "@yuki/tools/*": ["./tools/src/*"],
+      "@yuki/voice": ["./voice/src/index.ts"],
+      "@yuki/automation": ["./automation/src/index.ts"],
+      "@yuki/capabilities": ["./capabilities/src/index.ts"],
+      "@yuki/mcp": ["./mcp/src/index.ts"],
+      "@yuki/storage": ["./storage/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "target"]
+}

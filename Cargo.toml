@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/desktop/src-tauri",
+  "rust/system",
+  "rust/windows",
+  "rust/macos",
+  "rust/filesystem",
+  "rust/accessibility",
+  "rust/input",
+  "rust/screen",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+authors = ["nagapw09"]
+repository = "https://github.com/nagapw09/ai-yuki"
+
+[workspace.dependencies]
+anyhow = "1.0"
+thiserror = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+async-trait = "0.1"
+
+yuki-system = { path = "rust/system" }
+yuki-windows = { path = "rust/windows" }
+yuki-macos = { path = "rust/macos" }
+yuki-filesystem = { path = "rust/filesystem" }
+yuki-accessibility = { path = "rust/accessibility" }
+yuki-input = { path = "rust/input" }
+yuki-screen = { path = "rust/screen" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

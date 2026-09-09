@@ -1,0 +1,14 @@
+[package]
+name = "yuki-input"
+description = "Клавиатура и мышь (ТЗ §6, §30 InputAdapter)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuki-system = { workspace = true }
+enigo = "0.3"
+arboard = "3.4"

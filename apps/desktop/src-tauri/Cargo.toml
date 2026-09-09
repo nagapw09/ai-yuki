@@ -1,0 +1,40 @@
+[package]
+name = "yuki-desktop"
+description = "Yuki — персональный AI voice/desktop assistant"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+# Имя с суффиксом _lib обязательно: на Windows крейт библиотеки и бинарь
+# не могут называться одинаково.
+name = "yuki_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+rusqlite = { version = "0.32", features = ["bundled"] }
+keyring = { version = "3", features = ["apple-native", "windows-native"] }
+
+yuki-system = { workspace = true }
+yuki-filesystem = { workspace = true }
+yuki-input = { workspace = true }
+yuki-screen = { workspace = true }
+yuki-accessibility = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+yuki-windows = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+yuki-macos = { workspace = true }

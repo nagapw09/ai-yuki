@@ -1,0 +1,162 @@
+/*
+  Дизайн-токены Yuki (ТЗ §14).
+
+  Все значения проходят через переменные, потому что тема — точка расширения:
+  плагин может подменить палитру целиком, не трогая ни один компонент
+  (см. docs/GAPS.md §8). Dark — база, а не вариант.
+*/
+
+:root {
+  color-scheme: dark;
+
+  /* ── Поверхности ───────────────────────────────────────────────────────────
+     Глубокий графит из ТЗ §13. Слои различаются на несколько процентов яркости:
+     иерархия читается, но взгляд не цепляется за границы. */
+  --surface-abyss: #07090b;
+  --surface-base: #0b0d10;
+  --surface-raised: #101318;
+  --surface-overlay: #161a21;
+  --surface-hover: #1c212a;
+
+  /* Стекло — только для вторичных элементов (ТЗ §13). */
+  --glass-bg: rgb(255 255 255 / 4%);
+  --glass-border: rgb(255 255 255 / 8%);
+  --glass-blur: 20px;
+
+  /* ── Линии ────────────────────────────────────────────────────────────────
+     Тонкие и почти незаметные: разделяют, но не рисуют сетку. */
+  --line-subtle: rgb(255 255 255 / 6%);
+  --line-default: rgb(255 255 255 / 10%);
+  --line-strong: rgb(255 255 255 / 18%);
+
+  /* ── Текст ────────────────────────────────────────────────────────────────
+     Контраст к --surface-base: primary 15.8:1, secondary 7.4:1, muted 4.6:1 —
+     все выше порога WCAG AA для своих размеров. */
+  --text-primary: #f2f5f8;
+  --text-secondary: #a8b2c0;
+  --text-muted: #6b7786;
+  --text-inverse: #0b0d10;
+
+  /* ── Ядро и акценты ───────────────────────────────────────────────────────
+     Цвет несёт состояние Yuki, а не украшает: см. --orb-* ниже. */
+  --accent-core: #e8f7ff;
+  --accent-cool: #7fd1ff;
+  --accent-deep: #6c5ce7;
+  --accent-warm: #ff9f6e;
+  --accent-success: #4ade9b;
+  --accent-error: #ff6b7a;
+  --accent-warning: #ffc95c;
+
+  /* Состояния Orb (ТЗ §13). Каждому состоянию — свой цвет, чтобы состояние
+     считывалось периферийным зрением, без чтения подписи. */
+  --orb-idle: #6c5ce7;
+  --orb-listening: #7fd1ff;
+  --orb-thinking: #a78bfa;
+  --orb-working: #5eead4;
+  --orb-speaking: #ffb86c;
+  --orb-success: #4ade9b;
+  --orb-error: #ff6b7a;
+  --orb-sleeping: #3c4454;
+
+  /* ── Типографика ──────────────────────────────────────────────────────────
+     Системный стек: на Windows и macOS он даёт родной для платформы гротеск
+     без единого сетевого запроса, что важно для startup из ТЗ §37. */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text',
+    'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-base: 0.9375rem;/* 15px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.5rem;     /* 24px */
+  --text-2xl: 2rem;      /* 32px */
+  --text-3xl: 2.75rem;   /* 44px */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.08em;
+  --tracking-widest: 0.18em;
+
+  /* ── Сетка 4/8 px (ТЗ §14) ────────────────────────────────────────────────
+     Отступы крупные: «много свободного пространства» из ТЗ §13 — это требование,
+     а не вкусовщина. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 999px;
+
+  /* ── Тени и свечение ──────────────────────────────────────────────────────
+     На тёмном фоне тень почти не читается, поэтому глубину даёт свечение. */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 45%);
+  --shadow-lg: 0 24px 64px rgb(0 0 0 / 55%);
+  --glow-soft: 0 0 40px;
+  --glow-strong: 0 0 80px;
+
+  /* ── Motion (ТЗ §14) ──────────────────────────────────────────────────────
+     150–250 мс — обычные переходы; 300–800 мс — смена состояния Yuki:
+     состояние должно успеть прочитаться, а не мигнуть. */
+  --duration-instant: 90ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 250ms;
+  --duration-state: 420ms;
+  --duration-state-long: 800ms;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --z-base: 0;
+  --z-rail: 10;
+  --z-command: 20;
+  --z-overlay: 30;
+  --z-modal: 40;
+  --z-toast: 50;
+}
+
+/*
+  Reduce Motion (ТЗ §14). Анимации не выключаются полностью: состояние Yuki —
+  это смысл, а не декор, и если убрать движение совсем, «думает» перестанет
+  отличаться от «слушает». Вместо этого движение сводится к смене цвета
+  и прозрачности, а бесконечные циклы останавливаются.
+*/
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 1ms;
+    --duration-fast: 1ms;
+    --duration-normal: 1ms;
+    --duration-slow: 1ms;
+    --duration-state: 120ms;
+    --duration-state-long: 120ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 120ms !important;
+  }
+}

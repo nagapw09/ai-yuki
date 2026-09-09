@@ -1,0 +1,37 @@
+/*
+  Оболочка приложения: рейка слева, экран справа.
+
+  Фон — не плоская заливка: два очень слабых радиальных пятна создают ощущение
+  глубины, из-за которого Orb выглядит источником света в пространстве, а не
+  картинкой на прямоугольнике (ТЗ §13).
+*/
+
+.app {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  height: 100%;
+  background:
+    radial-gradient(120% 80% at 50% 12%, rgb(108 92 231 / 8%), transparent 60%),
+    radial-gradient(90% 60% at 50% 100%, rgb(127 209 255 / 5%), transparent 65%),
+    var(--surface-base);
+}
+
+.app__content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+  Зернистость поверх градиентов. На тёмных плавных переходах WebView2 и WKWebView
+  дают заметный бэндинг — тонкий шум его разбивает.
+*/
+.app::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}

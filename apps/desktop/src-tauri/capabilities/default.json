@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Базовые права основного окна. Расширяется по мере появления плагинов Tauri; всё, что касается системы, идёт через собственные команды из commands.rs, а не через готовые плагины.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

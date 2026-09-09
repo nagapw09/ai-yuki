@@ -1,0 +1,16 @@
+[package]
+name = "yuki-screen"
+description = "Снимки экрана и доступ к accessibility-дереву (ТЗ §6, §30 ScreenAdapter)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+yuki-system = { workspace = true }
+yuki-accessibility = { workspace = true }
+xcap = "0.0.14"
+image = { version = "0.25", default-features = false, features = ["png"] }
+base64 = "0.22"
