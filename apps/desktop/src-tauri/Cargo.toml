@@ -19,6 +19,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-notification = "2"
+tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -34,6 +36,11 @@ yuki-filesystem = { workspace = true }
 yuki-input = { workspace = true }
 yuki-screen = { workspace = true }
 yuki-accessibility = { workspace = true }
+
+# Глобальные хоткеи существуют только на десктопе — на мобильных целях
+# плагина нет, и безусловная зависимость сломала бы сборку под них.
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(windows)'.dependencies]
 yuki-windows = { workspace = true }

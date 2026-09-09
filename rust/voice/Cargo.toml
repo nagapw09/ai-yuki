@@ -1,0 +1,29 @@
+[package]
+name = "yuki-voice"
+description = "Голосовой конвейер: микрофон → VAD → STT → TTS (ТЗ §10)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+
+# Захват микрофона: WASAPI на Windows, CoreAudio на macOS — одним API.
+cpal = "0.15"
+# Синтез речи средствами ОС: SAPI на Windows, AVSpeechSynthesizer на macOS.
+# Ни моделей, ни сети, ни ключей — голос работает и в режиме Local Only (ТЗ §29).
+tts = "0.26"
+# WAV нужен, чтобы отдать сегмент речи в STT-эндпоинт.
+hound = "3.5"
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "multipart",
+  "rustls-tls",
+] }
+serde_json = { workspace = true }

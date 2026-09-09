@@ -7,6 +7,7 @@ import { Rail } from './design-system/components/Rail'
 import { useT } from './i18n'
 import { Activity } from './screens/Activity'
 import { Chat } from './screens/Chat'
+import { Memory } from './screens/Memory'
 import { Orbital } from './screens/Orbital'
 import { Placeholder } from './screens/Placeholder'
 import { Settings } from './screens/Settings'
@@ -49,10 +50,9 @@ export function App() {
         )}
         {screen === 'chat' && <Chat />}
         {screen === 'activity' && <Activity />}
+        {screen === 'memory' && <Memory />}
         {screen === 'settings' && <Settings />}
-        {(screen === 'commands' || screen === 'memory') && (
-          <Placeholder title={t(`rail.${screen}`)} />
-        )}
+        {screen === 'commands' && <Placeholder title={t('rail.commands')} />}
       </div>
       <ConfirmDialog />
     </div>

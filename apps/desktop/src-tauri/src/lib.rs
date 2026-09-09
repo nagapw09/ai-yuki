@@ -5,7 +5,10 @@
 
 pub mod ai;
 pub mod commands;
+pub mod hotkeys;
+pub mod memory;
 pub mod permissions;
+pub mod reminders;
 pub mod secrets;
 pub mod state;
 pub mod storage;
@@ -26,6 +29,8 @@ const DB_FILE: &str = "yuki.db";
 /// продолжать в таком состоянии хуже, чем честно сообщить об ошибке.
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let storage = Storage::open(data_dir.join(DB_FILE))?;
@@ -35,7 +40,30 @@ pub fn run() {
             let adapters = system::build()?;
             let http = yuki_ai::http_client()?;
 
+            // Хоткей читаем до передачи хранилища в состояние: дальше владение
+            // уходит в AppState.
+            let saved_hotkey = storage
+                .with_conn(|conn| {
+                    conn.query_row(
+                        "SELECT value FROM settings WHERE key = 'hotkey.summon'",
+                        [],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .map(Some)
+                    .or_else(|e| match e {
+                        rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                        other => Err(other),
+                    })
+                })
+                .unwrap_or(None);
+
+            // Протухшая краткосрочная память не должна пережить перезапуск.
+            let _ = memory::prune_expired(&storage);
+
             app.manage(AppState::new(adapters, storage, http));
+
+            hotkeys::init(app.handle(), saved_hotkey);
+            reminders::spawn_scheduler(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -94,6 +122,22 @@ pub fn run() {
             ai::provider_set_default,
             ai::provider_test,
             ai::chat_send,
+            // память (ТЗ §9)
+            memory::memory_list,
+            memory::memory_save,
+            memory::memory_search,
+            memory::memory_delete,
+            memory::memory_clear,
+            memory::memory_context,
+            // напоминания и уведомления (ТЗ §25)
+            reminders::reminder_create,
+            reminders::reminder_list,
+            reminders::reminder_complete,
+            reminders::reminder_delete,
+            reminders::notify,
+            // хоткеи (ТЗ §16, §38)
+            hotkeys::hotkey_get,
+            hotkeys::hotkey_set,
         ])
         .run(tauri::generate_context!())
         .expect("не удалось запустить окно Yuki");

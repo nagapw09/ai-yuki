@@ -1,0 +1,184 @@
+/* Управление памятью (ТЗ §9). */
+
+.memory {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+.memory__inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.memory__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.memory__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+}
+
+.memory__hint {
+  margin: 0;
+  max-width: 56ch;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.memory__empty,
+.memory__error {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.memory__error {
+  color: var(--accent-error);
+}
+
+.memory__confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.memory__button {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.memory__button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.memory__button--danger {
+  border-color: color-mix(in srgb, var(--accent-error) 45%, transparent);
+  color: var(--accent-error);
+}
+
+.memory__button--danger:hover {
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+  color: var(--accent-error);
+}
+
+.memory__group {
+  margin-bottom: var(--space-6);
+}
+
+.memory__group-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.memory__group-hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-normal);
+  text-transform: none;
+}
+
+.memory__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.memory__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-md);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.memory__row[data-saving='true'] {
+  opacity: 0.6;
+}
+
+.memory__key {
+  padding: 2px var(--space-2);
+  background: var(--surface-overlay);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  white-space: nowrap;
+}
+
+/* Поле правки выглядит как текст, пока в него не вошли: раздел должен читаться
+   как список фактов, а не как форма. */
+.memory__content {
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  field-sizing: content;
+}
+
+.memory__content:focus {
+  color: var(--text-primary);
+}
+
+.memory__meta {
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.memory__delete {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.memory__delete:hover {
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+  color: var(--accent-error);
+}

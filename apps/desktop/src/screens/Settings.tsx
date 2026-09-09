@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import {
+  hotkeyGet,
+  hotkeySet,
   permissionHint,
   permissionSet,
   permissionsList,
@@ -34,9 +36,103 @@ export function Settings() {
     <div className="settings">
       <div className="settings__inner">
         <Providers />
+        <Hotkey />
         <Permissions />
       </div>
     </div>
+  )
+}
+
+// ── Глобальный хоткей (ТЗ §16, §38) ─────────────────────────────────────────────
+
+/**
+ * Сочетание собирается по `event.code`, а не по `event.key`.
+ *
+ * `key` зависит от раскладки: на русской та же клавиша даёт «н» вместо «y», и
+ * записанный по ней хоткей перестаёт работать при переключении языка. `code`
+ * описывает физическую клавишу и от раскладки не зависит.
+ */
+function shortcutFromEvent(event: React.KeyboardEvent): string | null {
+  const code = event.code
+
+  // Одни модификаторы сочетанием не являются.
+  if (/^(Control|Shift|Alt|Meta|OS)/.test(code)) return null
+
+  const parts: string[] = []
+  if (event.ctrlKey) parts.push('Ctrl')
+  if (event.shiftKey) parts.push('Shift')
+  if (event.altKey) parts.push('Alt')
+  if (event.metaKey) parts.push('Super')
+
+  // Хоткей без модификатора перехватил бы клавишу во всех приложениях сразу.
+  if (parts.length === 0) return null
+
+  const key = code.startsWith('Key')
+    ? code.slice(3)
+    : code.startsWith('Digit')
+      ? code.slice(5)
+      : code
+
+  parts.push(key)
+  return parts.join('+')
+}
+
+function Hotkey() {
+  const [shortcut, setShortcut] = useState('')
+  const [capturing, setCapturing] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    hotkeyGet().then(setShortcut).catch(() => undefined)
+  }, [])
+
+  return (
+    <section className="settings__section">
+      <header className="settings__header">
+        <h2 className="settings__title">Вызов Yuki</h2>
+        <p className="settings__hint">
+          Сочетание работает поверх любого приложения. Повторное нажатие прячет окно.
+        </p>
+      </header>
+
+      <div className="provider__row">
+        <button
+          type="button"
+          className="settings__input settings__capture"
+          data-capturing={capturing}
+          onClick={() => {
+            setCapturing(true)
+            setStatus(null)
+          }}
+          onBlur={() => setCapturing(false)}
+          onKeyDown={(event) => {
+            if (!capturing) return
+            event.preventDefault()
+
+            if (event.key === 'Escape') {
+              setCapturing(false)
+              return
+            }
+
+            const next = shortcutFromEvent(event)
+            if (!next) return
+
+            setCapturing(false)
+            // Проверку делает Rust: он единственный знает, удалось ли занять
+            // сочетание в системе. Показываем то, что он ответил.
+            hotkeySet(next)
+              .then(() => {
+                setShortcut(next)
+                setStatus('сохранено')
+              })
+              .catch((e: unknown) => setStatus(describe(e)))
+          }}
+        >
+          {capturing ? 'Нажмите сочетание…' : shortcut || 'не задано'}
+        </button>
+        {status && <span className="provider__status">{status}</span>}
+      </div>
+    </section>
   )
 }
 

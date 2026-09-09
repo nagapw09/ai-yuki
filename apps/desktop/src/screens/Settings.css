@@ -176,3 +176,16 @@
   font-size: var(--text-xs);
   text-align: right;
 }
+
+/* Поле захвата сочетания: выглядит как input, но ведёт себя как кнопка. */
+.settings__capture {
+  text-align: left;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.settings__capture[data-capturing='true'] {
+  border-color: color-mix(in srgb, var(--accent-cool) 55%, transparent);
+  color: var(--accent-cool);
+}

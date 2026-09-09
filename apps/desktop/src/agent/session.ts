@@ -22,13 +22,14 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
-import { activityRecord, permissionsList, settingGet } from '../bridge'
+import { activityRecord, memoryContext, permissionsList, settingGet } from '../bridge'
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { BUILTIN_TOOLS } from '../tools/builtin'
+import { MEMORY_TOOLS } from '../tools/memory'
 
 /** Реестр создаётся один раз: инструменты не меняются в течение сессии. */
-const registry = new ToolRegistry().registerAll(BUILTIN_TOOLS)
+const registry = new ToolRegistry().registerAll(BUILTIN_TOOLS).registerAll(MEMORY_TOOLS)
 
 export function toolRegistry(): ToolRegistry {
   return registry
@@ -96,6 +97,36 @@ async function loadGateSettings(): Promise<GateSettings> {
   }
 }
 
+/**
+ * Собирает добавку к системной инструкции: время, память и настройку роли.
+ *
+ * Время обязательно и идёт первым: без него «напомни завтра в 10:00» модель
+ * посчитать не может — она не знает ни текущего момента, ни часового пояса
+ * пользователя, а ошибка здесь тихая и обнаружится только когда напоминание
+ * не сработает.
+ *
+ * Сбой любой части не должен ломать запрос: без памяти Yuki работает хуже,
+ * но работает, а без ответа — нет.
+ */
+async function buildSystemExtra(): Promise<string | undefined> {
+  const parts: string[] = []
+
+  const now = new Date()
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  parts.push(
+    `Сейчас ${now.toLocaleString('ru-RU')} (${zone}), ` +
+      `unix-время ${Math.floor(now.getTime() / 1000)}.`,
+  )
+
+  const memory = await memoryContext().catch(() => '')
+  if (memory) parts.push(memory)
+
+  const persona = await settingGet('persona.extra').catch(() => null)
+  if (persona) parts.push(persona)
+
+  return parts.length > 0 ? parts.join('\n\n') : undefined
+}
+
 /** Человеческое описание того, что именно произойдёт (ТЗ §22). */
 function describePlan(tool: Tool, input: unknown): string {
   if (input && typeof input === 'object' && Object.keys(input).length > 0) {
@@ -133,11 +164,11 @@ export async function sendMessage(text: string): Promise<void> {
     return
   }
 
-  const persona = (await settingGet('persona.extra').catch(() => null)) ?? undefined
+  const systemExtra = await buildSystemExtra()
 
   try {
     const outcome = await runAgent(history, {
-      chat: createChat(persona),
+      chat: createChat(systemExtra),
       registry,
       decide: (tool) => evaluate(tool, settings),
 

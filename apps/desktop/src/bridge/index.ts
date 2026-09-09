@@ -256,3 +256,69 @@ export const providerTest = (id: string) => invoke<string[]>('provider_test', { 
 /** Где выдать разрешение вручную; null — на этой ОС выдавать нечего (ТЗ §21). */
 export const permissionHint = (category: string) =>
   invoke<string | null>('permission_hint', { category })
+
+// ── Память (ТЗ §9) ──────────────────────────────────────────────────────────────
+
+export type MemoryKind = 'short_term' | 'session' | 'long_term' | 'episodic'
+
+export interface MemoryRecord {
+  id: string
+  kind: MemoryKind
+  key: string | null
+  content: string
+  source: string | null
+  confidence: number
+  expiresAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+export const memoryList = (kind?: MemoryKind) =>
+  invoke<MemoryRecord[]>('memory_list', { kind: kind ?? null })
+
+export const memorySave = (entry: {
+  kind: MemoryKind
+  content: string
+  key?: string
+  source?: string
+  ttlSeconds?: number
+}) =>
+  invoke<MemoryRecord>('memory_save', {
+    kind: entry.kind,
+    content: entry.content,
+    key: entry.key ?? null,
+    source: entry.source ?? null,
+    ttlSeconds: entry.ttlSeconds ?? null,
+  })
+
+export const memorySearch = (query: string, limit = 20) =>
+  invoke<MemoryRecord[]>('memory_search', { query, limit })
+export const memoryDelete = (id: string) => invoke<void>('memory_delete', { id })
+export const memoryClear = (kind?: MemoryKind) =>
+  invoke<number>('memory_clear', { kind: kind ?? null })
+/** Память, которая уходит в системную инструкцию перед запросом (ТЗ §9, §24). */
+export const memoryContext = () => invoke<string>('memory_context')
+
+// ── Напоминания и уведомления (ТЗ §25) ──────────────────────────────────────────
+
+export interface Reminder {
+  id: string
+  text: string
+  dueAt: number
+  recurrence: 'daily' | 'weekly' | null
+  completedAt: number | null
+  createdAt: number
+}
+
+export const reminderCreate = (text: string, dueAt: number, recurrence?: 'daily' | 'weekly') =>
+  invoke<Reminder>('reminder_create', { text, dueAt, recurrence: recurrence ?? null })
+export const reminderList = (includeCompleted = false) =>
+  invoke<Reminder[]>('reminder_list', { includeCompleted })
+export const reminderComplete = (id: string) => invoke<void>('reminder_complete', { id })
+export const reminderDelete = (id: string) => invoke<void>('reminder_delete', { id })
+export const notify = (title: string, body: string) => invoke<void>('notify', { title, body })
+
+// ── Глобальный хоткей (ТЗ §16, §38) ─────────────────────────────────────────────
+
+export const hotkeyGet = () => invoke<string>('hotkey_get')
+export const hotkeySet = (shortcut: string) => invoke<void>('hotkey_set', { shortcut })
