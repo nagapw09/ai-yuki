@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Condition, Step } from '@yuki/core'
 
 import { runById } from '../agent/commands'
+import { COMMAND_TEMPLATES, type CommandTemplate } from '../agent/templates'
 import { toolRegistry } from '../agent/session'
 import { commandDelete, commandList, commandSave, type CommandRecord } from '../bridge'
 import './Commands.css'
@@ -18,6 +19,7 @@ import './Commands.css'
 export function Commands() {
   const [commands, setCommands] = useState<CommandRecord[]>([])
   const [editing, setEditing] = useState<CommandRecord | null>(null)
+  const [library, setLibrary] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
@@ -57,10 +59,39 @@ export function Commands() {
               что и действия Yuki.
             </p>
           </div>
-          <button type="button" className="commands__button" onClick={create}>
-            Новая команда
-          </button>
+          <div className="commands__actions-top">
+            <button
+              type="button"
+              className="commands__button"
+              onClick={() => setLibrary((open) => !open)}
+            >
+              {library ? 'Скрыть библиотеку' : 'Библиотека'}
+            </button>
+            <button type="button" className="commands__button" onClick={create}>
+              Новая команда
+            </button>
+          </div>
         </header>
+
+        {library && !editing && (
+          <Library
+            onPick={(template) => {
+              setLibrary(false)
+              // Шаблон открывается в редакторе, а не сохраняется сразу: в
+              // половине из них надо поменять названия приложений или адреса.
+              setEditing({
+                id: `cmd-${Date.now().toString(36)}`,
+                name: template.name,
+                description: template.description,
+                triggerKind: template.triggerKind,
+                phrase: template.phrase ?? '',
+                hotkey: null,
+                enabled: true,
+                steps: template.steps as CommandRecord['steps'],
+              })
+            }}
+          />
+        )}
 
         {error && <p className="commands__error">{error}</p>}
 
@@ -102,6 +133,45 @@ const TRIGGER_LABEL: Record<CommandRecord['triggerKind'], string> = {
   hotkey: 'по сочетанию',
   startup: 'при запуске',
   manual: 'вручную',
+}
+
+
+/**
+ * Библиотека готовых команд (`docs/GAPS.md` §9).
+ *
+ * Заменяет ту функцию маркетплейса, которую отказ от него забрал заодно:
+ * показать, что вообще бывает. Ничего не скачивается: шаблоны идут
+ * вместе с приложением и после добавления становятся обычными командами
+ * пользователя — со своими правками и без связи с источником.
+ */
+function Library({ onPick }: { onPick: (template: CommandTemplate) => void }) {
+  return (
+    <div className="commands__library">
+      <p className="commands__hint">
+        Готовые заготовки. После добавления это обычная ваша команда:
+        правьте шаги, меняйте фразу, удаляйте — ничего не обновится извне.
+      </p>
+
+      <div className="commands__templates">
+        {COMMAND_TEMPLATES.map((template) => (
+          <button
+            key={template.id}
+            type="button"
+            className="commands__template"
+            onClick={() => onPick(template)}
+          >
+            <span className="commands__template-name">{template.name}</span>
+            <span className="commands__template-text">{template.description}</span>
+            {template.adjust && (
+              /* Честно предупреждаем, что из коробки оно ещё не работает: шаблон
+                 с чужими названиями приложений просто упадёт. */
+              <span className="commands__template-adjust">{template.adjust}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function Row({

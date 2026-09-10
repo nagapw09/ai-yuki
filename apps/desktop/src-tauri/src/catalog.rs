@@ -123,6 +123,48 @@ pub const INTEGRATIONS: &[Integration] = &[
         community: false,
     },
     Integration {
+        id: "notion",
+        label: "Notion",
+        description: "Страницы и базы Notion: чтение, поиск и создание записей.",
+        transport: "stdio",
+        command: "npx",
+        args: &["-y", "@notionhq/notion-mcp-server"],
+        secret_env: Some("NOTION_TOKEN"),
+        secret_hint: Some(
+            "notion.so/my-integrations → создать интеграцию → Internal Integration Token",
+        ),
+        permissions: &["network", "external_services"],
+        // Официальный сервер Notion. Одна особенность, о которой узнают не сразу:
+        // страницу надо явно поделить с интеграцией, иначе она её не видит.
+        community: false,
+    },
+    Integration {
+        id: "linear",
+        label: "Linear",
+        description: "Задачи, циклы и проекты Linear.",
+        transport: "stdio",
+        command: "npx",
+        args: &["-y", "mcp-remote", "https://mcp.linear.app/sse"],
+        // Вход через браузер при первом запуске: ключ вводить не нужно, и поле
+        // для него показывать не надо.
+        secret_env: None,
+        secret_hint: None,
+        permissions: &["network", "external_services", "browser"],
+        community: true,
+    },
+    Integration {
+        id: "trello",
+        label: "Trello",
+        description: "Доски, списки и карточки Trello.",
+        transport: "stdio",
+        command: "npx",
+        args: &["-y", "@delorenj/mcp-server-trello"],
+        secret_env: Some("TRELLO_API_KEY"),
+        secret_hint: Some("trello.com/power-ups/admin → ключ API и токен"),
+        permissions: &["network", "external_services"],
+        community: true,
+    },
+    Integration {
         id: "spotify",
         label: "Spotify",
         description:

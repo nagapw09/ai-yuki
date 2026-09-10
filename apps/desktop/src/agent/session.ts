@@ -25,25 +25,13 @@ import { listen } from '@tauri-apps/api/event'
 import { activityRecord, memoryContext, permissionsList, settingGet } from '../bridge'
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
-import { BUILTIN_TOOLS } from '../tools/builtin'
+import { mcpTools } from '../tools/capabilities'
+import { ALL_TOOLS } from '../tools'
 import { tryRun } from './commands'
 import { speakIfVoice } from './voice'
-import { CALENDAR_TOOLS } from '../tools/calendar'
-import { CAPABILITY_TOOLS, mcpTools } from '../tools/capabilities'
-import { COMMAND_TOOLS } from '../tools/commands'
-import { EVERYDAY_TOOLS } from '../tools/everyday'
-import { MEMORY_TOOLS } from '../tools/memory'
-import { PLUGIN_TOOLS } from '../tools/plugins'
 
 /** Реестр создаётся один раз: инструменты не меняются в течение сессии. */
-const registry = new ToolRegistry()
-  .registerAll(BUILTIN_TOOLS)
-  .registerAll(MEMORY_TOOLS)
-  .registerAll(CAPABILITY_TOOLS)
-  .registerAll(COMMAND_TOOLS)
-  .registerAll(PLUGIN_TOOLS)
-  .registerAll(CALENDAR_TOOLS)
-  .registerAll(EVERYDAY_TOOLS)
+const registry = new ToolRegistry().registerAll(ALL_TOOLS)
 
 /**
  * Подтягивает инструменты подключённых MCP-серверов (ТЗ §19).
