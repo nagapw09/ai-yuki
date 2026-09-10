@@ -15,6 +15,8 @@ export type ScreenId =
   | 'chat'
   | 'commands'
   | 'memory'
+  /** Заметки. В ТЗ раздела нет — см. docs/GAPS.md §5. */
+  | 'notes'
   | 'activity'
   | 'settings'
   /**

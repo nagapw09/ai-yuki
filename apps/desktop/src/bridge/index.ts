@@ -443,6 +443,90 @@ export const backgroundSetAutostart = (enabled: boolean) =>
 /** Показывает состояние Yuki в трее (docs/GAPS.md §3). */
 export const traySetState = (state: OrbState) => invoke<void>('tray_set_state', { state })
 
+
+// ── Заметки (docs/GAPS.md §5) ──────────────────────────────────
+
+export interface Note {
+  id: string
+  title: string
+  body: string
+  /** Закреплённые идут первыми. */
+  pinned: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export const noteList = (query?: string) =>
+  invoke<Note[]>('note_list', { query: query ?? null })
+
+export const noteSave = (note: {
+  id?: string
+  title?: string
+  body: string
+  pinned?: boolean
+}) =>
+  invoke<Note>('note_save', {
+    id: note.id ?? null,
+    title: note.title ?? null,
+    body: note.body,
+    pinned: note.pinned ?? null,
+  })
+
+export const noteDelete = (id: string) => invoke<void>('note_delete', { id })
+
+// ── Погода и курсы (docs/GAPS.md §6) ──────────────────────────────────
+
+export interface DayForecast {
+  date: string
+  min: number
+  max: number
+  description: string
+}
+
+export interface Weather {
+  place: string
+  temperature: number
+  /** Как ощущается — по ней решают, что надеть. */
+  feelsLike: number
+  description: string
+  windSpeed: number
+  forecast: DayForecast[]
+}
+
+export interface Rate {
+  code: string
+  value: number
+}
+
+export interface Rates {
+  base: string
+  date: string
+  rates: Rate[]
+}
+
+export const weatherGet = (city: string) => invoke<Weather>('weather_get', { city })
+
+export const ratesGet = (base?: string, symbols?: string[]) =>
+  invoke<Rates>('rates_get', { base: base ?? null, symbols: symbols ?? null })
+
+// ── Роль и тон (docs/GAPS.md §7) ──────────────────────────────────
+
+export interface Persona {
+  /** `assistant` · `coach` · `editor` · `developer` · `custom` */
+  role: string
+  custom: string
+  /** 0 — на «ты», 1 — нейтрально, 2 — на «вы». */
+  formality: number
+  /** 0 — кратко, 1 — обычно, 2 — подробно. */
+  verbosity: number
+  address: string
+}
+
+export const personaGet = () => invoke<Persona>('persona_get')
+
+/** Возвращает собранную добавку к системной инструкции. */
+export const personaSet = (persona: Persona) => invoke<string>('persona_set', { persona })
+
 export const onboardingStatus = () => invoke<OnboardingStatus>('onboarding_status')
 export const onboardingCompleted = () => invoke<boolean>('onboarding_completed')
 export const onboardingFinish = () => invoke<void>('onboarding_finish')

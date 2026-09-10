@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { startVoice, stopVoice } from '../agent/voice'
+import { getTheme, setTheme, type ThemeMode } from '../design-system/theme'
 import { useUiStore } from '../state/store'
 import {
   avatarClose,
@@ -24,6 +25,8 @@ import {
   permissionHint,
   permissionSet,
   permissionsList,
+  personaGet,
+  personaSet,
   privacySetLocalOnly,
   privacyStatus,
   providerClearKey,
@@ -32,7 +35,9 @@ import {
   providerSetDefault,
   providerSetKey,
   providerTest,
+  ratesGet,
   settingGet,
+  settingSet,
   systemRequirements,
   updateCheck,
   updateInstall,
@@ -46,6 +51,8 @@ import {
   type RequirementsReport,
   type PermissionStatus,
   type AvailableUpdate,
+  type Persona,
+  type Rates,
   type PrivacyStatus,
   type ProviderRecord,
   type UpdateStatus,
@@ -72,6 +79,9 @@ export function Settings() {
     <div className="settings">
       <div className="settings__inner">
         <CapabilitiesEntry />
+        <Appearance />
+        <PersonaSection />
+        <Everyday />
         <Privacy />
         <Providers />
         <Voice />
@@ -619,6 +629,267 @@ function Hotkey() {
         </button>
         {status && <span className="provider__status">{status}</span>}
       </div>
+    </section>
+  )
+}
+
+// ── Внешний вид (docs/GAPS.md §8) ────────────────────────────────────────
+
+const THEMES: { value: ThemeMode; label: string }[] = [
+  { value: 'dark', label: 'Тёмная' },
+  { value: 'light', label: 'Светлая' },
+  { value: 'system', label: 'Как в системе' },
+]
+
+/**
+ * Тема оформления.
+ *
+ * Тёмная — база из ТЗ §13, а не один из двух равноправных вариантов:
+ * светлая существует для тех, кому тёмный интерфейс физически тяжёл.
+ */
+function Appearance() {
+  const [theme, setThemeState] = useState<ThemeMode>('dark')
+
+  useEffect(() => {
+    getTheme()
+      .then(setThemeState)
+      .catch(() => undefined)
+  }, [])
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Внешний вид</h3>
+      <p className="settings__hint">
+        Тёмная тема — основная: интерфейс рисовался под неё. Светлая
+        переопределяет только цвета и ничего больше.
+      </p>
+
+      <div className="provider__row">
+        {THEMES.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className="settings__button"
+            data-active={theme === item.value}
+            onClick={() => {
+              setThemeState(item.value)
+              void setTheme(item.value)
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// ── Роль и тон (docs/GAPS.md §7) ────────────────────────────────────────
+
+const ROLES: { value: string; label: string; hint: string }[] = [
+  { value: 'assistant', label: 'Ассистент', hint: 'Как в ТЗ: делает и отчитывается' },
+  { value: 'coach', label: 'Наставник', hint: 'Помогает разобраться, не решает за вас' },
+  { value: 'editor', label: 'Редактор', hint: 'Правит текст, сохраняя ваш голос' },
+  { value: 'developer', label: 'Дев-помощник', hint: 'Говорит кодом и командами' },
+  { value: 'custom', label: 'Своя', hint: 'Сформулируйте сами' },
+]
+
+const FORMALITY = ['на «ты»', 'нейтрально', 'на «вы»']
+const VERBOSITY = ['кратко', 'обычно', 'подробно']
+
+/**
+ * Роль, тон и обращение.
+ *
+ * Настраивается слой поверх идентичности из ТЗ §44, а не она сама:
+ * «не рапортовать о невыполненном» — это не черта характера, которую можно
+ * выключить ползунком.
+ */
+function PersonaSection() {
+  const [persona, setPersona] = useState<Persona | null>(null)
+  const [preview, setPreview] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    personaGet()
+      .then(setPersona)
+      .catch((e: unknown) => setNote(describe(e)))
+  }, [])
+
+  if (!persona) return null
+
+  const save = (next: Persona) => {
+    setPersona(next)
+    personaSet(next)
+      .then((composed) => {
+        setPreview(composed)
+        setNote(null)
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+  }
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Кем быть</h3>
+      <p className="settings__hint">
+        Настраивается то, как Yuki ведёт разговор. Её собственные правила —
+        не обещать несделанное и спрашивать перед опасным — отсюда не меняются.
+      </p>
+
+      {note && <p className="settings__error">{note}</p>}
+
+      <div className="provider__row">
+        {ROLES.map((role) => (
+          <button
+            key={role.value}
+            type="button"
+            className="settings__button"
+            data-active={persona.role === role.value}
+            title={role.hint}
+            onClick={() => save({ ...persona, role: role.value })}
+          >
+            {role.label}
+          </button>
+        ))}
+      </div>
+
+      {persona.role === 'custom' && (
+        <div className="provider__row">
+          <input
+            className="settings__input"
+            value={persona.custom}
+            onChange={(e) => setPersona({ ...persona, custom: e.target.value })}
+            onBlur={() => save(persona)}
+            placeholder="Например: ты строгий научный редактор"
+          />
+        </div>
+      )}
+
+      <div className="provider__row">
+        <span className="settings__label">Тон</span>
+        {FORMALITY.map((label, index) => (
+          <button
+            key={label}
+            type="button"
+            className="settings__button"
+            data-active={persona.formality === index}
+            onClick={() => save({ ...persona, formality: index })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="provider__row">
+        <span className="settings__label">Ответы</span>
+        {VERBOSITY.map((label, index) => (
+          <button
+            key={label}
+            type="button"
+            className="settings__button"
+            data-active={persona.verbosity === index}
+            onClick={() => save({ ...persona, verbosity: index })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="provider__row">
+        <input
+          className="settings__input"
+          value={persona.address}
+          onChange={(e) => setPersona({ ...persona, address: e.target.value })}
+          onBlur={() => save(persona)}
+          placeholder="Как к вам обращаться"
+        />
+      </div>
+
+      {preview && (
+        /* Показываем ровно тот текст, который уйдёт модели: настройка
+           характера вслепую — это гадание. */
+        <p className="settings__hint" data-selectable>
+          Добавляется к инструкции: {preview}
+        </p>
+      )}
+    </section>
+  )
+}
+
+// ── Повседневное (docs/GAPS.md §6) ──────────────────────────────────────
+
+/**
+ * Город для погоды и валюта для курсов.
+ *
+ * Город спрашивается, а не определяется по IP: геолокация по адресу — это
+ * отправка данных о местонахождении туда, куда человек её не просил отправлять.
+ */
+function Everyday() {
+  const [city, setCity] = useState('')
+  const [base, setBase] = useState('USD')
+  const [rates, setRates] = useState<Rates | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    void settingGet('everyday.city')
+      .then((value) => setCity(value ?? ''))
+      .catch(() => undefined)
+    void settingGet('everyday.currency')
+      .then((value) => setBase(value?.trim() || 'USD'))
+      .catch(() => undefined)
+  }, [])
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Повседневное</h3>
+      <p className="settings__hint">
+        Город нужен, чтобы погода показывалась на главном экране. По IP он
+        не определяется: это было бы отправкой данных о вашем местонахождении
+        без вашего ведома. Курсы — по данным Европейского центробанка,
+        обновляются раз в сутки.
+      </p>
+
+      {note && <p className="settings__error">{note}</p>}
+
+      <div className="provider__row">
+        <input
+          className="settings__input"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          onBlur={() => void settingSet('everyday.city', city.trim())}
+          placeholder="Город для погоды"
+        />
+        <input
+          className="settings__input"
+          value={base}
+          onChange={(e) => setBase(e.target.value.toUpperCase())}
+          onBlur={() => void settingSet('everyday.currency', base.trim().toUpperCase())}
+          placeholder="Базовая валюта, например USD"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className="settings__button"
+          onClick={() =>
+            void ratesGet(base)
+              .then((value) => {
+                setRates(value)
+                setNote(null)
+              })
+              .catch((e: unknown) => setNote(describe(e)))
+          }
+        >
+          Курсы сейчас
+        </button>
+      </div>
+
+      {rates && (
+        <p className="settings__hint">
+          {/* Дата обязательна: в выходные курс стоит на пятничном,
+              и без неё это выглядит как зависшие данные. */}
+          На {rates.date}: 1 {rates.base} ={' '}
+          {rates.rates.map((rate) => rate.value.toFixed(2) + ' ' + rate.code).join(' · ')}
+        </p>
+      )}
     </section>
   )
 }

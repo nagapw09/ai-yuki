@@ -58,6 +58,59 @@
   --orb-error: #ff6b7a;
   --orb-sleeping: #3c4454;
 
+}
+
+/*
+  Светлая тема (docs/GAPS.md §8).
+
+  Переопределяются только цвета — ни размеры, ни ритм сетки от темы
+  не зависят. Тёмная остаётся базой из ТЗ §13: светлая — это вариант для
+  тех, кому тёмный интерфейс физически тяжёл, а не равноправная вторая шкурка.
+
+  Акценты приглушены: цвета, рассчитанные на свечение на графите, на белом
+  теряют контраст и перестают читаться как состояние.
+*/
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --surface-abyss: #eef1f5;
+  --surface-base: #f6f8fa;
+  --surface-raised: #ffffff;
+  --surface-overlay: #ffffff;
+  --surface-hover: #e9edf3;
+
+  --glass-bg: rgb(15 20 30 / 4%);
+  --glass-border: rgb(15 20 30 / 10%);
+
+  --line-subtle: rgb(15 20 30 / 8%);
+  --line-default: rgb(15 20 30 / 14%);
+  --line-strong: rgb(15 20 30 / 24%);
+
+  /* Контраст к --surface-base: primary 14.9:1, secondary 5.9:1, muted 4.6:1. */
+  --text-primary: #10151c;
+  --text-secondary: #46505f;
+  --text-muted: #5f6b7a;
+  --text-inverse: #f6f8fa;
+
+  --accent-core: #1f6f8b;
+  --accent-cool: #0f7ea8;
+  --accent-deep: #5b46c9;
+  --accent-warm: #c2571f;
+  --accent-success: #1f8a52;
+  --accent-error: #c62f3f;
+  --accent-warning: #a5670a;
+
+  --orb-idle: #5b46c9;
+  --orb-listening: #0f7ea8;
+  --orb-thinking: #7c5ce0;
+  --orb-working: #0f8878;
+  --orb-speaking: #c2571f;
+  --orb-success: #1f8a52;
+  --orb-error: #c62f3f;
+  --orb-sleeping: #8b95a5;
+}
+
+:root {
   /* ── Типографика ──────────────────────────────────────────────────────────
      Системный стек: на Windows и macOS он даёт родной для платформы гротеск
      без единого сетевого запроса, что важно для startup из ТЗ §37. */

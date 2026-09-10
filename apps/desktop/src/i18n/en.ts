@@ -8,6 +8,7 @@ export const en: Dictionary = {
   'rail.chat': 'Chat',
   'rail.commands': 'Commands',
   'rail.memory': 'Memory',
+  'rail.notes': 'Notes',
   'rail.activity': 'Activity',
   'rail.settings': 'Settings',
 
@@ -27,6 +28,7 @@ export const en: Dictionary = {
   'orbital.today': 'Today',
   'orbital.tasks': 'Tasks',
   'orbital.nextEvent': 'Next',
+  'orbital.weather': 'Weather',
   'orbital.noTasks': 'none active',
   'orbital.noEvents': 'nothing scheduled',
   'orbital.tasksCount': '{count} running',

@@ -15,6 +15,10 @@ const ENTRIES: RailEntry[] = [
   { id: 'chat', labelKey: 'rail.chat', icon: <ChatIcon /> },
   { id: 'commands', labelKey: 'rail.commands', icon: <CommandsIcon /> },
   { id: 'memory', labelKey: 'rail.memory', icon: <MemoryIcon /> },
+  // Заметок в составе рейки из ТЗ §13 нет: это осознанное дополнение
+  // из docs/GAPS.md §5 — без своего места заметки были бы доступны
+  // только через просьбу к модели.
+  { id: 'notes', labelKey: 'rail.notes', icon: <NotesIcon /> },
   { id: 'activity', labelKey: 'rail.activity', icon: <ActivityIcon /> },
   { id: 'settings', labelKey: 'rail.settings', icon: <SettingsIcon /> },
 ]
@@ -89,6 +93,16 @@ function MemoryIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 4c3 0 5 2 5 4.5 0 1-.4 1.8-1 2.5.6.7 1 1.6 1 2.5C17 16 15 18 12 18s-5-2-5-4.5c0-.9.4-1.8 1-2.5-.6-.7-1-1.5-1-2.5C7 6 9 4 12 4z" {...stroke} />
       <path d="M12 4v14" {...stroke} opacity="0.5" />
+    </svg>
+  )
+}
+
+function NotesIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" {...stroke} />
+      <path d="M14 3v5h5" {...stroke} />
+      <path d="M9 13h6M9 17h4" {...stroke} opacity="0.7" />
     </svg>
   )
 }

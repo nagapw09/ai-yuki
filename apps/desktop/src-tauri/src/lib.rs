@@ -10,10 +10,13 @@ pub mod calendar;
 pub mod capabilities;
 pub mod catalog;
 pub mod commands;
+pub mod everyday;
 pub mod hotkeys;
 pub mod memory;
+pub mod notes;
 pub mod onboarding;
 pub mod permissions;
+pub mod persona;
 pub mod plugins;
 pub mod privacy;
 pub mod reminders;
@@ -197,6 +200,16 @@ pub fn run() {
             capabilities::mcp_test,
             capabilities::mcp_tools,
             capabilities::mcp_call,
+            // роль и тон (docs/GAPS.md §7)
+            persona::persona_get,
+            persona::persona_set,
+            // заметки (docs/GAPS.md §5)
+            notes::note_list,
+            notes::note_save,
+            notes::note_delete,
+            // погода и курсы (docs/GAPS.md §6)
+            everyday::weather_get,
+            everyday::rates_get,
             // обновления (docs/GAPS.md §2)
             updater::update_status,
             updater::update_check,

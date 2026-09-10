@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { isTauri, settingGet, weatherGet, type Weather } from '../bridge'
 import { CommandBar } from '../design-system/components/CommandBar'
 import { Orb } from '../design-system/components/Orb'
 import { ActivityChip, StatusPill } from '../design-system/components/Pills'
@@ -90,8 +91,60 @@ export function Orbital({ onSubmit, onToggleVoice }: OrbitalProps) {
           value={nextEvent ? nextEvent.title : t('orbital.noEvents')}
           empty={!nextEvent}
         />
+        <WeatherChip />
       </footer>
     </div>
+  )
+}
+
+
+/**
+ * Погода в нижней полосе (`docs/GAPS.md` §6).
+ *
+ * Город берётся из настройки и не угадывается по IP: геолокация по адресу —
+ * это отправка данных о местонахождении туда, куда человек её не просил
+ * отправлять. Без города чип просто не показывается.
+ */
+function WeatherChip() {
+  const t = useT()
+  const [weather, setWeather] = useState<Weather | null>(null)
+  const [city, setCity] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isTauri()) return
+
+    let cancelled = false
+
+    void settingGet('everyday.city')
+      .then((saved) => {
+        const name = saved?.trim()
+        if (cancelled || !name) return
+        setCity(name)
+        return weatherGet(name).then((value) => {
+          if (!cancelled) setWeather(value)
+        })
+      })
+      // Нет сети или сервис молчит — полоса остаётся без погоды, а не
+      // показывает ошибку там, где человек ждёт покоя.
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (!city) return null
+
+  return (
+    <ActivityChip
+      label={t('orbital.weather')}
+      value={
+        weather
+          ? `${Math.round(weather.temperature)}°, ${weather.description}`
+          : city
+      }
+      empty={!weather}
+    />
   )
 }
 

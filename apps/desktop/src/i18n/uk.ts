@@ -8,6 +8,7 @@ export const uk: Dictionary = {
   'rail.chat': 'Чат',
   'rail.commands': 'Команди',
   'rail.memory': 'Пам’ять',
+  'rail.notes': 'Нотатки',
   'rail.activity': 'Активність',
   'rail.settings': 'Налаштування',
 
@@ -27,6 +28,7 @@ export const uk: Dictionary = {
   'orbital.today': 'Сьогодні',
   'orbital.tasks': 'Завдання',
   'orbital.nextEvent': 'Далі',
+  'orbital.weather': 'Погода',
   'orbital.noTasks': 'немає активних',
   'orbital.noEvents': 'нічого не заплановано',
   'orbital.tasksCount': '{count} у роботі',

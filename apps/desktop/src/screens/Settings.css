@@ -76,6 +76,19 @@
   white-space: nowrap;
 }
 
+/* Выбранный вариант в ряду кнопок-переключателей (тема, роль, тон). */
+.settings__button[data-active='true'] {
+  border-color: var(--accent-deep);
+  color: var(--text-primary);
+}
+
+/* Подпись перед рядом переключателей. */
+.settings__label {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  min-width: 6ch;
+}
+
 .settings__input {
   flex: 1;
   min-width: 0;

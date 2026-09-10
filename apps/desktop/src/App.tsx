@@ -5,6 +5,7 @@ import { initTriggers } from './agent/commands'
 import { sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { startAvatarBroadcast } from './avatar/broadcast'
+import { startTheme } from './design-system/theme'
 import {
   isTauri,
   NAVIGATE_EVENT,
@@ -21,6 +22,7 @@ import { Chat } from './screens/Chat'
 import { Commands } from './screens/Commands'
 import { Memory } from './screens/Memory'
 import { Onboarding } from './screens/Onboarding'
+import { Notes } from './screens/Notes'
 import { Orbital } from './screens/Orbital'
 import { Settings } from './screens/Settings'
 import { useUiStore } from './state/store'
@@ -43,6 +45,9 @@ export function App() {
 
   // Аватар живёт в соседнем окне и состояние знает только отсюда (ТЗ §12).
   useEffect(() => startAvatarBroadcast(), [])
+
+  // Тема применяется до первого кадра и следит за системной (docs/GAPS.md §8).
+  useEffect(() => startTheme(), [])
 
   // Переходы из меню трея: меню живёт в Rust и о экранах не знает.
   useEffect(() => {
@@ -97,6 +102,7 @@ export function App() {
         {screen === 'chat' && <Chat />}
         {screen === 'activity' && <Activity />}
         {screen === 'memory' && <Memory />}
+        {screen === 'notes' && <Notes />}
         {screen === 'capabilities' && <Capabilities />}
         {screen === 'settings' && <Settings />}
         {screen === 'commands' && <Commands />}
