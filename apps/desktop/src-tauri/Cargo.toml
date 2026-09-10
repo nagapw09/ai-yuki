@@ -27,6 +27,8 @@ tauri-plugin-autostart = "2"
 # Автообновление (docs/GAPS.md §2).
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Диалоги выбора файла для экспорта и импорта (docs/GAPS.md §11, §14).
+tauri-plugin-dialog = "2"
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

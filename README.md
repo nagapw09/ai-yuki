@@ -96,6 +96,8 @@ storage/          Схема БД и доступ к данным
 - [Пропуски ТЗ](docs/GAPS.md) — сверка с Astra и что из неё сделано
 - [Системные требования](docs/REQUIREMENTS.md)
 - [Выпуск и обновления](docs/RELEASE.md)
+- [Remote Control: требования безопасности](docs/REMOTE-CONTROL.md)
+- [Лицензирование и распространение](docs/LICENSING.md)
 - [Plugin SDK](docs/PLUGIN-SDK.md)
 - [Изменения](CHANGELOG.md)
 

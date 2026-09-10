@@ -6,8 +6,10 @@
 pub mod ai;
 pub mod automation;
 pub mod avatar;
+pub mod backup;
 pub mod calendar;
 pub mod capabilities;
+pub mod diagnostics;
 pub mod catalog;
 pub mod commands;
 pub mod everyday;
@@ -42,7 +44,7 @@ const DB_FILE: &str = "yuki.db";
 /// Падение на этапе инициализации адаптеров или базы — фатально и осознанно:
 /// Yuki без системного слоя и хранилища не ассистент, а пустое окно, и молча
 /// продолжать в таком состоянии хуже, чем честно сообщить об ошибке.
-/// Включает журнал диагностики.
+/// Включает журнал диагностики и возвращает буфер с его хвостом.
 ///
 /// Без подписчика каждый `tracing::warn!` в коде — это строка, которую никто
 /// никогда не прочтёт. Именно так незамеченным осталось неудавшееся
@@ -50,21 +52,31 @@ const DB_FILE: &str = "yuki.db";
 /// вывести.
 ///
 /// Уровень берётся из `YUKI_LOG` (формат `RUST_LOG`), по умолчанию `info`.
-fn init_logging() {
+fn init_logging() -> diagnostics::LogBuffer {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::EnvFilter;
 
     let filter = EnvFilter::try_from_env("YUKI_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
+    let buffer = diagnostics::LogBuffer::new();
 
-    // Ошибка установки означает лишь то, что подписчик уже есть — это не повод
-    // не запускать приложение.
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_writer(std::io::stderr)
+    // Два приёмника: stderr для того, кто смотрит сейчас, и кольцевой
+    // буфер для отчёта о поломке, который соберут после сбоя.
+    let _ = tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(buffer.clone()),
+        )
         .try_init();
+
+    buffer
 }
 
 pub fn run() {
-    init_logging();
+    let logs = init_logging();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -73,11 +85,12 @@ pub fn run() {
         // не распахивается — Yuki просто появляется в трее (docs/GAPS.md §3).
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .setup(|app| {
+        .setup(move |app| {
             let data_dir = app.path().app_data_dir()?;
             let storage = Storage::open(data_dir.join(DB_FILE))?;
             // Разрешение могли выдать или отозвать в системных настройках между
@@ -89,7 +102,7 @@ pub fn run() {
             // Протухшая краткосрочная память не должна пережить перезапуск.
             let _ = memory::prune_expired(&storage);
 
-            app.manage(AppState::new(adapters, storage, http));
+            app.manage(AppState::new(adapters, storage, http, logs.clone()));
 
             hotkeys::init(app.handle());
             // Трей строится после состояния: его меню читает настройки.
@@ -203,6 +216,13 @@ pub fn run() {
             // роль и тон (docs/GAPS.md §7)
             persona::persona_get,
             persona::persona_set,
+            // диагностика (docs/GAPS.md §14)
+            diagnostics::diagnostics_report,
+            diagnostics::diagnostics_save,
+            // экспорт и импорт (docs/GAPS.md §11)
+            backup::backup_export,
+            backup::backup_preview,
+            backup::backup_import,
             // заметки (docs/GAPS.md §5)
             notes::note_list,
             notes::note_save,

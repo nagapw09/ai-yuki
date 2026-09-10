@@ -527,6 +527,37 @@ export const personaGet = () => invoke<Persona>('persona_get')
 /** Возвращает собранную добавку к системной инструкции. */
 export const personaSet = (persona: Persona) => invoke<string>('persona_set', { persona })
 
+
+// ── Перенос данных и диагностика (docs/GAPS.md §11, §14) ──────────────────────────────
+
+export interface TableCount {
+  table: string
+  rows: number
+}
+
+export interface BackupSummary {
+  version: number
+  counts: TableCount[]
+  /** Что придётся ввести заново: секреты в копию не входят. */
+  secretsToReenter: string[]
+}
+
+export const backupExport = (path: string) =>
+  invoke<BackupSummary>('backup_export', { path })
+
+/** Читает файл и рассказывает, что в нём, ничего не меняя. */
+export const backupPreview = (path: string) =>
+  invoke<BackupSummary>('backup_preview', { path })
+
+export const backupImport = (path: string, mode: 'merge' | 'replace') =>
+  invoke<BackupSummary>('backup_import', { path, mode })
+
+/** Отчёт о состоянии в Markdown. Никуда не отправляется. */
+export const diagnosticsReport = () => invoke<string>('diagnostics_report')
+
+export const diagnosticsSave = (path: string) =>
+  invoke<string>('diagnostics_save', { path })
+
 export const onboardingStatus = () => invoke<OnboardingStatus>('onboarding_status')
 export const onboardingCompleted = () => invoke<boolean>('onboarding_completed')
 export const onboardingFinish = () => invoke<void>('onboarding_finish')

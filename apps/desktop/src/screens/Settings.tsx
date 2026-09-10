@@ -3,8 +3,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { startVoice, stopVoice } from '../agent/voice'
 import { getTheme, setTheme, type ThemeMode } from '../design-system/theme'
 import { useUiStore } from '../state/store'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
+
 import {
   avatarClose,
+  backupExport,
+  backupImport,
+  backupPreview,
   backgroundSetAlwaysOnTop,
   backgroundSetAutostart,
   backgroundSetCloseToTray,
@@ -19,6 +24,7 @@ import {
   calendarConnect,
   calendarDisconnect,
   calendarSetClient,
+  diagnosticsSave,
   hotkeyGet,
   hotkeySet,
   openUrl,
@@ -51,6 +57,7 @@ import {
   type RequirementsReport,
   type PermissionStatus,
   type AvailableUpdate,
+  type BackupSummary,
   type Persona,
   type Rates,
   type PrivacyStatus,
@@ -92,6 +99,7 @@ export function Settings() {
         <Permissions />
         <SystemSection />
         <Updates />
+        <DataTransfer />
       </div>
     </div>
   )
@@ -1472,6 +1480,179 @@ function Updates() {
             </button>
           </div>
         </div>
+      )}
+    </section>
+  )
+}
+
+// ── Перенос данных и диагностика (docs/GAPS.md §11, §14) ──────────────────────────────────────────
+
+/**
+ * Экспорт, импорт и отчёт о состоянии.
+ *
+ * Секреты в копию не входят, и об этом сказано до экспорта, а не после:
+ * перенос, после которого половина возможностей молча не работает, хуже
+ * отсутствия переноса.
+ */
+function DataTransfer() {
+  const [summary, setSummary] = useState<BackupSummary | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const run = (action: () => Promise<string | null>) => {
+    setBusy(true)
+    action()
+      .then(setNote)
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Перенос и диагностика</h3>
+      <p className="settings__hint">
+        В копию входят настройки, команды, память, заметки, напоминания
+        и список возможностей. Ключи и токены — нет: они лежат в хранилище ОС,
+        и копия, которую опасно потерять, — плохая копия.
+      </p>
+
+      {note && <p className="settings__hint">{note}</p>}
+
+      <div className="provider__row">
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              const path = await saveDialog({
+                title: 'Куда сохранить копию',
+                defaultPath: 'yuki-backup.json',
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+              })
+              if (!path) return null
+
+              const result = await backupExport(path)
+              setSummary(result)
+              return `сохранено: ${path}`
+            })
+          }
+        >
+          Сохранить копию
+        </button>
+
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              const path = await openDialog({
+                title: 'Файл копии',
+                multiple: false,
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+              })
+              if (typeof path !== 'string') return null
+
+              // Сначала показываем, что в файле, и только потом предлагаем
+              // восстановить: импорт вслепую меняет чужие данные.
+              const preview = await backupPreview(path)
+              setSummary(preview)
+              window.sessionStorage.setItem('yuki.backup.path', path)
+              return 'файл прочитан — проверьте состав и выберите режим'
+            })
+          }
+        >
+          Открыть копию
+        </button>
+
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              const path = await saveDialog({
+                title: 'Куда сохранить отчёт',
+                defaultPath: 'yuki-diagnostics.md',
+                filters: [{ name: 'Markdown', extensions: ['md'] }],
+              })
+              if (!path) return null
+
+              await diagnosticsSave(path)
+              return `отчёт сохранён: ${path}`
+            })
+          }
+        >
+          Отчёт о состоянии
+        </button>
+      </div>
+
+      {summary && (
+        <>
+          <ul className="settings__blockers">
+            {summary.counts
+              .filter((count) => count.rows > 0)
+              .map((count) => (
+                <li className="settings__blocker" key={count.table}>
+                  {count.table}: {count.rows}
+                </li>
+              ))}
+          </ul>
+
+          {summary.secretsToReenter.length > 0 && (
+            /* Список показывается и при экспорте, и при импорте: человек
+               должен знать заранее, что придётся ввести заново. */
+            <>
+              <p className="settings__hint">После переноса придётся ввести заново:</p>
+              <ul className="settings__blockers">
+                {summary.secretsToReenter.map((item) => (
+                  <li className="settings__blocker" key={item} data-ok={false}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <div className="provider__row">
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const path = window.sessionStorage.getItem('yuki.backup.path')
+                  if (!path) return 'сначала откройте файл копии'
+
+                  const result = await backupImport(path, 'merge')
+                  setSummary(result)
+                  return 'данные дополнены из копии'
+                })
+              }
+            >
+              Дополнить из копии
+            </button>
+
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const path = window.sessionStorage.getItem('yuki.backup.path')
+                  if (!path) return 'сначала откройте файл копии'
+
+                  const result = await backupImport(path, 'replace')
+                  setSummary(result)
+                  return 'данные заменены копией'
+                })
+              }
+            >
+              Заменить всё
+            </button>
+          </div>
+        </>
       )}
     </section>
   )

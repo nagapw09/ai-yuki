@@ -3,6 +3,7 @@
 use yuki_system::PlatformAdapters;
 
 use crate::calendar::TokenCache;
+use crate::diagnostics::LogBuffer;
 use crate::capabilities::McpRegistry;
 use crate::storage::Storage;
 use crate::voice::VoiceState;
@@ -23,17 +24,25 @@ pub struct AppState {
     pub voice: VoiceState,
     /// Подключённые MCP-серверы (ТЗ §19).
     pub mcp: McpRegistry,
+    /// Последние строки журнала для отчёта о поломке (docs/GAPS.md §14).
+    pub logs: LogBuffer,
     /// Access-токены календарей (ТЗ §25). Только в памяти: они живут
     /// час, и записывать их на диск ради экономии одного обновления не стоит.
     pub calendar: TokenCache,
 }
 
 impl AppState {
-    pub fn new(adapters: PlatformAdapters, storage: Storage, http: reqwest::Client) -> Self {
+    pub fn new(
+        adapters: PlatformAdapters,
+        storage: Storage,
+        http: reqwest::Client,
+        logs: LogBuffer,
+    ) -> Self {
         Self {
             adapters,
             storage,
             http,
+            logs,
             voice: VoiceState::default(),
             mcp: McpRegistry::default(),
             calendar: TokenCache::default(),
