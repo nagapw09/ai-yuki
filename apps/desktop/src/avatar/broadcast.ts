@@ -1,5 +1,5 @@
 /**
- * Трансляция состояния в окно аватара (ТЗ §12).
+ * Трансляция состояния в окно аватара и в трей (ТЗ §12, docs/GAPS.md §3).
  *
  * Аватар — второе окно и второй JS-контекст: общего store у них нет. Поэтому
  * главное окно рассылает состояние событием, а аватар только слушает. Обратной
@@ -7,7 +7,7 @@
  * при первой же гонке.
  */
 
-import { avatarBroadcast, isTauri } from '../bridge'
+import { avatarBroadcast, isTauri, traySetState } from '../bridge'
 import { useUiStore } from '../state/store'
 
 /**
@@ -35,6 +35,14 @@ export function startAvatarBroadcast(): () => void {
     })
   }
 
+  // Иконка в трее меняется только при смене состояния: громкость её
+  // не касается, а перерисовка десятки раз в секунду мигала бы на панели.
+  const paint = () => {
+    void traySetState(useUiStore.getState().orbState).catch(() => undefined)
+  }
+
+  paint()
+
   send()
 
   return useUiStore.subscribe((state) => {
@@ -42,6 +50,7 @@ export function startAvatarBroadcast(): () => void {
       lastState = state.orbState
       lastLevelSentAt = Date.now()
       send()
+      paint()
       return
     }
 

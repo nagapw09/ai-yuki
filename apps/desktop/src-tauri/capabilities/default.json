@@ -8,6 +8,9 @@
   "permissions": [
     "core:default",
     "notification:default",
-    "global-shortcut:default"
+    "global-shortcut:default",
+    "autostart:default",
+    "updater:default",
+    "process:default"
   ]
 }

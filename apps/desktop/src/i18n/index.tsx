@@ -1,5 +1,7 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+
+import { isTauri, settingGet, settingSet } from '../bridge'
 
 import { en } from './en'
 import { ru } from './ru'
@@ -14,6 +16,13 @@ const DICTIONARIES: Record<Locale, Dictionary> = { ru, en, uk }
 
 /** Русский — язык по умолчанию, если системный не входит в поддерживаемые. */
 const FALLBACK: Locale = 'ru'
+
+/** Ключ настройки языка. */
+const SETTING_KEY = 'ui.language'
+
+function isLocale(value: string): value is Locale {
+  return value === 'ru' || value === 'en' || value === 'uk'
+}
 
 interface I18nValue {
   locale: Locale
@@ -41,13 +50,33 @@ export function I18nProvider({
 }) {
   const [locale, setLocale] = useState<Locale>(initialLocale ?? detectLocale())
 
+  // Язык, выбранный в мастере, должен переживать перезапуск: иначе при
+  // каждом старте он определяется по системному и тихо отменяет выбор.
+  useEffect(() => {
+    if (initialLocale || !isTauri()) return
+
+    let cancelled = false
+    void settingGet(SETTING_KEY)
+      .then((saved) => {
+        if (!cancelled && saved && isLocale(saved)) setLocale(saved)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialLocale])
+
   const value = useMemo<I18nValue>(() => {
     const dict = DICTIONARIES[locale]
     const fallbackDict = DICTIONARIES[FALLBACK]
 
     return {
       locale,
-      setLocale,
+      setLocale: (next: Locale) => {
+        setLocale(next)
+        if (isTauri()) void settingSet(SETTING_KEY, next).catch(() => undefined)
+      },
       t: (key, vars) => {
         // Отсутствующий перевод не должен ломать экран: сначала пробуем язык
         // по умолчанию, и только потом показываем сам ключ — так пропуск виден

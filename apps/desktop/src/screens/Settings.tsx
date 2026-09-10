@@ -4,6 +4,11 @@ import { startVoice, stopVoice } from '../agent/voice'
 import { useUiStore } from '../state/store'
 import {
   avatarClose,
+  backgroundSetAlwaysOnTop,
+  backgroundSetAutostart,
+  backgroundSetCloseToTray,
+  backgroundStatus,
+  onboardingReset,
   avatarOpen,
   avatarSetAlwaysOnTop,
   avatarSetClickThrough,
@@ -28,14 +33,22 @@ import {
   providerSetKey,
   providerTest,
   settingGet,
+  systemRequirements,
+  updateCheck,
+  updateInstall,
+  updateStatus,
   voiceConfigureStt,
   voiceSetVoice,
   voiceStatus,
   type AvatarStatus,
+  type BackgroundStatus,
   type CalendarAccount,
+  type RequirementsReport,
   type PermissionStatus,
+  type AvailableUpdate,
   type PrivacyStatus,
   type ProviderRecord,
+  type UpdateStatus,
   type VoiceStatus as VoiceStatusRecord,
 } from '../bridge'
 import './Settings.css'
@@ -65,7 +78,10 @@ export function Settings() {
         <Calendar />
         <Avatar />
         <Hotkey />
+        <Background />
         <Permissions />
+        <SystemSection />
+        <Updates />
       </div>
     </div>
   )
@@ -953,6 +969,239 @@ function Permissions() {
           </label>
         ))}
       </div>
+    </section>
+  )
+}
+
+// ── Фоновый режим (docs/GAPS.md §3) ──────────────────────────────────────
+
+/**
+ * Трей, автозапуск и оверлей.
+ *
+ * Голосовой ассистент, закрывающийся по крестику, слышит только тогда,
+ * когда на него смотрят. Поэтому умолчание — прятаться в трей, а
+ * полный выход живёт в меню трея, где его видно.
+ */
+function Background() {
+  const [status, setStatus] = useState<BackgroundStatus | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(async () => {
+    try {
+      setStatus(await backgroundStatus())
+      setNote(null)
+    } catch (e) {
+      setNote(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  const run = (action: () => Promise<unknown>) => {
+    setBusy(true)
+    action()
+      .then(() => reload())
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  if (!status) return null
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Фоновый режим</h3>
+      <p className="settings__hint">
+        Закрытое окно не означает выключенную Yuki: вместе с ней иначе умирают
+        напоминания, сочетания клавиш и голосовой режим. Совсем выйти можно
+        через меню иконки в трее — там же видно, чем она сейчас занята.
+      </p>
+
+      {note && <p className="settings__error">{note}</p>}
+
+      <div className="provider__row">
+        <label className="hub__checkbox">
+          <input
+            type="checkbox"
+            checked={status.closeToTray}
+            disabled={busy}
+            onChange={(e) => run(() => backgroundSetCloseToTray(e.target.checked))}
+          />
+          прятать в трей вместо выхода
+        </label>
+
+        <label className="hub__checkbox">
+          <input
+            type="checkbox"
+            checked={status.autostart}
+            disabled={busy}
+            onChange={(e) => run(() => backgroundSetAutostart(e.target.checked))}
+          />
+          запускать при входе в систему
+        </label>
+
+        <label className="hub__checkbox">
+          <input
+            type="checkbox"
+            checked={status.alwaysOnTop}
+            disabled={busy}
+            onChange={(e) => run(() => backgroundSetAlwaysOnTop(e.target.checked))}
+          />
+          держать окно поверх остальных
+        </label>
+      </div>
+    </section>
+  )
+}
+
+// ── Система и мастер (docs/GAPS.md §1, §4) ────────────────────────────────────────
+
+/**
+ * Требования и повторный прогон мастера.
+ *
+ * Список требований, который негде сверить, читают один раз и забывают,
+ * поэтому он сравнивается с настоящей машиной здесь же.
+ */
+function SystemSection() {
+  const [report, setReport] = useState<RequirementsReport | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    systemRequirements()
+      .then(setReport)
+      .catch((e: unknown) => setNote(describe(e)))
+  }, [])
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Система</h3>
+
+      {note && <p className="settings__error">{note}</p>}
+
+      {report && (
+        <ul className="settings__blockers">
+          {report.items.map((item) => (
+            <li className="settings__blocker" key={item.key} data-ok={item.ok}>
+              {item.label}: {item.actual}
+              {item.ok ? '' : ` — меньше минимальных ${item.required}`}
+            </li>
+          ))}
+          {/* Отдельно от базовых: машина может вполне тянуть Yuki и
+              не тянуть локальную модель — это разные утверждения. */}
+          <li className="settings__blocker" data-ok={report.localOnlyOk}>
+            Режим Local Only: {report.localOnlyOk ? 'памяти хватает' : 'рекомендуется 16 ГБ'}
+          </li>
+        </ul>
+      )}
+
+      <div className="provider__row">
+        <button
+          type="button"
+          className="settings__button"
+          onClick={() =>
+            void onboardingReset()
+              .then(() => setNote('мастер откроется при следующем запуске'))
+              .catch((e: unknown) => setNote(describe(e)))
+          }
+        >
+          Пройти настройку заново
+        </button>
+      </div>
+    </section>
+  )
+}
+
+// ── Обновления (docs/GAPS.md §2) ────────────────────────────────────────────
+
+/**
+ * Проверка и установка обновлений.
+ *
+ * Когда канал не настроен, секция говорит это прямо, а не показывает
+ * кнопку, которая молча ничего не делает: обновления — это право
+ * запускать код на чужой машине, и без подписи оно выключено целиком.
+ */
+function Updates() {
+  const [status, setStatus] = useState<UpdateStatus | null>(null)
+  const [found, setFound] = useState<AvailableUpdate | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    updateStatus()
+      .then(setStatus)
+      .catch((e: unknown) => setNote(describe(e)))
+  }, [])
+
+  if (!status) return null
+
+  const check = () => {
+    setBusy(true)
+    setNote(null)
+    updateCheck()
+      .then((update) => {
+        setFound(update)
+        // «Обновлений нет» — это ответ, и он должен быть виден.
+        if (!update) setNote('установлена самая свежая версия')
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Обновления</h3>
+      <p className="settings__hint">Установлена версия {status.currentVersion}.</p>
+
+      {!status.configured && status.reason && (
+        <p className="settings__error">{status.reason}</p>
+      )}
+
+      {status.configured && (
+        <div className="provider__row">
+          <button type="button" className="settings__button" disabled={busy} onClick={check}>
+            {busy ? 'Проверяю…' : 'Проверить обновления'}
+          </button>
+          {note && <span className="provider__status">{note}</span>}
+        </div>
+      )}
+
+      {found && (
+        <div className="provider">
+          <div className="provider__head">
+            <span className="provider__label">Версия {found.version}</span>
+            {found.publishedAt && (
+              <span className="provider__status">{found.publishedAt}</span>
+            )}
+          </div>
+
+          {found.notes && (
+            <p className="settings__hint" data-selectable>
+              {found.notes}
+            </p>
+          )}
+
+          <div className="provider__row">
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true)
+                setNote('Скачиваю… после установки Yuki перезапустится')
+                updateInstall()
+                  .catch((e: unknown) => {
+                    setNote(describe(e))
+                    setBusy(false)
+                  })
+              }}
+            >
+              Установить и перезапустить
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

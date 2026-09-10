@@ -12,6 +12,8 @@
 //! состоит только из вызовов `Command`, поэтому он компилируется и проверяется
 //! компилятором на любой платформе, а не молча выпадает из сборки на Windows.
 
+pub mod tcc;
+
 use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};

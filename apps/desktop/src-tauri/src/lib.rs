@@ -12,14 +12,18 @@ pub mod catalog;
 pub mod commands;
 pub mod hotkeys;
 pub mod memory;
+pub mod onboarding;
 pub mod permissions;
 pub mod plugins;
 pub mod privacy;
 pub mod reminders;
+pub mod requirements;
 pub mod secrets;
 pub mod state;
 pub mod storage;
 pub mod system;
+pub mod tray;
+pub mod updater;
 pub mod voice;
 
 use tauri::Manager;
@@ -35,10 +39,41 @@ const DB_FILE: &str = "yuki.db";
 /// Падение на этапе инициализации адаптеров или базы — фатально и осознанно:
 /// Yuki без системного слоя и хранилища не ассистент, а пустое окно, и молча
 /// продолжать в таком состоянии хуже, чем честно сообщить об ошибке.
+/// Включает журнал диагностики.
+///
+/// Без подписчика каждый `tracing::warn!` в коде — это строка, которую никто
+/// никогда не прочтёт. Именно так незамеченным осталось неудавшееся
+/// сочетание вызова: код честно предупреждал, но предупреждение некуда было
+/// вывести.
+///
+/// Уровень берётся из `YUKI_LOG` (формат `RUST_LOG`), по умолчанию `info`.
+fn init_logging() {
+    use tracing_subscriber::EnvFilter;
+
+    let filter = EnvFilter::try_from_env("YUKI_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
+
+    // Ошибка установки означает лишь то, что подписчик уже есть — это не повод
+    // не запускать приложение.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
+}
+
 pub fn run() {
+    init_logging();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Автозапуск без аргументов: при старте вместе с системой окно
+        // не распахивается — Yuki просто появляется в трее (docs/GAPS.md §3).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let storage = Storage::open(data_dir.join(DB_FILE))?;
@@ -54,6 +89,12 @@ pub fn run() {
             app.manage(AppState::new(adapters, storage, http));
 
             hotkeys::init(app.handle());
+            // Трей строится после состояния: его меню читает настройки.
+            if let Err(error) = tray::init(app.handle()) {
+                // Система без области уведомлений — не повод не запуститься.
+                tracing::warn!(%error, "не удалось создать иконку в трее");
+            }
+            tray::restore(app.handle());
             reminders::spawn_scheduler(app.handle().clone());
             capabilities::connect_enabled(app.handle().clone());
             // Окно аватара возвращается туда же, где его оставили (ТЗ §12).
@@ -156,6 +197,25 @@ pub fn run() {
             capabilities::mcp_test,
             capabilities::mcp_tools,
             capabilities::mcp_call,
+            // обновления (docs/GAPS.md §2)
+            updater::update_status,
+            updater::update_check,
+            updater::update_install,
+            // трей, фон и автозапуск (docs/GAPS.md §3)
+            tray::background_status,
+            tray::background_set_close_to_tray,
+            tray::background_set_always_on_top,
+            tray::background_set_autostart,
+            tray::tray_set_state,
+            // мастер первого запуска (docs/GAPS.md §1)
+            onboarding::onboarding_status,
+            onboarding::onboarding_completed,
+            onboarding::onboarding_finish,
+            onboarding::onboarding_reset,
+            onboarding::permission_open_settings,
+            onboarding::permission_request_os,
+            // системные требования (docs/GAPS.md §4)
+            requirements::system_requirements,
             // аватар (ТЗ §12)
             avatar::avatar_status,
             avatar::avatar_open,
@@ -185,6 +245,20 @@ pub fn run() {
             automation::command_delete,
         ])
         .on_window_event(|window, event| {
+            // Крестик прячет главное окно в трей, а не выключает ассистента:
+            // вместе с окном иначе умирают напоминания, сочетания и голос
+            // (docs/GAPS.md §3). Совсем выйти можно из меню трея.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    let app = window.app_handle();
+                    if tray::close_to_tray(app, &app.state::<AppState>()) {
+                        api.prevent_close();
+                        let _ = window.hide();
+                        return;
+                    }
+                }
+            }
+
             // Микрофон и синтезатор держат устройства ОС: закрыть их надо явно,
             // иначе процесс уходит, а индикатор записи у пользователя остаётся.
             if matches!(event, tauri::WindowEvent::Destroyed)

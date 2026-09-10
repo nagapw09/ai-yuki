@@ -80,8 +80,10 @@ fn apply_all(app: &AppHandle, summon: &str, commands: &[(String, String)]) -> Re
 
     let summon_shortcut = parse(summon)?;
     let summon_key = summon_shortcut.to_string();
+    let summon_label = summon_key.clone();
 
     let handle = app.clone();
+    let registered = by_shortcut.len();
     let mut all: Vec<Shortcut> = vec![summon_shortcut];
     for shortcut in by_shortcut.keys() {
         if let Ok(parsed) = parse(shortcut) {
@@ -107,7 +109,12 @@ fn apply_all(app: &AppHandle, summon: &str, commands: &[(String, String)]) -> Re
                 let _ = handle.emit(EVENT_COMMAND, serde_json::json!({ "commandId": id }));
             }
         })
-        .map_err(err)
+        .map_err(err)?;
+
+    // Сочетание, которое не сработало, неотличимо от незарегистрированного,
+    // пока не сказано, что именно было зарегистрировано.
+    tracing::info!(summon = %summon_label, commands = registered, "сочетания зарегистрированы");
+    Ok(())
 }
 
 /// Читает сохранённое сочетание вызова.

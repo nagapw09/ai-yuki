@@ -1,10 +1,17 @@
-import { useCallback, useEffect } from 'react'
+import { listen } from '@tauri-apps/api/event'
+import { useCallback, useEffect, useState } from 'react'
 
 import { initTriggers } from './agent/commands'
 import { sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { startAvatarBroadcast } from './avatar/broadcast'
-import { isTauri, providerList, systemInfo } from './bridge'
+import {
+  isTauri,
+  NAVIGATE_EVENT,
+  onboardingCompleted,
+  providerList,
+  systemInfo,
+} from './bridge'
 import { ConfirmDialog } from './design-system/components/ConfirmDialog'
 import { Rail } from './design-system/components/Rail'
 import { useT } from './i18n'
@@ -13,12 +20,14 @@ import { Capabilities } from './screens/Capabilities'
 import { Chat } from './screens/Chat'
 import { Commands } from './screens/Commands'
 import { Memory } from './screens/Memory'
+import { Onboarding } from './screens/Onboarding'
 import { Orbital } from './screens/Orbital'
 import { Settings } from './screens/Settings'
 import { useUiStore } from './state/store'
 import './App.css'
 
 export function App() {
+  const onboarded = useOnboarding()
   const screen = useUiStore((s) => s.screen)
   const setScreen = useUiStore((s) => s.setScreen)
   const setOrbState = useUiStore((s) => s.setOrbState)
@@ -34,6 +43,19 @@ export function App() {
 
   // Аватар живёт в соседнем окне и состояние знает только отсюда (ТЗ §12).
   useEffect(() => startAvatarBroadcast(), [])
+
+  // Переходы из меню трея: меню живёт в Rust и о экранах не знает.
+  useEffect(() => {
+    if (!isTauri()) return
+
+    const pending = listen<string>(NAVIGATE_EVENT, (event) => {
+      setScreen(event.payload as Parameters<typeof setScreen>[0])
+    })
+
+    return () => {
+      void pending.then((unlisten) => unlisten())
+    }
+  }, [setScreen])
 
   const handleSubmit = useCallback(
     (text: string) => {
@@ -57,6 +79,14 @@ export function App() {
     void startVoice('push_to_talk').catch(() => undefined)
   }, [setHeadline])
 
+  // Пока не знаем — не рисуем ничего: мелькнувший на полсекунды главный
+  // экран перед мастером выглядит как сбой.
+  if (onboarded === null) return <div className="app" />
+
+  if (!onboarded.done) {
+    return <Onboarding onDone={onboarded.finish} />
+  }
+
   return (
     <div className="app">
       <Rail current={screen} onNavigate={setScreen} />
@@ -74,6 +104,40 @@ export function App() {
       <ConfirmDialog />
     </div>
   )
+}
+
+/**
+ * Пройден ли мастер первого запуска (docs/GAPS.md §1).
+ *
+ * В браузере мастера нет: он спрашивает про системные разрешения, которых
+ * вне приложения не существует.
+ */
+function useOnboarding(): { done: boolean; finish: () => void } | null {
+  const [done, setDone] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!isTauri()) {
+      setDone(true)
+      return
+    }
+
+    let cancelled = false
+    onboardingCompleted()
+      .then((value) => {
+        if (!cancelled) setDone(value)
+      })
+      // Сбой чтения настройки не должен запереть человека в мастере навсегда.
+      .catch(() => {
+        if (!cancelled) setDone(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (done === null) return null
+  return { done, finish: () => setDone(true) }
 }
 
 /**

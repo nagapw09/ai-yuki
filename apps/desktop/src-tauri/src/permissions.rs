@@ -42,16 +42,34 @@ const OS_GRANTED: &[&str] = &[
     "external_services",
 ];
 
+/// Категории, статус которых на macOS спрашивается у системы в момент проверки.
+///
+/// Их нельзя внести в [`OS_GRANTED`]: там список постоянный, а эти две меняются
+/// в System Settings без ведома приложения — и меняются именно тогда, когда
+/// пользователь идёт их выдавать.
+#[cfg(target_os = "macos")]
+fn probe_live(category: &str) -> Option<bool> {
+    match category {
+        "accessibility" => Some(yuki_macos::tcc::accessibility_granted()),
+        "screen_recording" => Some(yuki_macos::tcc::screen_recording_granted()),
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn probe_live(_category: &str) -> Option<bool> {
+    None
+}
+
 /// Проставляет `os_granted` по правилам текущей платформы.
 ///
-/// Вызывается при каждом старте: пользователь мог выдать или отозвать разрешение
-/// в системных настройках между запусками.
+/// Вызывается при каждом старте и из мастера первого запуска: пользователь мог
+/// выдать или отозвать разрешение в системных настройках между запусками — а на
+/// macOS ещё и прямо сейчас, не закрывая мастер.
 ///
-/// # Ограничение
-/// Живой опрос статуса TCC на macOS (`AXIsProcessTrusted`, `CGPreflight…`) — это
-/// фаза 2 вместе с мастером первого запуска. Пока категории, требующие явной
-/// выдачи, остаются невыданными, и инструмент честно упирается в отказ, а не
-/// делает вид, что сработал.
+/// На macOS Accessibility и Screen Recording спрашиваются у системы, а не
+/// предполагаются: до выдачи соответствующий API возвращает не ошибку, а пустоту,
+/// и приложение, не спросившее статус, уверенно рапортует ерунду.
 pub fn sync_os(storage: &Storage) -> StorageResult<()> {
     storage.with_conn(|conn| {
         conn.execute("UPDATE permissions SET os_granted = 0", [])?;
@@ -62,9 +80,18 @@ pub fn sync_os(storage: &Storage) -> StorageResult<()> {
         for category in OS_GRANTED {
             stmt.execute([category])?;
         }
+
+        for category in LIVE_CATEGORIES {
+            if probe_live(category) == Some(true) {
+                stmt.execute([category])?;
+            }
+        }
         Ok(())
     })
 }
+
+/// Категории, которые опрашиваются вживую там, где это возможно.
+pub const LIVE_CATEGORIES: &[&str] = &["accessibility", "screen_recording"];
 
 /// Что показать пользователю, чтобы он выдал разрешение вручную (ТЗ §21).
 ///
@@ -88,6 +115,53 @@ pub fn how_to_grant(category: &str) -> Option<&'static str> {
     }
 }
 
+/// Адрес панели системных настроек для категории.
+///
+/// Список закрытый и константный: это единственная причина, по которой открывать
+/// схемы вроде `ms-settings:` вообще допустимо. Принимать сюда произвольную
+/// строку значило бы дать способ запустить что угодно через зарегистрированный
+/// в системе протокол.
+pub fn settings_url(category: &str) -> Option<&'static str> {
+    match Platform::current()? {
+        Platform::MacOS => Some(match category {
+            "accessibility" => {
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            }
+            "screen_recording" => {
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            }
+            "microphone" => {
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            }
+            "camera" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
+            "files" => {
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+            }
+            _ => return None,
+        }),
+        Platform::Windows => Some(match category {
+            "microphone" => "ms-settings:privacy-microphone",
+            "camera" => "ms-settings:privacy-webcam",
+            _ => return None,
+        }),
+    }
+}
+
+/// Показывает системный диалог выдачи, если для категории он существует.
+///
+/// Существует он ровно один: Screen Recording на macOS. Accessibility диалога
+/// не имеет вовсе — только панель настроек, — а на Windows обе категории
+/// спрашиваются самой ОС в момент захвата.
+pub fn request_from_os(category: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    if category == "screen_recording" {
+        return yuki_macos::tcc::request_screen_recording();
+    }
+
+    let _ = category;
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +182,27 @@ mod tests {
             .expect("запрос должен выполниться");
 
         assert_eq!(granted as usize, OS_GRANTED.len());
+    }
+
+    #[test]
+    fn every_live_category_knows_where_it_is_granted() {
+        // Опрашиваемая вживую категория без ссылки на панель настроек — это
+        // мастер, который говорит «выдайте разрешение» и не может показать где.
+        for category in LIVE_CATEGORIES {
+            if Platform::current() == Some(Platform::MacOS) {
+                assert!(
+                    settings_url(category).is_some(),
+                    "для «{category}» нет панели настроек"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn settings_urls_are_limited_to_known_panes() {
+        // Произвольная категория не должна превращаться в открытие чего угодно.
+        assert!(settings_url("shell").is_none());
+        assert!(settings_url("../../evil").is_none());
     }
 
     #[test]

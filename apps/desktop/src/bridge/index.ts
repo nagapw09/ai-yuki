@@ -352,6 +352,112 @@ export interface CalendarEvent {
   link: string | null
 }
 
+
+// ── Мастер первого запуска и требования (docs/GAPS.md §1, §4) ──────────────────────────────
+
+export interface PermissionStep {
+  category: string
+  /** Согласие внутри Yuki. */
+  userGranted: boolean
+  /** Разрешение на уровне ОС. */
+  osGranted: boolean
+  hint: string | null
+  canOpenSettings: boolean
+  canRequest: boolean
+  required: boolean
+}
+
+export interface Requirement {
+  key: string
+  label: string
+  required: string
+  actual: string
+  ok: boolean
+}
+
+export interface RequirementsReport {
+  ok: boolean
+  items: Requirement[]
+  avatarOk: boolean
+  localOnlyOk: boolean
+}
+
+export interface OnboardingStatus {
+  completed: boolean
+  platform: string
+  providerReady: boolean
+  providerLabel: string | null
+  permissions: PermissionStep[]
+  requirements: RequirementsReport
+}
+
+
+// ── Трей, фон и автозапуск (docs/GAPS.md §3) ──────────────────────────────────
+
+export interface BackgroundStatus {
+  /** Прятать окно в трей вместо выхода. */
+  closeToTray: boolean
+  /** Держать главное окно поверх остальных. */
+  alwaysOnTop: boolean
+  /** Запускаться вместе с системой. */
+  autostart: boolean
+}
+
+/** Событие перехода на экран — его шлёт меню трея. */
+export const NAVIGATE_EVENT = 'yuki://navigate'
+
+
+// ── Обновления (docs/GAPS.md §2) ──────────────────────────────────────────
+
+export interface UpdateStatus {
+  currentVersion: string
+  /** Настроен ли канал: есть ли ключ подписи и адрес. */
+  configured: boolean
+  /** Почему канал не работает. */
+  reason: string | null
+}
+
+export interface AvailableUpdate {
+  version: string
+  currentVersion: string
+  notes: string | null
+  publishedAt: string | null
+}
+
+export const updateStatus = () => invoke<UpdateStatus>('update_status')
+
+/** `null` — обновлений нет; это ответ, а не ошибка. */
+export const updateCheck = () => invoke<AvailableUpdate | null>('update_check')
+
+/** Скачивает, ставит и перезапускает приложение. */
+export const updateInstall = () => invoke<void>('update_install')
+
+export const backgroundStatus = () => invoke<BackgroundStatus>('background_status')
+export const backgroundSetCloseToTray = (enabled: boolean) =>
+  invoke<void>('background_set_close_to_tray', { enabled })
+export const backgroundSetAlwaysOnTop = (enabled: boolean) =>
+  invoke<void>('background_set_always_on_top', { enabled })
+export const backgroundSetAutostart = (enabled: boolean) =>
+  invoke<void>('background_set_autostart', { enabled })
+
+/** Показывает состояние Yuki в трее (docs/GAPS.md §3). */
+export const traySetState = (state: OrbState) => invoke<void>('tray_set_state', { state })
+
+export const onboardingStatus = () => invoke<OnboardingStatus>('onboarding_status')
+export const onboardingCompleted = () => invoke<boolean>('onboarding_completed')
+export const onboardingFinish = () => invoke<void>('onboarding_finish')
+export const onboardingReset = () => invoke<void>('onboarding_reset')
+
+/** Открывает панель системных настроек для категории разрешений. */
+export const permissionOpenSettings = (category: string) =>
+  invoke<void>('permission_open_settings', { category })
+
+/** Просит ОС показать диалог выдачи, где он есть. */
+export const permissionRequestOs = (category: string) =>
+  invoke<boolean>('permission_request_os', { category })
+
+export const systemRequirements = () => invoke<RequirementsReport>('system_requirements')
+
 export const calendarAccounts = () => invoke<CalendarAccount[]>('calendar_accounts')
 
 // ── Аватар (ТЗ §12) ────────────────────────────────────────────

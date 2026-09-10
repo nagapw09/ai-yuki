@@ -20,13 +20,20 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 # macos-private-api нужен ради прозрачного окна аватара на macOS (ТЗ §12):
 # без него Tauri отказывается создавать transparent-окно.
-tauri = { version = "2", features = ["macos-private-api"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-notification = "2"
+# Автозапуск вместе с системой (docs/GAPS.md §3).
+tauri-plugin-autostart = "2"
+# Автообновление (docs/GAPS.md §2).
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+# Без подписчика все tracing::warn! уходят в пустоту.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 rusqlite = { version = "0.32", features = ["bundled"] }
 opener = "0.7"

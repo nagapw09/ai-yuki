@@ -1,0 +1,82 @@
+name: Release
+
+# Выпуск собирается на обеих системах сразу (ТЗ §2). Собрать macOS-сборку можно
+# только на macOS — кросс-компиляции для неё нет, — поэтому матрица здесь не
+# оптимизация, а единственный способ выпустить приложение целиком.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Ручной запуск нужен, чтобы проверить сборку до того, как поставлен тег:
+  # тег снять уже нельзя, а сломанный выпуск с ним связан навсегда.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # Один упавший таргет не должен отменять второй: чинить их всё равно
+      # придётся по отдельности, а половина артефактов лучше, чем ничего.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+          - platform: macos-13
+            target: x86_64-apple-darwin
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Проверки
+        # Тесты идут до сборки намеренно: выпуск, который не проходит
+        # собственные тесты, не должен доехать до артефакта.
+        run: |
+          npm test
+          npx tsc --noEmit -p apps/desktop/tsconfig.json
+          cargo test --workspace
+
+      - name: Собрать и опубликовать
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Приватный ключ подписи обновлений. Без него сборка получится, но
+          # артефакты обновления подписаны не будут — и клиент их отвергнет.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}-dev', github.run_number) }}
+          releaseName: 'Yuki ${{ github.ref_name }}'
+          releaseBody: 'Список изменений — в CHANGELOG.md.'
+          # Черновик, пока не собрались все три таргета: выпуск, у которого
+          # есть только Windows-установщик, выглядит как готовый и вводит
+          # в заблуждение.
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }}
+          # Файл, который клиент обновления читает по адресу из tauri.conf.json.
+          includeUpdaterJson: true

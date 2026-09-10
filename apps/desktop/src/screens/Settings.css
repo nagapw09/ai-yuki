@@ -49,6 +49,11 @@
   gap: var(--space-1);
 }
 
+/* Строка требований: несоответствие видно без чтения текста. */
+.settings__blocker[data-ok='false'] {
+  color: var(--accent-warning);
+}
+
 .settings__blocker {
   color: var(--text-muted);
   font-size: var(--text-sm);
