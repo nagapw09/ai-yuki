@@ -301,6 +301,51 @@ pub fn restore(app: tauri::AppHandle) {
 mod tests {
     use super::*;
 
+    /// Политика окна должна разрешать `blob:` в `connect-src`.
+    ///
+    /// Текстуры VRM лежат внутри файла модели, и three.js достаёт их через
+    /// `fetch` по `blob:`-адресу — а `fetch` подчиняется `connect-src`, а не
+    /// `img-src`. Без этого разрешения модель грузится целиком, но приходит
+    /// без текстур: белое лицо и плоские цвета вместо глаз.
+    ///
+    /// Заметить это можно только в настоящей сборке: в режиме разработки
+    /// политика не применяется, и там всё выглядит правильно. Поэтому проверка
+    /// живёт в тесте, а не в чьей-то памяти.
+    #[test]
+    fn the_window_policy_lets_the_page_read_its_own_blobs() {
+        let config = include_str!("../tauri.conf.json");
+
+        let connect = config
+            .split("connect-src")
+            .nth(1)
+            .and_then(|rest| rest.split(';').next())
+            .expect("в политике нет connect-src");
+
+        assert!(
+            connect.contains("blob:"),
+            "connect-src запрещает blob: — текстуры аватара не загрузятся: {connect}"
+        );
+    }
+
+    /// А вот сетевой доступ странице по-прежнему закрыт.
+    ///
+    /// Весь смысл политики в том, что запросы к провайдерам идут через Rust,
+    /// где лежат ключи (ТЗ §29). Разрешение `blob:` этого не меняет — но
+    /// соседняя правка могла бы, и заметить это стоит здесь.
+    #[test]
+    fn the_page_still_cannot_reach_the_network() {
+        let config = include_str!("../tauri.conf.json");
+
+        let connect = config
+            .split("connect-src")
+            .nth(1)
+            .and_then(|rest| rest.split(';').next())
+            .expect("в политике нет connect-src");
+
+        assert!(!connect.contains("https:"), "странице открыли сеть: {connect}");
+        assert!(!connect.contains('*'), "странице открыли сеть: {connect}");
+    }
+
     #[test]
     fn placement_survives_a_round_trip_through_settings() {
         let placement = Placement {
