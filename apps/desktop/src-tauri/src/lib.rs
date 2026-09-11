@@ -30,6 +30,7 @@ pub mod system;
 pub mod tray;
 pub mod updater;
 pub mod voice;
+pub mod window;
 
 use tauri::Manager;
 
@@ -292,7 +293,7 @@ pub fn run() {
                     let app = window.app_handle();
                     if tray::close_to_tray(app, &app.state::<AppState>()) {
                         api.prevent_close();
-                        let _ = window.hide();
+                        crate::window::hide_main(app);
                         return;
                     }
                 }

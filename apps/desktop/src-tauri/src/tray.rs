@@ -206,13 +206,9 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Показ окна идёт общим путём: он же сообщает странице, что её снова видно.
 fn show_main(app: &AppHandle) {
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-    let _ = window.show();
-    let _ = window.unminimize();
-    let _ = window.set_focus();
+    crate::window::show_main(app);
 }
 
 // ── Автозапуск ──────────────────────────────────────────────────────────────────

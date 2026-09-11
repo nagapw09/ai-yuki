@@ -147,6 +147,33 @@ fn filter_bounds() -> Vec<usize> {
         .collect()
 }
 
+/// Счётчик признаков с заранее посчитанными границами фильтров.
+///
+/// Границы зависят только от частоты дискретизации, и пересчитывать их на
+/// каждый кадр — работа впустую сто раз в секунду.
+pub struct FrameExtractor {
+    bounds: Vec<usize>,
+}
+
+impl Default for FrameExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FrameExtractor {
+    pub fn new() -> Self {
+        Self {
+            bounds: filter_bounds(),
+        }
+    }
+
+    /// Признаки одного окна. Нужно не меньше [`FRAME_LEN`] отсчётов.
+    pub fn frame(&self, samples: &[f32]) -> [f32; COEFFS] {
+        frame_coeffs(samples, &self.bounds)
+    }
+}
+
 /// Считает MFCC одного окна.
 fn frame_coeffs(samples: &[f32], bounds: &[usize]) -> [f32; COEFFS] {
     let mut buffer = [Complex::ZERO; FFT_SIZE];

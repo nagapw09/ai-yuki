@@ -6,6 +6,7 @@ import { sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { startAvatarBroadcast } from './avatar/broadcast'
 import { startTheme } from './design-system/theme'
+import { startVisibility } from './design-system/visibility'
 import {
   isTauri,
   NAVIGATE_EVENT,
@@ -48,6 +49,10 @@ export function App() {
 
   // Тема применяется до первого кадра и следит за системной (docs/GAPS.md §8).
   useEffect(() => startTheme(), [])
+
+  // Спрятанное в трей окно не должно продолжать анимировать: это
+  // измеренные 21 % одного ядра впустую.
+  useEffect(() => startVisibility(), [])
 
   // Переходы из меню трея: меню живёт в Rust и о экранах не знает.
   useEffect(() => {

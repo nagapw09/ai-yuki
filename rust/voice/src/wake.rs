@@ -31,7 +31,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::mfcc::{self, COEFFS, FRAME_HOP, SAMPLE_RATE};
+use crate::mfcc::{self, COEFFS, FRAME_HOP, FRAME_LEN, SAMPLE_RATE};
 
 /// Сколько звука держать в окне анализа.
 ///
@@ -50,6 +50,12 @@ const CHECK_EVERY_FRAMES: usize = 6;
 /// Три: по одному нельзя оценить, насколько слово вообще похоже на себя, а
 /// больше пяти человек записывать не станет.
 pub const ENROLL_SAMPLES: usize = 3;
+
+/// Насколько путь выравнивания может отходить от диагонали, в кадрах.
+///
+/// Двадцать кадров — это 200 мс перекоса на слове длиной полсекунды: с запасом
+/// покрывает разницу темпа между «Юки» сказанным быстро и вразвалку.
+const BAND: usize = 20;
 
 /// Запас к порогу, вычисленному по образцам.
 ///
@@ -167,10 +173,17 @@ fn distance_shifted(
     let mut current = vec![f32::INFINITY; template.len() + 1];
     previous[0] = 0.0;
 
-    for frame in window {
+    for (i, frame) in window.iter().enumerate() {
         current[0] = f32::INFINITY;
 
-        for (j, reference) in template.iter().enumerate() {
+        // Полоса Сакоэ–Чибы: путь выравнивания не должен уходить от диагонали
+        // дальше, чем на BAND кадров. Растяжение речи вдвое — это норма,
+        // растяжение в пять раз — это уже не то же слово, и считать такие
+        // клетки значит платить за пути, которые всё равно не выберут.
+        let from = i.saturating_sub(BAND);
+        let to = (i + BAND + 1).min(template.len());
+
+        for (j, reference) in template.iter().enumerate().take(to).skip(from) {
             let cost = frame
                 .iter()
                 .zip(mean)
@@ -186,23 +199,42 @@ fn distance_shifted(
             current[j + 1] = cost + best;
         }
 
+        // Клетки вне полосы должны остаться недостижимыми на следующем шаге.
+        for slot in current.iter_mut().take(from + 1) {
+            *slot = f32::INFINITY;
+        }
+        for slot in current.iter_mut().skip(to + 1) {
+            *slot = f32::INFINITY;
+        }
+        current[0] = f32::INFINITY;
+
         std::mem::swap(&mut previous, &mut current);
     }
 
     previous[template.len()] / (window.len() + template.len()) as f32
 }
 
+/// Сколько кадров признаков держится в окне.
+fn window_frames() -> usize {
+    ((SAMPLE_RATE * WINDOW_SECONDS) as usize - FRAME_LEN) / FRAME_HOP + 1
+}
+
 /// Скользящий детектор.
 ///
-/// Держит окно звука, считает признаки и сравнивает с образцами. Состояние
-/// внутри, потому что поток приходит кусками по 16 мс, а решение принимается
-/// по секунде с лишним.
+/// Держит окно **признаков**, а не звука: поток приходит кусками по 20 мс, и
+/// за один шаг проверки окно меняется на десятую часть. Считать признаки всего
+/// окна заново на каждой проверке — это в десять раз больше преобразований
+/// Фурье, чем нужно, и именно на них уходило бы всё процессорное время.
 pub struct WakeDetector {
     model: WakeModel,
-    window: Vec<f32>,
-    /// Сколько отсчётов пришло с прошлой проверки.
+    extractor: mfcc::FrameExtractor,
+    /// Хвост звука, из которого ещё не собран кадр.
+    tail: Vec<f32>,
+    /// Готовые кадры признаков, старые в начале.
+    frames: std::collections::VecDeque<[f32; COEFFS]>,
+    /// Сколько кадров добавилось с прошлой проверки.
     since_check: usize,
-    /// Сколько отсчётов игнорировать после срабатывания.
+    /// Сколько кадров игнорировать после срабатывания.
     cooldown: usize,
 }
 
@@ -210,15 +242,12 @@ impl WakeDetector {
     pub fn new(model: WakeModel) -> Self {
         Self {
             model,
-            window: Vec::with_capacity((SAMPLE_RATE * WINDOW_SECONDS) as usize),
+            extractor: mfcc::FrameExtractor::new(),
+            tail: Vec::with_capacity(FRAME_LEN + FRAME_HOP),
+            frames: std::collections::VecDeque::with_capacity(window_frames() + 1),
             since_check: 0,
             cooldown: 0,
         }
-    }
-
-    /// Сколько отсчётов держится окно.
-    fn capacity(&self) -> usize {
-        (SAMPLE_RATE * WINDOW_SECONDS) as usize
     }
 
     /// Добавляет кусок звука и говорит, услышано ли обращение.
@@ -228,45 +257,53 @@ impl WakeDetector {
     /// слово дало бы десяток срабатываний подряд — оно остаётся в окне ещё
     /// секунду.
     pub fn push(&mut self, samples: &[f32]) -> bool {
-        self.window.extend_from_slice(samples);
+        self.tail.extend_from_slice(samples);
 
-        let capacity = self.capacity();
-        if self.window.len() > capacity {
-            let excess = self.window.len() - capacity;
-            self.window.drain(..excess);
+        let capacity = window_frames();
+        let mut added = 0;
+
+        // Из хвоста собираем столько кадров, сколько в нём поместилось. Кадр
+        // длиной 25 мс, шаг 10 мс — значит, перекрытие остаётся в хвосте.
+        while self.tail.len() >= FRAME_LEN {
+            let frame = self.extractor.frame(&self.tail[..FRAME_LEN]);
+            self.tail.drain(..FRAME_HOP);
+
+            if self.frames.len() == capacity {
+                self.frames.pop_front();
+            }
+            self.frames.push_back(frame);
+            added += 1;
         }
 
         if self.cooldown > 0 {
-            self.cooldown = self.cooldown.saturating_sub(samples.len());
+            self.cooldown = self.cooldown.saturating_sub(added);
             return false;
         }
 
-        self.since_check += samples.len();
-        if self.since_check < FRAME_HOP * CHECK_EVERY_FRAMES {
+        self.since_check += added;
+        if self.since_check < CHECK_EVERY_FRAMES {
             return false;
         }
         self.since_check = 0;
 
         // Пока окно не набралось, сравнивать не с чем: короткий кусок даст
         // маленькое расстояние просто потому, что в нём мало кадров.
-        if self.window.len() < capacity / 2 {
+        if self.frames.len() < capacity / 2 {
             return false;
         }
 
-        let frames = mfcc::extract(&self.window);
-        if frames.is_empty() {
-            return false;
-        }
+        let window: Vec<[f32; COEFFS]> = self.frames.iter().copied().collect();
 
         let heard = self
             .model
             .templates
             .iter()
-            .any(|template| best_alignment(&frames, template) <= self.model.threshold);
+            .any(|template| best_alignment(&window, template) <= self.model.threshold);
 
         if heard {
             self.cooldown = capacity;
-            self.window.clear();
+            self.frames.clear();
+            self.tail.clear();
         }
 
         heard

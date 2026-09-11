@@ -31,26 +31,10 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
-/// Показывает и фокусирует главное окно.
+/// Показывает и фокусирует главное окно, а видимое и активное — прячет.
 ///
-/// Если окно уже видно и активно — прячет его: тот же хоткей должен убирать
-/// ассистента с глаз, иначе для этого нужна мышь.
-fn toggle_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-
-    let visible = window.is_visible().unwrap_or(false);
-    let focused = window.is_focused().unwrap_or(false);
-
-    if visible && focused {
-        let _ = window.hide();
-    } else {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
-}
+/// Логика живёт в [`crate::window`]: скрытие обязано сообщить странице, что её
+/// больше не видно, и второй путь скрытия рядом с первым про это забыл бы.
 
 fn parse(shortcut: &str) -> Result<Shortcut, String> {
     shortcut
@@ -101,7 +85,7 @@ fn apply_all(app: &AppHandle, summon: &str, commands: &[(String, String)]) -> Re
 
             let key = shortcut.to_string();
             if key == summon_key {
-                toggle_window(&handle);
+                crate::window::toggle_main(&handle);
                 return;
             }
 
