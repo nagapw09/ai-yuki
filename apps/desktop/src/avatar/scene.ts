@@ -33,6 +33,58 @@ const EXPRESSION_EASE = 6
 /** Средняя длительность слога при озвучке, секунды. */
 const SYLLABLE = 0.14
 
+/**
+ * Наводит камеру на голову и плечи.
+ *
+ * Замер идёт по границам самой модели, а не по числу из головы: рост VRM-моделей
+ * различается вдвое, и фиксированная камера одну обрезала бы по подбородок, а
+ * другую показала точкой. Кость головы используется, если она есть и её
+ * положение осмысленно; иначе работает оценка по габаритам — так кадрируются и
+ * модели с нестандартным скелетом.
+ */
+function frameUpperBody(
+  camera: THREE.PerspectiveCamera,
+  vrm: VRM,
+  head: THREE.Object3D | null | undefined,
+): void {
+  const box = new THREE.Box3().setFromObject(vrm.scene)
+  const size = box.getSize(new THREE.Vector3())
+  const height = size.y
+
+  if (height <= 0.01) {
+    // Модель без габаритов — ставить камеру некуда; оставляем как есть, чтобы
+    // не отправить её внутрь меша.
+    return
+  }
+
+  const headY = head ? head.getWorldPosition(new THREE.Vector3()).y : 0
+
+  // Кость принимается, только если она похожа на голову: выше середины роста и
+  // не выше макушки. Иначе кадрируем по габаритам — так показываются и модели
+  // с нестандартным скелетом.
+  const plausible = headY > box.min.y + height * 0.5 && headY <= box.max.y + 0.05
+
+  // Кость головы стоит у основания черепа, а не на уровне глаз: от неё до
+  // макушки ещё двадцать сантиметров причёски. Кадр строится от макушки вниз,
+  // иначе волосы срезает верхним краем.
+  const top = box.max.y
+  const headSize = plausible ? top - headY : height * 0.13
+  const bottom = plausible ? headY - headSize * 1.2 : top - height * 0.3
+
+  // Запас по десятой доле сверху и снизу: модель, упирающаяся в края кадра,
+  // выглядит обрезанной даже когда попала целиком.
+  const visible = (top - bottom) * 1.12
+  const center = (top + bottom) / 2
+
+  // Расстояние, на котором эта высота занимает кадр целиком.
+  const fov = (camera.fov * Math.PI) / 180
+  const distance = visible / 2 / Math.tan(fov / 2)
+
+  camera.position.set(0, center, distance)
+  camera.lookAt(0, center, 0)
+  camera.updateProjectionMatrix()
+}
+
 export interface AvatarScene {
   /** Меняет состояние: мимика и темп подхватываются плавно. */
   setState: (state: OrbState) => void
@@ -62,6 +114,9 @@ export async function createScene(
   // Прозрачный фон — обязательное условие окна без рамки: иначе вокруг аватара
   // будет висеть чёрный прямоугольник.
   renderer.setClearColor(0x000000, 0)
+  // Цветовое пространство задаём явно: умолчание менялось между версиями three,
+  // и модель, собранная под sRGB, в линейном выводе выглядит выцветшей.
+  renderer.outputColorSpace = THREE.SRGBColorSpace
 
   const scene = new THREE.Scene()
 
@@ -97,18 +152,36 @@ export async function createScene(
   // скелеты. На маленьком окне это разница между 60 и 30 кадрами.
   VRMUtils.removeUnnecessaryVertices(gltf.scene)
   VRMUtils.combineSkeletons(gltf.scene)
-  vrm.scene.rotation.y = Math.PI // VRM смотрит от зрителя; разворачиваем к нему
+  VRMUtils.combineMorphs(vrm)
+
+  // Разворот делает библиотека, а не мы: 180 градусов нужны только моделям
+  // VRM 0.x, а у VRM 1.0 перёд уже направлен к зрителю. Безусловный поворот
+  // показывал бы половину моделей спиной.
+  VRMUtils.rotateVRM0(vrm)
+
+  // Части тела не должны исчезать при движении костей. Three.js считает объём
+  // отсечения по позе покоя, и поднятая рука или наклон головы выводят кусок
+  // меша за эту границу — он пропадает целиком. Для аватара в маленьком окне
+  // экономия на отсечении не стоит исчезающих рук.
+  vrm.scene.traverse((object) => {
+    object.frustumCulled = false
+  })
+
   scene.add(vrm.scene)
 
   const head = vrm.humanoid?.getNormalizedBoneNode('head')
   const spine = vrm.humanoid?.getNormalizedBoneNode('spine')
   const chest = vrm.humanoid?.getNormalizedBoneNode('chest') ?? spine
 
-  // Кадрируем по голове: рост моделей различается, и фиксированная камера
-  // одну обрезала бы по подбородок, а другую показала бы точкой.
-  const headHeight = head ? head.getWorldPosition(new THREE.Vector3()).y : 1.4
-  camera.position.set(0, headHeight - 0.02, 1.65)
-  camera.lookAt(0, headHeight - 0.08, 0)
+  // Первое обновление до замера: нормализованный скелет three-vrm получает
+  // настоящие положения только после него, а матрицы мира — только после
+  // updateMatrixWorld. Без этих двух строк замер возвращал положение кости
+  // в покое относительно родителя — около нуля вместо полутора метров, — и
+  // камера оказывалась на уровне пола, показывая ноги вместо лица.
+  vrm.update(0)
+  vrm.scene.updateMatrixWorld(true)
+
+  frameUpperBody(camera, vrm, head)
 
   // Взгляд следует за камерой: аватар смотрит на пользователя, а не сквозь него.
   if (vrm.lookAt) {
