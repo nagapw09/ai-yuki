@@ -1,26 +1,48 @@
 /*
-  Оболочка приложения: рейка слева, экран справа.
+  Оболочка приложения: заголовок, навигация, экран.
 
-  Фон — не плоская заливка: два очень слабых радиальных пятна создают ощущение
+  Фон — не плоская заливка: два очень слабых световых пятна создают ощущение
   глубины, из-за которого Orb выглядит источником света в пространстве, а не
-  картинкой на прямоугольнике (ТЗ §13).
+  картинкой на прямоугольнике (ТЗ §13). Пятна медленно дышат, и это стоит
+  почти ничего: анимируется только transform, то есть работа уходит в
+  композитор, а не в процессор. Цена простоя измерена в docs/REQUIREMENTS.md,
+  и ронять её ради красоты нельзя.
 */
 
 .app {
   position: relative;
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  background:
-    radial-gradient(120% 80% at 50% 12%, rgb(108 92 231 / 8%), transparent 60%),
-    radial-gradient(90% 60% at 50% 100%, rgb(127 209 255 / 5%), transparent 65%),
-    var(--surface-base);
+  overflow: hidden;
+  background: var(--surface-base);
 }
 
 .app__content {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.app__glow {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 32% at 32% 26%, rgb(108 92 231 / 16%), transparent 70%),
+    radial-gradient(34% 30% at 72% 64%, rgb(127 209 255 / 11%), transparent 70%),
+    radial-gradient(50% 40% at 50% 108%, rgb(94 234 212 / 7%), transparent 70%);
+  animation: app-drift 48s ease-in-out infinite alternate;
+}
+
+@keyframes app-drift {
+  from {
+    transform: translate3d(-1.5%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2%, 1.5%, 0) scale(1.08);
+  }
 }
 
 /*

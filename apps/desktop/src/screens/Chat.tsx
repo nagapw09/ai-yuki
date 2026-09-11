@@ -8,6 +8,49 @@ import type { ToolStatus } from '../state/chatStore'
 import './Chat.css'
 
 /**
+ * С чего начать разговор.
+ *
+ * Пустой чат раньше говорил одну серую строчку в центре пустого экрана —
+ * «спроси что угодно». Совет верный и бесполезный: человек, открывший
+ * ассистента впервые, не знает, что «что угодно» тут значит, и закрывает окно.
+ *
+ * Примеры не выдуманы под красивый вид: каждый опирается на инструмент,
+ * который у Yuki есть, — окна, файлы, буфер обмена, заметки. Обещать в
+ * подсказке то, чего нет, хуже, чем не подсказывать.
+ */
+const STARTERS: readonly string[] = [
+  'Какие окна сейчас открыты?',
+  'Найди в загрузках файлы, которые я скачал сегодня',
+  'Запиши заметку: купить кофе и заплатить за интернет',
+  'Что у меня в буфере обмена?',
+]
+
+function Start() {
+  return (
+    <div className="chat__start">
+      <p className="chat__start-title">С чего начнём?</p>
+      <p className="chat__start-hint">
+        Спросите что угодно или попросите что-нибудь сделать — Yuki покажет каждый шаг
+        и спросит разрешение там, где оно нужно.
+      </p>
+
+      <div className="chat__starters">
+        {STARTERS.map((text) => (
+          <button
+            key={text}
+            type="button"
+            className="chat__starter"
+            onClick={() => void sendMessage(text)}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
  * Чат — вторичный режим, а не главный экран (ТЗ §15).
  *
  * Показываются только безопасные статусы инструментов: «Ищу файл…», «Открываю
@@ -29,11 +72,7 @@ export function Chat() {
   return (
     <div className="chat">
       <div className="chat__feed">
-        {entries.length === 0 && !running && (
-          <p className="chat__empty">
-            Спроси что угодно или попроси что-нибудь сделать — Yuki покажет каждый шаг.
-          </p>
-        )}
+        {entries.length === 0 && !running && <Start />}
 
         {entries.map((entry) => (
           <article className="chat__entry" data-role={entry.role} key={entry.id}>

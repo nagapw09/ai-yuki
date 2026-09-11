@@ -1,0 +1,63 @@
+/* Горизонтальная навигация под строкой заголовка. */
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) 0;
+  z-index: var(--z-rail);
+}
+
+.tabs__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.tabs__item:hover {
+  color: var(--text-secondary);
+  background: var(--glass-bg);
+}
+
+.tabs__item[aria-current='page'] {
+  color: var(--text-primary);
+}
+
+/* Подчёркивание активного раздела: полоса шириной с подпись, а не заливка
+   всей кнопки — так активный раздел виден, но кнопки не спорят друг с другом. */
+.tabs__item[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  inset-inline: var(--space-4);
+  bottom: 0;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--accent-cool);
+  box-shadow: 0 0 12px var(--accent-cool);
+}
+
+/* Узкое окно: подписи уходят, остаются иконки — но по клику, а не по
+   наведению, поведение не меняется. */
+@media (width < 820px) {
+  .tabs__item span {
+    display: none;
+  }
+
+  .tabs__item {
+    padding-inline: var(--space-3);
+  }
+
+  .tabs__item[aria-current='page']::after {
+    inset-inline: var(--space-3);
+  }
+}

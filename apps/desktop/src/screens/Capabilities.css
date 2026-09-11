@@ -21,15 +21,20 @@
 
 .hub__title {
   margin: 0 0 var(--space-2);
-  font-size: var(--text-lg);
-  font-weight: var(--weight-medium);
+  /* 24 пикселя, а не 18: заголовок в 18 серым не читался как заголовок, и
+     страница начиналась ниоткуда. */
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
 }
 
 .hub__hint {
   margin: 0;
   max-width: 62ch;
-  color: var(--text-muted);
+  /* Вторичный, а не приглушённый: приглушённый даёт 4.6:1 — на пределе
+     читаемости, и пояснение под заголовком приходилось разглядывать. */
+  color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }

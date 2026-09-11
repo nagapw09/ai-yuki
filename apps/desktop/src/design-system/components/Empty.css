@@ -1,0 +1,43 @@
+/* Пустое состояние: занимает высоту, а не строчку. */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 320px;
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+}
+
+.empty__icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--space-1);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  color: var(--text-muted);
+}
+
+.empty__title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+.empty__body {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+}
+
+.empty__action {
+  margin-top: var(--space-2);
+}

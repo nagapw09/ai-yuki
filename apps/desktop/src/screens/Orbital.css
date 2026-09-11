@@ -1,104 +1,237 @@
 /*
-  Orbital — главный экран (ТЗ §13).
+  Главный экран.
 
-  Композиция ровно из ТЗ: сверху имя, время и статус; в центре Orb с короткой
-  репликой; снизу Command Bar; в самом низу компактные Today / Tasks / Next Event.
-  Постоянных панелей нет: экран отвечает на вопрос «что Yuki делает сейчас»,
-  а не «какие функции есть у приложения».
+  Сетка из трёх колонок: сводки слева, центр, сводки справа. Центр остаётся
+  центром при любой ширине окна — по нему человек находит взглядом состояние
+  Yuki, и уезжающий вбок Orb сломал бы это.
 */
 
 .orbital {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
-  height: 100%;
-  padding: var(--space-5) var(--space-6) var(--space-6);
+  /* Центральная колонка с явной шириной, а не по содержимому: при auto её
+     задавал самый узкий элемент, и строка ввода схлопывалась до 420 пикселей,
+     подрезая собственную подсказку. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 600px) minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  align-items: start;
   gap: var(--space-5);
+  height: 100%;
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  overflow: hidden;
 }
 
-/* ── Верх ──────────────────────────────────────────────────────────────────── */
-
-.orbital__top {
+.orbital__side {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
 }
 
-.orbital__wordmark {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-widest);
-  text-transform: uppercase;
-  color: var(--text-secondary);
+.orbital__side--left {
+  grid-column: 1;
+  align-items: flex-start;
 }
 
-.orbital__clock {
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--tracking-normal);
-  color: var(--text-muted);
+.orbital__side--right {
+  grid-column: 3;
+  align-items: flex-end;
 }
 
-/* ── Центр ─────────────────────────────────────────────────────────────────── */
-
+/* Центр занимает вторую колонку и обе строки: строка ввода живёт под ним, а
+   не под сводками. */
 .orbital__stage {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-7);
-  min-height: 0;
+  gap: var(--space-3);
+  min-width: 0;
+  height: 100%;
 }
 
-.orbital__headline {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--weight-regular);
+/* Шар на главной меньше, чем по умолчанию: рядом с ним теперь стоят имя,
+   подпись и две кнопки, и шар в 260 пикселей растаскивал их по краям экрана
+   вместо того, чтобы собирать в один блок. */
+.orbital__stage .orb {
+  --orb-size: 190px;
+}
+
+.orbital__wordmark {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-tight);
-  color: var(--text-secondary);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+.orbital__tagline {
+  margin: 0;
+  max-width: 34ch;
   text-align: center;
-
-  /* Смена реплики — это смена состояния Yuki, поэтому длительность из
-     диапазона состояний, а не из диапазона обычных переходов (ТЗ §14). */
-  animation: headline-in var(--duration-state) var(--ease-out);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+  transition: color var(--duration-state) var(--ease-out);
 }
 
-@keyframes headline-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* Реплика о состоянии — это речь Yuki, а не подпись под именем, и читаться
+   она должна ярче. */
+.orbital__tagline[data-phrase] {
+  color: var(--text-primary);
 }
 
-/* ── Command Bar ───────────────────────────────────────────────────────────── */
-
-.orbital__command {
+.orbital__actions {
   display: flex;
-  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 
-/* ── Нижняя полоса ─────────────────────────────────────────────────────────── */
-
-.orbital__strip {
+.orbital__action {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-full);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
-/* На узком окне полоса важнее всего в части задач: остальное сжимается первым. */
-@media (max-width: 940px) {
+.orbital__action:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+
+.orbital__action:active {
+  transform: scale(0.98);
+}
+
+.orbital__action[data-active] {
+  border-color: var(--orb-listening);
+  color: var(--orb-listening);
+  box-shadow: 0 0 24px rgb(127 209 255 / 25%);
+}
+
+.orbital__command {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: stretch;
+}
+
+/*
+  Карточка сводки. Плотная и тихая: она сообщает, а не зовёт нажать, поэтому
+  фон почти не отличается от подложки, а подпись мельче значения.
+*/
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 148px;
+  max-width: 240px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  text-align: left;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+button.card:hover {
+  border-color: var(--line-default);
+  background: var(--surface-hover);
+}
+
+.card__label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.card__value {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+}
+
+.card[data-muted] .card__value {
+  color: var(--text-muted);
+}
+
+.card__big {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+.card__bar {
+  display: block;
+  height: 3px;
+  margin-top: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--line-default);
+  overflow: hidden;
+}
+
+.card__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--accent-cool), var(--accent-deep));
+  transition: inline-size var(--duration-slow) var(--ease-out);
+}
+
+/*
+  Узкое окно: сводкам не хватает места по бокам, и они уезжают под центр.
+  Прятать их совсем было бы хуже — это единственные живые данные на экране.
+*/
+@media (width < 980px) {
   .orbital {
-    padding: var(--space-4);
-    gap: var(--space-4);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto;
+    justify-items: center;
+  }
+
+  .orbital__side {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .orbital__side--left {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .orbital__side--right {
+    grid-column: 1;
+    grid-row: 3;
+    align-items: flex-start;
   }
 
   .orbital__stage {
-    gap: var(--space-5);
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .orbital__command {
+    grid-column: 1;
+    grid-row: 4;
   }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Базовые права основного окна плюс уведомления и глобальные хоткеи. Всё, что касается системы, идёт через собственные команды из commands.rs, а не через готовые плагины.",
+  "description": "Базовые права основного окна плюс уведомления, глобальные хоткеи и три действия над самим окном: рамки у него нет, и свернуть, развернуть или спрятать его может только своя строка заголовка. Всё, что касается системы, идёт через собственные команды из commands.rs, а не через готовые плагины.",
   "windows": [
     "main"
   ],
@@ -12,6 +12,9 @@
     "autostart:default",
     "updater:default",
     "process:default",
-    "dialog:default"
+    "dialog:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close"
   ]
 }

@@ -15,12 +15,67 @@
   padding: var(--space-6) var(--space-6) var(--space-4);
 }
 
-.chat__empty {
-  margin: auto;
-  max-width: 420px;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
+/*
+  Начало разговора: заголовок, одна строка объяснения и готовые примеры.
+
+  Примеры — кнопки, а не картинки: нажатие отправляет их как обычное
+  сообщение, и первый разговор начинается одним щелчком.
+*/
+.chat__start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 60%;
+  padding: var(--space-7) var(--space-4);
   text-align: center;
+}
+
+.chat__start-title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+.chat__start-hint {
+  margin: 0;
+  max-width: 52ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+}
+
+.chat__starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  max-width: 620px;
+}
+
+.chat__starter {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-full);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: left;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.chat__starter:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
 }
 
 .chat__entry {

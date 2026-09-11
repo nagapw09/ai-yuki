@@ -6,6 +6,7 @@ import { runById } from '../agent/commands'
 import { COMMAND_TEMPLATES, type CommandTemplate } from '../agent/templates'
 import { toolRegistry } from '../agent/session'
 import { commandDelete, commandList, commandSave, type CommandRecord } from '../bridge'
+import { Empty } from '../design-system/components/Empty'
 import './Commands.css'
 
 /**
@@ -107,10 +108,15 @@ export function Commands() {
         ) : (
           <div className="commands__list">
             {commands.length === 0 && (
-              <p className="commands__empty">
-                Пока пусто. Команду можно создать здесь или просто попросить:
-                «Юки, создай команду „Работа“, которая откроет Chrome и VS Code».
-              </p>
+              <Empty
+                title="Команд пока нет"
+                body="Команда — это записанная последовательность действий. Она выполняется мгновенно и без расхода токенов, потому что модель в ней не участвует."
+                action={
+                  <button type="button" className="commands__button" onClick={create}>
+                    Новая команда
+                  </button>
+                }
+              />
             )}
 
             {commands.map((command) => (

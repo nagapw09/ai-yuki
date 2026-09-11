@@ -38,4 +38,14 @@ export const uk: Dictionary = {
 
   'screen.soon.title': 'Розділ у розробці',
   'screen.soon.body': 'З’явиться в найближчій фазі — див. docs/ROADMAP.md.',
+
+  'window.minimize': 'Згорнути',
+  'window.maximize': 'Розгорнути',
+  'window.restore': 'Повернути розмір',
+  'window.hide': 'Сховати в трей',
+  'orbital.tagline': 'Асистент, який працює на цьому компʼютері',
+  'orbital.openChat': 'Чат',
+  'orbital.talk': 'Говорити',
+  'orbital.memory': 'Памʼять',
+  'unit.gb': 'ГБ',
 }

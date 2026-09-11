@@ -9,6 +9,7 @@ import {
   type MemoryRecord,
 } from '../bridge'
 import { useI18n } from '../i18n'
+import { Empty } from '../design-system/components/Empty'
 import './Memory.css'
 
 /** Типы памяти из ТЗ §9 в порядке от постоянного к мимолётному. */
@@ -98,7 +99,10 @@ export function Memory() {
         {error && <p className="memory__error">{error}</p>}
 
         {records.length === 0 && !error && (
-          <p className="memory__empty">Пока пусто. Yuki запомнит то, что вы попросите.</p>
+          <Empty
+            title="Память пуста"
+            body="Yuki запоминает только то, что вы попросите запомнить. Скажите «запомни, что я предпочитаю Chrome» — запись появится здесь, и её можно будет изменить или удалить."
+          />
         )}
 
         {KINDS.map((kind) => {

@@ -38,4 +38,14 @@ export const en: Dictionary = {
 
   'screen.soon.title': 'Section in progress',
   'screen.soon.body': 'Arrives in an upcoming phase — see docs/ROADMAP.md.',
+
+  'window.minimize': 'Minimise',
+  'window.maximize': 'Maximise',
+  'window.restore': 'Restore',
+  'window.hide': 'Hide to tray',
+  'orbital.tagline': 'An assistant that works on this computer',
+  'orbital.openChat': 'Chat',
+  'orbital.talk': 'Talk',
+  'orbital.memory': 'Memory',
+  'unit.gb': 'GB',
 }

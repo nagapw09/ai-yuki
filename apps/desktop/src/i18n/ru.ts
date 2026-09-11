@@ -39,4 +39,14 @@ export const ru: Dictionary = {
 
   'screen.soon.title': 'Раздел в разработке',
   'screen.soon.body': 'Появится в ближайшей фазе — см. docs/ROADMAP.md.',
+
+  'window.minimize': 'Свернуть',
+  'window.maximize': 'Развернуть',
+  'window.restore': 'Вернуть размер',
+  'window.hide': 'Спрятать в трей',
+  'orbital.tagline': 'Ассистент, который работает на этом компьютере',
+  'orbital.openChat': 'Чат',
+  'orbital.talk': 'Говорить',
+  'orbital.memory': 'Память',
+  'unit.gb': 'ГБ',
 }

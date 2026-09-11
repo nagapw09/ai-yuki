@@ -103,3 +103,44 @@ button {
 :root[data-paused='true'] *::after {
   animation-play-state: paused !important;
 }
+
+/*
+  Шапка раздела.
+
+  Общая, а не своя у каждого экрана: до этого каждый раздел объявлял свои
+  .commands__title, .memory__title, .notes__title — с разными размерами и
+  разным отступом, и разделы выглядели сделанными в разное время. Заголовок
+  крупнее и контрастнее, чем был: 18 пикселей серым не читались как заголовок
+  вовсе, и страница начиналась ниоткуда.
+*/
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.page-head__title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+.page-head__hint {
+  margin: var(--space-2) 0 0;
+  max-width: 64ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--text-secondary);
+}
+
+/* Действия раздела держатся вместе и не растягиваются по ширине шапки. */
+.page-head__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}

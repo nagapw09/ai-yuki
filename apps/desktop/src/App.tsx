@@ -15,7 +15,8 @@ import {
   systemInfo,
 } from './bridge'
 import { ConfirmDialog } from './design-system/components/ConfirmDialog'
-import { Rail } from './design-system/components/Rail'
+import { Tabs } from './design-system/components/Tabs'
+import { TitleBar } from './design-system/components/TitleBar'
 import { useT } from './i18n'
 import { Activity } from './screens/Activity'
 import { Capabilities } from './screens/Capabilities'
@@ -89,29 +90,39 @@ export function App() {
     void startVoice('push_to_talk').catch(() => undefined)
   }, [setHeadline])
 
-  // Пока не знаем — не рисуем ничего: мелькнувший на полсекунды главный
-  // экран перед мастером выглядит как сбой.
-  if (onboarded === null) return <div className="app" />
-
-  if (!onboarded.done) {
-    return <Onboarding onDone={onboarded.finish} />
-  }
-
+  // Строка заголовка рисуется всегда, даже пока мы не знаем, куда идти:
+  // у окна нет системной рамки, и без неё это единственный способ его
+  // передвинуть или закрыть. Пропустить её на время загрузки значило бы
+  // запереть человека в окне, которое ничем не управляется.
   return (
     <div className="app">
-      <Rail current={screen} onNavigate={setScreen} />
-      <div className="app__content">
-        {screen === 'orbital' && (
-          <Orbital onSubmit={handleSubmit} onToggleVoice={handleToggleVoice} />
-        )}
-        {screen === 'chat' && <Chat />}
-        {screen === 'activity' && <Activity />}
-        {screen === 'memory' && <Memory />}
-        {screen === 'notes' && <Notes />}
-        {screen === 'capabilities' && <Capabilities />}
-        {screen === 'settings' && <Settings />}
-        {screen === 'commands' && <Commands />}
-      </div>
+      <div className="app__glow" aria-hidden="true" />
+      <TitleBar />
+
+      {onboarded === null ? (
+        <div className="app__content" />
+      ) : onboarded.done ? (
+        <>
+          <Tabs current={screen} onNavigate={setScreen} />
+          <div className="app__content">
+            {screen === 'orbital' && (
+              <Orbital onSubmit={handleSubmit} onToggleVoice={handleToggleVoice} />
+            )}
+            {screen === 'chat' && <Chat />}
+            {screen === 'activity' && <Activity />}
+            {screen === 'memory' && <Memory />}
+            {screen === 'notes' && <Notes />}
+            {screen === 'capabilities' && <Capabilities />}
+            {screen === 'settings' && <Settings />}
+            {screen === 'commands' && <Commands />}
+          </div>
+        </>
+      ) : (
+        <div className="app__content">
+          <Onboarding onDone={onboarded.finish} />
+        </div>
+      )}
+
       <ConfirmDialog />
     </div>
   )
