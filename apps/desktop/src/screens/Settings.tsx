@@ -51,6 +51,10 @@ import {
   voiceConfigureStt,
   voiceSetVoice,
   voiceStatus,
+  wakeEnrollFinish,
+  wakeEnrollRecord,
+  wakeForget,
+  wakeStatus,
   type AvatarStatus,
   type BackgroundStatus,
   type CalendarAccount,
@@ -62,6 +66,7 @@ import {
   type Rates,
   type PrivacyStatus,
   type ProviderRecord,
+  type WakeStatus,
   type UpdateStatus,
   type VoiceStatus as VoiceStatusRecord,
 } from '../bridge'
@@ -92,6 +97,7 @@ export function Settings() {
         <Privacy />
         <Providers />
         <Voice />
+        <WakeWord />
         <Calendar />
         <Avatar />
         <Hotkey />
@@ -250,6 +256,104 @@ function Voice() {
         в ней обращение, поэтому отзыв наступает после того, как вы договорили.
         Мгновенная реакция требует отдельной модели пробуждения — она в планах.
       </p>
+    </section>
+  )
+}
+
+// ── Слово пробуждения (ТЗ §37) ────────────────────────────────────
+
+/**
+ * Запись обращения «Юки».
+ *
+ * Без записанных образцов обращение ищется в уже распознанном тексте —
+ * отзыв наступает после того, как человек договорил, и бюджет ТЗ §37 не
+ * выдерживается. С образцами обращение узнаётся локально и по звуку,
+ * а фразы без обращения вообще не уходят на распознавание.
+ */
+function WakeWord() {
+  const [status, setStatus] = useState<WakeStatus | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    wakeStatus()
+      .then(setStatus)
+      .catch((e: unknown) => setNote(describe(e)))
+  }, [])
+
+  if (!status) return null
+
+  const run = (action: () => Promise<WakeStatus>, message: string) => {
+    setBusy(true)
+    setNote(message)
+    action()
+      .then((next) => {
+        setStatus(next)
+        setNote(null)
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Обращение «Юки»</h3>
+      <p className="settings__hint">
+        Запишите слово {status.needed} раза — и Yuki начнёт узнавать его на месте,
+        без отправки звука на распознавание. Тогда она отзывается сразу, пока
+        вы ещё говорите, а фразы не к ней не уходят в сеть вовсе.
+      </p>
+      <p className="settings__hint">
+        {/* Цену способа надо назвать до записи, а не после. */}
+        Узнаёт именно ваш голос: другой человек, сказавший «Юки», скорее
+        всего не будет услышан — и вы сами с сильно изменившимся голосом тоже.
+        В таком случае запишите обращение заново.
+      </p>
+
+      {note && <p className="settings__hint">{note}</p>}
+
+      <div className="provider__row">
+        <span className="settings__label">
+          {status.enrolled
+            ? 'записано'
+            : status.recorded > 0
+              ? `записано ${status.recorded} из ${status.needed}`
+              : 'не записано'}
+        </span>
+
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(wakeEnrollRecord, 'говорите «Юки»… (две секунды)')
+          }
+        >
+          {status.recorded === 0 ? 'Записать' : 'Ещё раз'}
+        </button>
+
+        {status.recorded >= status.needed && (
+          <button
+            type="button"
+            className="settings__button"
+            disabled={busy}
+            onClick={() => run(wakeEnrollFinish, 'собираю…')}
+          >
+            Готово
+          </button>
+        )}
+
+        {status.enrolled && (
+          <button
+            type="button"
+            className="settings__button"
+            disabled={busy}
+            onClick={() => run(wakeForget, 'убираю…')}
+          >
+            Забыть
+          </button>
+        )}
+      </div>
     </section>
   )
 }

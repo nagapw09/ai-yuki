@@ -38,6 +38,9 @@ pub enum VoiceEvent {
     SpeechStarted,
     /// Фраза закончилась, идёт распознавание.
     SpeechEnded,
+    /// Услышано обращение (ТЗ §37). Приходит в момент произнесения слова,
+    /// а не после конца фразы — на этом и держится бюджет 300 мс.
+    WakeWord,
     /// Распознанный текст.
     ///
     /// `addressed` показывает, обращались ли к Yuki: в режиме слова пробуждения
@@ -50,6 +53,12 @@ pub enum VoiceEvent {
 /// Сегмент речи, ушедший на распознавание.
 pub struct Utterance {
     pub samples: Vec<f32>,
+    /// Обращались ли к Yuki.
+    ///
+    /// В режиме слова пробуждения с записанными образцами фраза без обращения
+    /// не уходит на распознавание вовсе: это и деньги, и приватность — фон
+    /// комнаты незачем отправлять в чужой сервис.
+    pub addressed: bool,
 }
 
 /// Варианты обращения к Yuki (ТЗ §10).
@@ -94,6 +103,13 @@ pub fn strip_wake_phrase(text: &str) -> Option<String> {
 }
 
 /// Работающая голосовая сессия.
+/// Сколько времени после обращения фразы считаются адресованными.
+///
+/// Восемь секунд: человек говорит «Юки» и продолжает мысль, иногда с паузой на
+/// раздумье. Короче — ассистент перестаёт слышать собственное имя; дольше —
+/// начинает подслушивать разговор, случившийся после.
+const ADDRESS_WINDOW: std::time::Duration = std::time::Duration::from_secs(8);
+
 pub struct VoiceSession {
     mode: ListenMode,
     capture: Option<CaptureHandle>,
@@ -108,7 +124,14 @@ impl VoiceSession {
     /// `on_event` вызывается из аудиопотока: он должен быть быстрым. Готовые
     /// сегменты речи забираются через [`VoiceSession::utterances`] — распознавание
     /// асинхронно и в аудиопотоке ему делать нечего.
-    pub fn start<F>(mode: ListenMode, mut on_event: F) -> VoiceResult<Self>
+    /// `wake` — образцы слова пробуждения. Без них режим слова пробуждения
+    /// работает по прежнему пути: фраза распознаётся целиком, и обращение
+    /// ищется в тексте. Это медленнее бюджета ТЗ §37, но не требует настройки.
+    pub fn start<F>(
+        mode: ListenMode,
+        wake: Option<crate::wake::WakeModel>,
+        mut on_event: F,
+    ) -> VoiceResult<Self>
     where
         F: FnMut(VoiceEvent) + Send + 'static,
     {
@@ -122,8 +145,24 @@ impl VoiceSession {
         });
         let mut buffer: Vec<f32> = Vec::with_capacity(TARGET_RATE as usize * 3);
 
+        // Детектор работает только в режиме слова пробуждения: в push-to-talk
+        // обращение и есть нажатая кнопка.
+        let mut detector = match (mode, wake) {
+            (ListenMode::WakeWord, Some(model)) => Some(crate::wake::WakeDetector::new(model)),
+            _ => None,
+        };
+        let mut addressed_until: Option<std::time::Instant> = None;
+
         let capture = capture::start(move |frame| {
             on_event(VoiceEvent::Level(level_of(frame)));
+
+            if let Some(detector) = detector.as_mut() {
+                if detector.push(frame) {
+                    // Отзыв в момент произнесения, до конца фразы.
+                    addressed_until = Some(std::time::Instant::now() + ADDRESS_WINDOW);
+                    on_event(VoiceEvent::WakeWord);
+                }
+            }
 
             let forced = finish_in_stream.swap(false, Ordering::Relaxed);
             let event = vad.push_frame(frame);
@@ -141,9 +180,18 @@ impl VoiceSession {
                 }
                 VadEvent::SpeechEnd => {
                     on_event(VoiceEvent::SpeechEnded);
+
+                    // Без детектора адресованность решается позже, по тексту;
+                    // с детектором — здесь, и неадресованное дальше не идёт.
+                    let addressed = match addressed_until {
+                        None => detector.is_none(),
+                        Some(until) => std::time::Instant::now() < until,
+                    };
+
                     if tx
                         .send(Utterance {
                             samples: std::mem::take(&mut buffer),
+                            addressed,
                         })
                         .is_err()
                     {
@@ -161,6 +209,8 @@ impl VoiceSession {
                 on_event(VoiceEvent::SpeechEnded);
                 let _ = tx.send(Utterance {
                     samples: std::mem::take(&mut buffer),
+                    // Кнопку нажал человек — это и есть обращение.
+                    addressed: true,
                 });
             }
         })?;

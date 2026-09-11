@@ -24,7 +24,7 @@ interface LevelEvent {
 }
 
 interface StateEvent {
-  state: 'listening' | 'speech' | 'transcribing' | 'idle' | 'error'
+  state: 'listening' | 'speech' | 'addressed' | 'transcribing' | 'idle' | 'error'
   message: string | null
 }
 
@@ -102,6 +102,13 @@ export async function startVoice(mode: ListenMode): Promise<void> {
       case 'listening':
       case 'speech':
         store.setOrbState('listening')
+        break
+      // Отзыв на собственное имя (ТЗ §37): приходит в момент произнесения
+      // слова, пока человек ещё говорит фразу. В этом и смысл бюджета:
+      // видимый ответ до конца реплики.
+      case 'addressed':
+        store.setOrbState('listening')
+        store.setHeadline('Слушаю')
         break
       case 'transcribing':
         store.setOrbState('thinking')

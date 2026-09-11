@@ -1,11 +1,13 @@
-//! Экран: снимки и accessibility-дерево (ТЗ §6, §30).
+//! Экран: снимки, распознавание текста и accessibility-дерево (ТЗ §6, §30).
+
+pub mod ocr;
 
 use base64::Engine as _;
 use image::ImageEncoder;
 use xcap::{Monitor, Window};
 use yuki_system::{
     AccessibilityNode, CaptureOptions, Rect, ScreenAdapter, ScreenCapture, SystemError,
-    SystemResult,
+    SystemResult, TextLine,
 };
 
 pub struct DesktopScreenAdapter {
@@ -134,6 +136,19 @@ impl ScreenAdapter for DesktopScreenAdapter {
             .ok_or_else(|| SystemError::NotFound(format!("окно #{window_id}")))?;
         let image = window.capture_image().map_err(platform_err)?;
         encode(image, 0)
+    }
+
+    fn recognize_text(&self, options: &CaptureOptions) -> SystemResult<Vec<TextLine>> {
+        // Распознаём тот же кадр, который ушёл бы модели картинкой: и область,
+        // и уменьшение применяются одинаково, поэтому координаты строк
+        // совпадают с координатами на снимке.
+        let capture = self.capture_with(options)?;
+
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(capture.png_base64.as_bytes())
+            .map_err(platform_err)?;
+
+        ocr::recognize(&png)
     }
 
     fn accessibility_tree(&self, window_id: Option<u64>) -> SystemResult<AccessibilityNode> {

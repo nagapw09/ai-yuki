@@ -83,6 +83,14 @@ pub trait ScreenAdapter: Send + Sync {
     /// Снимок с областью и ограничением размера (ТЗ §6).
     fn capture_with(&self, options: &CaptureOptions) -> SystemResult<ScreenCapture>;
 
+    /// Распознаёт текст на экране или в его части (ТЗ §6).
+    ///
+    /// Запасной путь после дерева интерфейса, но более дешёвый, чем снимок:
+    /// строки текста весят единицы килобайт против сотен у картинки. Нужен
+    /// там, где текста в дереве нет вовсе — картинки, PDF, игры, удалённый
+    /// рабочий стол.
+    fn recognize_text(&self, options: &CaptureOptions) -> SystemResult<Vec<TextLine>>;
+
     /// Снимок конкретного окна.
     fn capture_window(&self, window_id: u64) -> SystemResult<ScreenCapture>;
 

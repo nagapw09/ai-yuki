@@ -231,6 +231,27 @@ pub fn screen_capture(
         .map_err(err)
 }
 
+/// Распознаёт текст на экране (ТЗ §6).
+///
+/// Область не уменьшается по умолчанию, в отличие от снимка: уменьшенный мелкий
+/// текст перестаёт распознаваться, а ради мелкого текста область и берут.
+#[tauri::command]
+pub fn screen_read_text(
+    state: State<'_, AppState>,
+    display_index: Option<usize>,
+    region: Option<yuki_system::Rect>,
+) -> Result<Vec<yuki_system::TextLine>, String> {
+    state
+        .adapters
+        .screen
+        .recognize_text(&yuki_system::CaptureOptions {
+            display_index,
+            region,
+            max_width: None,
+        })
+        .map_err(err)
+}
+
 #[tauri::command]
 pub fn screen_capture_window(
     state: State<'_, AppState>,

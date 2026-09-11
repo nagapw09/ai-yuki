@@ -135,6 +135,17 @@ pub struct ScreenCapture {
     pub display_index: usize,
 }
 
+/// Распознанная строка текста на изображении (ТЗ §6).
+///
+/// Прямоугольник — в координатах изображения, а не экрана: снимок мог быть
+/// кадрирован и уменьшен, и пересчёт в экранные делает тот, кто снимал.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextLine {
+    pub text: String,
+    pub rect: Rect,
+}
+
 /// Что и как снимать (ТЗ §6).
 ///
 /// Отдельной структурой, а не тремя аргументами: снимок всего экрана в полном

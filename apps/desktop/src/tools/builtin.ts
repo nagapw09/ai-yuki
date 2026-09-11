@@ -431,6 +431,56 @@ const readUi: Tool = {
   },
 }
 
+const screenReadText: Tool = {
+  id: 'read_screen_text',
+  name: 'Прочитать текст с экрана',
+  description:
+    'Распознаёт текст на экране и возвращает строки с их координатами. ' +
+    'Порядок выбора такой: read_ui — точнее всего и даёт готовые действия; ' +
+    'этот инструмент — когда текста в дереве нет вовсе (картинки, PDF, игры, ' +
+    'удалённый рабочий стол); screen_capture — последний, когда важна сама ' +
+    'графика. Строки весят на порядок меньше снимка. ' +
+    'Для мелкого текста бери region — точность тем выше, чем меньше лишнего вокруг. ' +
+    'Распознавание ошибается на похожих символах — не выдавай его результат за точную ' +
+    'цитату там, где важна буква в букву.',
+  permissions: ['screen_recording'],
+  risk: 'medium',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      displayIndex: { type: 'number' },
+      region: {
+        type: 'object',
+        description: 'Область экрана: x, y, width, height в пикселях',
+        properties: {
+          x: { type: 'number' },
+          y: { type: 'number' },
+          width: { type: 'number' },
+          height: { type: 'number' },
+        },
+        required: ['x', 'y', 'width', 'height'],
+      },
+    },
+    additionalProperties: false,
+  },
+  execute: async (input) => {
+    const options = input as { displayIndex?: number; region?: bridge.CaptureRegion }
+    const lines = await bridge.screenReadText(options)
+
+    // Пустой результат — это ответ, а не сбой, и отличать его надо: на экране
+    // может и не быть текста, а может не быть языкового пакета в системе.
+    if (lines.length === 0) {
+      return {
+        lines: [],
+        note: 'текст не найден — либо его там нет, либо в системе нет нужного языкового пакета',
+      }
+    }
+
+    return { lines }
+  },
+}
+
 const screenCapture: Tool = {
   id: 'screen_capture',
   name: 'Снимок экрана',
@@ -510,4 +560,5 @@ export const BUILTIN_TOOLS: readonly Tool[] = [
   mouseScroll,
   readUi,
   screenCapture,
+  screenReadText,
 ]

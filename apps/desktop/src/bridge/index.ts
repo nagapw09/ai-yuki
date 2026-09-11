@@ -185,6 +185,23 @@ export const screenCapture = (options?: {
     region: options?.region ?? null,
     maxWidth: options?.maxWidth ?? null,
   })
+/** Строка текста, найденная на экране (ТЗ §6). */
+export interface TextLine {
+  text: string
+  /** Прямоугольник в координатах снятого кадра. */
+  rect: CaptureRegion
+}
+
+/** Распознаёт текст на экране или в его части (ТЗ §6). */
+export const screenReadText = (options?: {
+  displayIndex?: number
+  region?: CaptureRegion
+}) =>
+  invoke<TextLine[]>('screen_read_text', {
+    displayIndex: options?.displayIndex ?? null,
+    region: options?.region ?? null,
+  })
+
 export const screenCaptureWindow = (windowId: number) =>
   invoke<ScreenCapture>('screen_capture_window', { windowId })
 export const accessibilityTree = (windowId?: number) =>
@@ -557,6 +574,27 @@ export const diagnosticsReport = () => invoke<string>('diagnostics_report')
 
 export const diagnosticsSave = (path: string) =>
   invoke<string>('diagnostics_save', { path })
+
+
+// ── Слово пробуждения (ТЗ §37) ──────────────────────────────────
+
+export interface WakeStatus {
+  /** Записано ли обращение. */
+  enrolled: boolean
+  /** Сколько образцов нужно всего. */
+  needed: number
+  /** Сколько уже записано в текущем заходе. */
+  recorded: number
+  threshold: number | null
+}
+
+export const wakeStatus = () => invoke<WakeStatus>('wake_status')
+
+/** Пишет один образец: две секунды с микрофона. */
+export const wakeEnrollRecord = () => invoke<WakeStatus>('wake_enroll_record')
+
+export const wakeEnrollFinish = () => invoke<WakeStatus>('wake_enroll_finish')
+export const wakeForget = () => invoke<WakeStatus>('wake_forget')
 
 export const onboardingStatus = () => invoke<OnboardingStatus>('onboarding_status')
 export const onboardingCompleted = () => invoke<boolean>('onboarding_completed')

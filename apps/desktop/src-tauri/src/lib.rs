@@ -151,6 +151,7 @@ pub fn run() {
             // экран (ТЗ §6)
             commands::screen_capture,
             commands::screen_capture_window,
+            commands::screen_read_text,
             commands::accessibility_tree,
             commands::accessibility_text,
             commands::display_count,
@@ -203,6 +204,11 @@ pub fn run() {
             voice::voice_stop_speaking,
             voice::voice_set_voice,
             voice::voice_configure_stt,
+            // слово пробуждения (ТЗ §37)
+            voice::wake_status,
+            voice::wake_enroll_record,
+            voice::wake_enroll_finish,
+            voice::wake_forget,
             // возможности и MCP (ТЗ §17, §18, §19)
             capabilities::integrations_list,
             capabilities::integration_install,

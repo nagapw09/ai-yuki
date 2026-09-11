@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use yuki_voice::{
     strip_wake_phrase, HttpStt, ListenMode, SpeechToText, SystemTts, TextToSpeech, VoiceEvent,
+    WakeModel, ENROLL_SAMPLES,
     VoiceSession,
 };
 
@@ -176,6 +177,11 @@ fn stt_config(state: &AppState) -> Result<SttConfig, String> {
 /// Голосовая часть состояния приложения.
 #[derive(Default)]
 pub struct VoiceState {
+    /// Образцы обращения, записанные но ещё не собранные в модель (ТЗ §37).
+    ///
+    /// В памяти, а не в базе: незаконченная запись не должна переживать
+    /// перезапуск — человек и так начнёт заново.
+    enrollment: Mutex<Vec<Vec<f32>>>,
     session: Mutex<Option<VoiceSession>>,
     tts: Mutex<Option<SystemTts>>,
 }
@@ -240,7 +246,11 @@ pub fn voice_start(
     }
 
     let events = app.clone();
-    let mut session = VoiceSession::start(mode, move |event| match event {
+    // Образцы обращения читаются при старте сессии: их могли записать только что.
+    let wake = wake_model(&state);
+    let fast_wake = wake.is_some();
+
+    let mut session = VoiceSession::start(mode, wake, move |event| match event {
         VoiceEvent::Level(level) => {
             let _ = events.emit(EVENT_LEVEL, LevelEvent { level });
         }
@@ -258,6 +268,17 @@ pub fn voice_start(
                 EVENT_STATE,
                 StateEvent {
                     state: "transcribing",
+                    message: None,
+                },
+            );
+        }
+        VoiceEvent::WakeWord => {
+            // В этот момент и укладывается бюджет ТЗ §37: интерфейс отзывается
+            // на своё имя, пока человек ещё говорит фразу.
+            let _ = events.emit(
+                EVENT_STATE,
+                StateEvent {
+                    state: "addressed",
                     message: None,
                 },
             );
@@ -283,6 +304,20 @@ pub fn voice_start(
 
             // Канал закрывается вместе с сессией — это и есть условие выхода.
             while let Ok(utterance) = utterances.recv() {
+                // С записанным обращением фраза без обращения не уходит на
+                // распознавание вовсе: это и деньги, и приватность — фон комнаты
+                // незачем отправлять в чужой сервис.
+                if fast_wake && !utterance.addressed {
+                    let _ = worker.emit(
+                        EVENT_STATE,
+                        StateEvent {
+                            state: "listening",
+                            message: None,
+                        },
+                    );
+                    continue;
+                }
+
                 let language = config.language.as_deref();
                 let result = tauri::async_runtime::block_on(
                     stt.transcribe(&utterance.samples, language),
@@ -302,7 +337,14 @@ pub fn voice_start(
                     Ok(text) => {
                         // В режиме слова пробуждения командой считается только
                         // то, что адресовано Yuki; остальное — фон комнаты.
-                        let (payload, addressed) = if wake_word {
+                        let (payload, addressed) = if fast_wake {
+                            // Кто кому адресовал, решил детектор по звуку. Из текста
+                            // само обращение всё равно убираем: в команде слово «Юки» лишнее.
+                            (
+                                strip_wake_phrase(&text).unwrap_or_else(|| text.clone()),
+                                true,
+                            )
+                        } else if wake_word {
                             match strip_wake_phrase(&text) {
                                 Some(command) => (command, true),
                                 None => (text.clone(), false),
@@ -460,4 +502,161 @@ pub fn shutdown(app: &AppHandle) {
         }
     }
     let _ = state.voice.with_tts(|tts| tts.stop().map_err(err));
+}
+
+// ── Слово пробуждения (ТЗ §37) ──────────────────────────────────────────────────
+
+/// Ключ настройки с образцами слова пробуждения.
+const SETTING_WAKE: &str = "voice.wake.model";
+
+/// Сколько писать один образец.
+const ENROLL_SECONDS: u64 = 2;
+
+/// Состояние записи образцов для интерфейса.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WakeStatus {
+    /// Записано ли обращение.
+    pub enrolled: bool,
+    /// Сколько образцов нужно всего.
+    pub needed: usize,
+    /// Сколько уже записано в текущем заходе.
+    pub recorded: usize,
+    /// Порог узнавания; `null`, если модели нет.
+    pub threshold: Option<f32>,
+}
+
+/// Читает сохранённую модель.
+///
+/// Повреждённая настройка — это «модели нет», а не отказ запускать голос:
+/// формат мог поменяться между версиями, и терять из-за этого голосовой режим
+/// незачем.
+fn wake_model(state: &AppState) -> Option<WakeModel> {
+    let raw = setting(state, SETTING_WAKE)?;
+    serde_json::from_str(&raw).ok()
+}
+
+#[tauri::command]
+pub fn wake_status(state: State<'_, AppState>) -> WakeStatus {
+    let model = wake_model(&state);
+
+    WakeStatus {
+        enrolled: model.is_some(),
+        needed: ENROLL_SAMPLES,
+        recorded: state
+            .voice
+            .enrollment
+            .lock()
+            .map(|samples| samples.len())
+            .unwrap_or(0),
+        threshold: model.map(|model| model.threshold),
+    }
+}
+
+/// Записывает один образец обращения.
+///
+/// Пишет ровно две секунды и возвращает состояние: человек говорит «Юки» и
+/// видит, что образец принят. Молчаливая запись не даёт понять, услышал ли
+/// микрофон вообще что-нибудь.
+#[tauri::command]
+pub fn wake_enroll_record(state: State<'_, AppState>) -> Result<WakeStatus, String> {
+    ensure_microphone_allowed(&state)?;
+
+    if state.voice.session.lock().map(|s| s.is_some()).unwrap_or(false) {
+        // Один микрофон нельзя слушать дважды: пока идёт голосовой режим,
+        // запись образца получила бы пустой поток.
+        return Err("сначала выключите голосовой режим".into());
+    }
+
+    let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::<f32>::new()));
+    let sink = std::sync::Arc::clone(&buffer);
+
+    let handle = yuki_voice::capture::start(move |frame| {
+        if let Ok(mut buffer) = sink.lock() {
+            buffer.extend_from_slice(frame);
+        }
+    })
+    .map_err(err)?;
+
+    std::thread::sleep(std::time::Duration::from_secs(ENROLL_SECONDS));
+    handle.stop();
+
+    let audio = buffer
+        .lock()
+        .map(|buffer| buffer.clone())
+        .unwrap_or_default();
+
+    let loudness = (audio.iter().map(|s| s * s).sum::<f32>() / audio.len().max(1) as f32).sqrt();
+    if loudness < 0.005 {
+        // Тихий образец испортит модель: порог посчитается по тишине, и
+        // детектор начнёт срабатывать на что угодно.
+        return Err("микрофон ничего не услышал — скажите «Юки» ближе к микрофону".into());
+    }
+
+    state
+        .voice
+        .enrollment
+        .lock()
+        .map_err(|_| "состояние записи занято".to_string())?
+        .push(audio);
+
+    Ok(wake_status(state))
+}
+
+/// Собирает модель из записанных образцов и сохраняет её.
+#[tauri::command]
+pub fn wake_enroll_finish(state: State<'_, AppState>) -> Result<WakeStatus, String> {
+    let samples = {
+        let mut enrollment = state
+            .voice
+            .enrollment
+            .lock()
+            .map_err(|_| "состояние записи занято".to_string())?;
+        std::mem::take(&mut *enrollment)
+    };
+
+    if samples.len() < ENROLL_SAMPLES {
+        return Err(format!(
+            "нужно {ENROLL_SAMPLES} образца, записано {}",
+            samples.len()
+        ));
+    }
+
+    let model = WakeModel::from_samples(&samples)
+        .ok_or("образцы не годятся: слишком короткие или тихие")?;
+
+    let json = serde_json::to_string(&model).map_err(err)?;
+    set_setting(&state, SETTING_WAKE, &json)?;
+
+    Ok(wake_status(state))
+}
+
+/// Забывает записанное обращение.
+#[tauri::command]
+pub fn wake_forget(state: State<'_, AppState>) -> Result<WakeStatus, String> {
+    if let Ok(mut enrollment) = state.voice.enrollment.lock() {
+        enrollment.clear();
+    }
+
+    state
+        .storage
+        .with_conn(|conn| conn.execute("DELETE FROM settings WHERE key = ?1", [SETTING_WAKE]))
+        .map_err(err)?;
+
+    Ok(wake_status(state))
+}
+
+/// Записывает настройку.
+fn set_setting(state: &AppState, key: &str, value: &str) -> Result<(), String> {
+    state
+        .storage
+        .with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()",
+                rusqlite::params![key, value],
+            )
+        })
+        .map(|_| ())
+        .map_err(err)
 }

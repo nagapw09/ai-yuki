@@ -7711,6 +7711,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "image",
+ "windows 0.58.0",
  "xcap",
  "yuki-accessibility",
  "yuki-system",

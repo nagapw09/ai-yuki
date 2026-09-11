@@ -14,5 +14,5 @@ pub use adapter::{
 pub use error::{Platform, SystemError, SystemResult};
 pub use types::{
     AccessibilityNode, AppInfo, FileEntry, FileQuery, FileSort, Modifier, MouseButton, Rect,
-    CaptureOptions, ScreenCapture, SystemInfo, WindowInfo,
+    CaptureOptions, ScreenCapture, SystemInfo, TextLine, WindowInfo,
 };
