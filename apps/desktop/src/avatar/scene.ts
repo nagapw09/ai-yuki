@@ -33,55 +33,125 @@ const EXPRESSION_EASE = 6
 /** Средняя длительность слога при озвучке, секунды. */
 const SYLLABLE = 0.14
 
+/** Насколько руки опускаются из Т-позы, радианы (около 72 градусов). */
+const ARM_DOWN = 1.26
+
+/** Небольшой сгиб в локте: прямая рука выглядит палкой. */
+const ELBOW_BEND = 0.14
+
 /**
- * Наводит камеру на голову и плечи.
+ * Опускает руки вдоль тела.
+ *
+ * В файле VRM модель хранится в Т-позе — так требует формат, иначе скелеты
+ * разных моделей нельзя было бы менять местами. Но живой аватар, стоящий
+ * буквой Т, выглядит манекеном, и руки, раскинутые на полтора метра, ещё и не
+ * влезают в узкое окно.
+ *
+ * Сторона поворота определяется пробой, а не записана числом. У VRM 0.x модель
+ * смотрит в минус Z, у VRM 1.0 — в плюс Z, и один и тот же угол одной модели
+ * руки опускает, а другой поднимает. Пробный поворот на малый угол показывает,
+ * куда поехала кисть; настоящий идёт в ту сторону, где она оказалась ниже.
+ */
+export function relaxArms(vrm: VRM): void {
+  const humanoid = vrm.humanoid
+  if (!humanoid) return
+
+  const sides = [
+    ['leftUpperArm', 'leftLowerArm', 'leftHand'],
+    ['rightUpperArm', 'rightLowerArm', 'rightHand'],
+  ] as const
+
+  const probe = new THREE.Vector3()
+
+  for (const [upperName, lowerName, handName] of sides) {
+    const upper = humanoid.getNormalizedBoneNode(upperName)
+    const lower = humanoid.getNormalizedBoneNode(lowerName)
+    const tip = humanoid.getNormalizedBoneNode(handName) ?? lower
+
+    // Без кости дальше по руке пробу ставить не на чем: сам плечевой сустав
+    // от собственного поворота не сдвигается. Такую руку лучше оставить как
+    // есть, чем повернуть наугад.
+    if (!upper || !tip) continue
+
+    vrm.scene.updateMatrixWorld(true)
+    const before = tip.getWorldPosition(probe).y
+
+    upper.rotation.z = 0.2
+    vrm.scene.updateMatrixWorld(true)
+    const after = tip.getWorldPosition(probe).y
+
+    const down = after < before ? 1 : -1
+    upper.rotation.z = down * ARM_DOWN
+    if (lower) lower.rotation.z = down * ELBOW_BEND
+  }
+
+  vrm.update(0)
+  vrm.scene.updateMatrixWorld(true)
+}
+
+/** Какой кусок мира должна показать камера. */
+export interface Framing {
+  centerY: number
+  halfHeight: number
+  halfWidth: number
+}
+
+/**
+ * Считает, что показывать: голову и торс примерно до пояса.
  *
  * Замер идёт по границам самой модели, а не по числу из головы: рост VRM-моделей
  * различается вдвое, и фиксированная камера одну обрезала бы по подбородок, а
  * другую показала точкой. Кость головы используется, если она есть и её
  * положение осмысленно; иначе работает оценка по габаритам — так кадрируются и
  * модели с нестандартным скелетом.
+ *
+ * Ширина меряется отдельно и честно, по габаритам модели: окно аватара узкое,
+ * и кадр, подогнанный только по высоте, срезает плечи и руки.
  */
-function frameUpperBody(
-  camera: THREE.PerspectiveCamera,
-  vrm: VRM,
-  head: THREE.Object3D | null | undefined,
-): void {
+export function measureUpperBody(vrm: VRM, head: THREE.Object3D | null | undefined): Framing | null {
   const box = new THREE.Box3().setFromObject(vrm.scene)
-  const size = box.getSize(new THREE.Vector3())
-  const height = size.y
+  const height = box.max.y - box.min.y
 
-  if (height <= 0.01) {
-    // Модель без габаритов — ставить камеру некуда; оставляем как есть, чтобы
-    // не отправить её внутрь меша.
-    return
-  }
+  // Модель без габаритов — ставить камеру некуда; лучше оставить её там, где
+  // она есть, чем отправить внутрь меша.
+  if (height <= 0.01) return null
 
   const headY = head ? head.getWorldPosition(new THREE.Vector3()).y : 0
 
   // Кость принимается, только если она похожа на голову: выше середины роста и
-  // не выше макушки. Иначе кадрируем по габаритам — так показываются и модели
-  // с нестандартным скелетом.
+  // не выше макушки.
   const plausible = headY > box.min.y + height * 0.5 && headY <= box.max.y + 0.05
 
   // Кость головы стоит у основания черепа, а не на уровне глаз: от неё до
-  // макушки ещё двадцать сантиметров причёски. Кадр строится от макушки вниз,
+  // макушки ещё сантиметров двадцать причёски. Кадр строится от макушки вниз,
   // иначе волосы срезает верхним краем.
   const top = box.max.y
   const headSize = plausible ? top - headY : height * 0.13
-  const bottom = plausible ? headY - headSize * 1.2 : top - height * 0.3
+  const bottom = plausible ? headY - headSize * 2.4 : top - height * 0.45
 
-  // Запас по десятой доле сверху и снизу: модель, упирающаяся в края кадра,
-  // выглядит обрезанной даже когда попала целиком.
-  const visible = (top - bottom) * 1.12
-  const center = (top + bottom) / 2
+  // Запас в паре процентов: модель, упирающаяся в края кадра, выглядит
+  // обрезанной даже когда попала целиком.
+  return {
+    centerY: (top + bottom) / 2,
+    halfHeight: ((top - bottom) / 2) * 1.06,
+    halfWidth: Math.max(Math.abs(box.min.x), Math.abs(box.max.x)) * 1.06,
+  }
+}
 
-  // Расстояние, на котором эта высота занимает кадр целиком.
-  const fov = (camera.fov * Math.PI) / 180
-  const distance = visible / 2 / Math.tan(fov / 2)
+/**
+ * Отодвигает камеру на расстояние, с которого кадр влезает целиком.
+ *
+ * Считаются оба требования — по высоте и по ширине — и берётся большее.
+ * Учитывать только высоту нельзя: окно аватара вытянутое, по горизонтали в
+ * него помещается заметно меньше, и именно там срезало руки.
+ */
+export function placeCamera(camera: THREE.PerspectiveCamera, framing: Framing): void {
+  const half = (camera.fov * Math.PI) / 360
+  const byHeight = framing.halfHeight / Math.tan(half)
+  const byWidth = framing.halfWidth / (Math.tan(half) * Math.max(camera.aspect, 0.01))
 
-  camera.position.set(0, center, distance)
-  camera.lookAt(0, center, 0)
+  camera.position.set(0, framing.centerY, Math.max(byHeight, byWidth))
+  camera.lookAt(0, framing.centerY, 0)
   camera.updateProjectionMatrix()
 }
 
@@ -181,7 +251,12 @@ export async function createScene(
   vrm.update(0)
   vrm.scene.updateMatrixWorld(true)
 
-  frameUpperBody(camera, vrm, head)
+  // Руки опускаем до замера: в Т-позе модель втрое шире, и кадр, посчитанный
+  // по ней, отодвинул бы камеру далеко назад ради пустоты по бокам.
+  relaxArms(vrm)
+
+  const framing = measureUpperBody(vrm, head)
+  if (framing) placeCamera(camera, framing)
 
   // Взгляд следует за камерой: аватар смотрит на пользователя, а не сквозь него.
   if (vrm.lookAt) {
@@ -292,6 +367,10 @@ export async function createScene(
       renderer.setSize(width, height, false)
       camera.aspect = width / Math.max(height, 1)
       camera.updateProjectionMatrix()
+      // Окно можно тянуть за угол, и узкое требует другого расстояния, чем
+      // широкое. Без пересчёта аватар вылезал бы за края после каждого
+      // изменения размера.
+      if (framing) placeCamera(camera, framing)
     },
     dispose: () => {
       state.running = false
