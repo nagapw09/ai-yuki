@@ -152,16 +152,31 @@ pub async fn update_install(app: AppHandle) -> Result<(), String> {
 mod tests {
     /// Конфигурация сборки должна упоминать канал — пусть и незаполненный.
     ///
-    /// Тест сторожит не значение ключа, а сам факт: секция `updater`, тихо
-    /// исчезнувшая из конфигурации, превращает обновления в кнопку, которая
-    /// всегда отвечает «не настроено», и заметить это можно только руками.
+    /// Тест сторожит сам факт: секция `updater`, тихо исчезнувшая из
+    /// конфигурации, превращает обновления в кнопку, которая всегда отвечает
+    /// «не настроено», и заметить это можно только руками.
     #[test]
     fn the_build_configuration_declares_an_update_channel() {
         let config = include_str!("../tauri.conf.json");
         assert!(config.contains("\"updater\""), "в конфигурации нет секции updater");
-        assert!(
-            config.contains("\"createUpdaterArtifacts\": true"),
-            "сборка не создаёт артефакты обновления — публиковать будет нечего"
+    }
+
+    /// Артефакты обновления и ключ подписи включаются вместе.
+    ///
+    /// Ровно эта рассинхронизация стоила испорченной сборки: артефакты
+    /// создавались, ключа не было, и `tauri build` доводил установщик до конца,
+    /// а потом падал с «no private key». Обратная ошибка не лучше: ключ есть,
+    /// артефактов нет — публиковать нечего, а канал выглядит настроенным.
+    #[test]
+    fn update_artifacts_and_the_signing_key_are_switched_on_together() {
+        let config = include_str!("../tauri.conf.json");
+
+        let has_key = !config.contains("\"pubkey\": \"\"");
+        let makes_artifacts = config.contains("\"createUpdaterArtifacts\": true");
+
+        assert_eq!(
+            has_key, makes_artifacts,
+            "ключ подписи и создание артефактов обновления разошлись"
         );
     }
 
