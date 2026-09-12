@@ -1,0 +1,271 @@
+/*
+  Полотно конструктора команд.
+
+  Узлы — обычные кнопки с абсолютным положением, связи — один SVG под ними.
+  Всё вместе лежит в слое, который двигается и масштабируется одним transform:
+  так панорама и зум уходят в композитор и не стоят процессорного времени,
+  измеренного в docs/REQUIREMENTS.md.
+*/
+
+.canvas {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.canvas__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.canvas__count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.canvas__viewport {
+  position: relative;
+  height: min(60vh, 560px);
+  overflow: hidden;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 1px 1px, var(--line-subtle) 1px, transparent 0) 0 0 / 24px 24px,
+    var(--surface-abyss);
+  cursor: grab;
+  touch-action: none;
+}
+
+.canvas__viewport:active {
+  cursor: grabbing;
+}
+
+.canvas__viewport[data-dragging] {
+  cursor: grabbing;
+}
+
+.canvas__layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform-origin: 0 0;
+}
+
+.canvas__edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.canvas__edge {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+}
+
+.canvas__edge-label {
+  fill: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+/*
+  Место, куда можно положить шаг. В покое почти незаметно — это подсказка, а не
+  элемент схемы; под перетаскиванием разгорается то, куда шаг встанет.
+*/
+.canvas__slot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: var(--radius-full);
+  background: var(--line-default);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+  pointer-events: none;
+}
+
+.canvas__slot[data-active] {
+  background: var(--accent-cool);
+  transform: scale(1.8);
+  box-shadow: 0 0 16px var(--accent-cool);
+}
+
+.canvas__node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  text-align: left;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.canvas__node:hover {
+  border-color: var(--line-strong);
+}
+
+.canvas__node[data-selected] {
+  border-color: var(--accent-cool);
+  box-shadow: 0 0 0 1px var(--accent-cool), 0 0 24px rgb(127 209 255 / 20%);
+}
+
+/* Тащимый узел бледнеет: он уже «снят» с места и ещё не поставлен. */
+.canvas__node[data-dragging] {
+  opacity: 0.45;
+}
+
+.canvas__node-kind {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.canvas__node-label {
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Цвет несёт роль узла: запуск, ветвление и действие различаются без чтения. */
+.canvas__node[data-kind='trigger'] {
+  border-color: color-mix(in srgb, var(--accent-success) 45%, transparent);
+}
+
+.canvas__node[data-kind='trigger'] .canvas__node-kind {
+  color: var(--accent-success);
+}
+
+.canvas__node[data-kind='if'] {
+  border-color: color-mix(in srgb, var(--accent-warning) 45%, transparent);
+}
+
+.canvas__node[data-kind='if'] .canvas__node-kind {
+  color: var(--accent-warning);
+}
+
+/* ── Палитра ─────────────────────────────────────────────────────────────── */
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 380px;
+  padding: var(--space-3);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-md);
+}
+
+.palette__group {
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.palette__group:first-child {
+  margin-top: 0;
+}
+
+.palette__item {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-align: left;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.palette__item:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+/*
+  Высота поля поиска задана числом, а не «по содержимому».
+
+  Палитра — колонка с ограниченной высотой, и вся свободная или недостающая
+  высота делится между её детьми. Поле ввода в этом делении участвовать не
+  должно: один раз оно уже вытянулось на всю палитру, схлопнув список действий
+  в ничто, и разбираться в том, какое именно правило flex до него дошло, дороже,
+  чем назвать высоту прямо.
+*/
+.palette .commands__input {
+  flex: 0 0 auto;
+  height: 36px;
+}
+
+.palette__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  /* Список — единственное, что здесь может расти и сжиматься, но не до нуля:
+     палитра без списка действий бесполезна. */
+  min-height: 140px;
+  overflow-y: auto;
+}
+
+.palette__empty {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* ── Панель выбранного узла ──────────────────────────────────────────────── */
+
+.canvas__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+}
+
+.canvas__panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.canvas__panel-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+
+.canvas__panel-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.canvas__panel-actions {
+  display: flex;
+  gap: var(--space-3);
+}

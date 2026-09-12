@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { Condition, Step } from '@yuki/core'
+import type { Step, Trigger } from '@yuki/core'
 
 import { runById } from '../agent/commands'
 import { COMMAND_TEMPLATES, type CommandTemplate } from '../agent/templates'
 import { toolRegistry } from '../agent/session'
 import { commandDelete, commandList, commandSave, type CommandRecord } from '../bridge'
 import { Empty } from '../design-system/components/Empty'
+import { CommandCanvas } from './CommandCanvas'
+import { StepFields, type ToolOption } from './CommandFields'
 import './Commands.css'
 
 /**
@@ -262,6 +264,12 @@ function Editor({
   const [draft, setDraft] = useState<CommandRecord>(command)
   const [note, setNote] = useState<string | null>(null)
 
+  // Полотно по умолчанию: на нём видно форму команды целиком, а ветвления
+  // читаются как ветвления, а не как отступ в списке. Список остаётся — на
+  // длинной линейной команде он быстрее, и правится в нём всё сразу, а не по
+  // одному выбранному узлу.
+  const [view, setView] = useState<'canvas' | 'list'>('canvas')
+
   // Список инструментов берётся из живого реестра: в нём уже есть и встроенные,
   // и всё, что принесли подключённые возможности.
   const tools = useMemo(
@@ -322,12 +330,40 @@ function Editor({
         />
       )}
 
-      <StepList
-        steps={draft.steps as Step[]}
-        tools={tools}
-        depth={0}
-        onChange={(steps) => setDraft({ ...draft, steps })}
-      />
+      <div className="editor__views">
+        <button
+          type="button"
+          className="commands__button"
+          data-active={view === 'canvas'}
+          onClick={() => setView('canvas')}
+        >
+          Полотно
+        </button>
+        <button
+          type="button"
+          className="commands__button"
+          data-active={view === 'list'}
+          onClick={() => setView('list')}
+        >
+          Список
+        </button>
+      </div>
+
+      {view === 'canvas' ? (
+        <CommandCanvas
+          steps={draft.steps as Step[]}
+          trigger={triggerOf(draft)}
+          tools={tools}
+          onChange={(steps) => setDraft({ ...draft, steps: steps as Step[] })}
+        />
+      ) : (
+        <StepList
+          steps={draft.steps as Step[]}
+          tools={tools}
+          depth={0}
+          onChange={(steps) => setDraft({ ...draft, steps })}
+        />
+      )}
 
       <div className="command__actions">
         <button
@@ -345,11 +381,6 @@ function Editor({
       </div>
     </div>
   )
-}
-
-interface ToolOption {
-  id: string
-  name: string
 }
 
 /** Редактор списка шагов; вызывает сам себя для веток «если». */
@@ -410,57 +441,7 @@ function StepList({
           <div className="step__head">
             <span className="step__index">{index + 1}</span>
 
-            {step.kind === 'action' && (
-              <>
-                <select
-                  className="commands__input"
-                  value={step.toolId}
-                  onChange={(e) => replace(index, { ...step, toolId: e.target.value })}
-                >
-                  {/* Инструмент из команды мог исчезнуть вместе с возможностью;
-                      показываем его как есть, чтобы правка не подменила шаг молча. */}
-                  {!tools.some((t) => t.id === step.toolId) && (
-                    <option value={step.toolId}>{step.toolId} — недоступен</option>
-                  )}
-                  {tools.map((tool) => (
-                    <option key={tool.id} value={tool.id}>
-                      {tool.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="commands__input"
-                  value={JSON.stringify(step.input)}
-                  onChange={(e) => {
-                    try {
-                      replace(index, { ...step, input: JSON.parse(e.target.value) })
-                    } catch {
-                      // Пока JSON не дописан, он невалиден — это нормально,
-                      // и ронять ввод на каждом символе нельзя.
-                    }
-                  }}
-                  placeholder='Аргументы, например {"app": "Chrome"}'
-                  spellCheck={false}
-                />
-              </>
-            )}
-
-            {step.kind === 'delay' && (
-              <input
-                className="commands__input"
-                type="number"
-                value={step.ms}
-                onChange={(e) => replace(index, { ...step, ms: Number(e.target.value) || 0 })}
-                placeholder="Пауза, мс"
-              />
-            )}
-
-            {step.kind === 'if' && (
-              <ConditionEditor
-                condition={step.condition}
-                onChange={(condition) => replace(index, { ...step, condition })}
-              />
-            )}
+            <StepFields step={step} tools={tools} onChange={(next) => replace(index, next)} />
 
             <button
               type="button"
@@ -559,54 +540,24 @@ function StepList({
   )
 }
 
-const OPS: { value: Condition['op']; label: string }[] = [
-  { value: 'contains', label: 'содержит' },
-  { value: 'not_contains', label: 'не содержит' },
-  { value: 'equals', label: 'равно' },
-  { value: 'not_equals', label: 'не равно' },
-  { value: 'empty', label: 'пусто' },
-  { value: 'not_empty', label: 'не пусто' },
-]
-
-function ConditionEditor({
-  condition,
-  onChange,
-}: {
-  condition: Condition
-  onChange: (condition: Condition) => void
-}) {
-  const needsRight = condition.op !== 'empty' && condition.op !== 'not_empty'
-
-  return (
-    <>
-      <input
-        className="commands__input"
-        value={condition.left}
-        onChange={(e) => onChange({ ...condition, left: e.target.value })}
-        placeholder="{{результат}}"
-        spellCheck={false}
-      />
-      <select
-        className="commands__input commands__input--narrow"
-        value={condition.op}
-        onChange={(e) => onChange({ ...condition, op: e.target.value as Condition['op'] })}
-      >
-        {OPS.map((op) => (
-          <option key={op.value} value={op.value}>
-            {op.label}
-          </option>
-        ))}
-      </select>
-      {needsRight && (
-        <input
-          className="commands__input"
-          value={condition.right ?? ''}
-          onChange={(e) => onChange({ ...condition, right: e.target.value })}
-          placeholder="значение"
-        />
-      )}
-    </>
-  )
+/**
+ * Триггер записи в том виде, в каком его понимает ядро.
+ *
+ * В базе он разложен по полям — вид, фраза, сочетание, — потому что колонки
+ * проще искать и мигрировать. Ядру нужно размеченное объединение, и собирать
+ * его приходится здесь.
+ */
+function triggerOf(command: CommandRecord): Trigger {
+  switch (command.triggerKind) {
+    case 'phrase':
+      return { kind: 'phrase', phrase: command.phrase ?? '' }
+    case 'hotkey':
+      return { kind: 'hotkey', shortcut: command.hotkey ?? '' }
+    case 'startup':
+      return { kind: 'startup' }
+    default:
+      return { kind: 'manual' }
+  }
 }
 
 function describe(error: unknown): string {

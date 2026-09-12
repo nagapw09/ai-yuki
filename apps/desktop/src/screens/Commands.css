@@ -306,3 +306,10 @@
   color: var(--accent-warning);
   font-size: var(--text-2xs);
 }
+
+/* Переключатель вида редактора: полотно или список. */
+.editor__views {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-3);
+}
