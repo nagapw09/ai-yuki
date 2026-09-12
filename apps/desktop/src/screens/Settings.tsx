@@ -17,7 +17,9 @@ import {
   onboardingReset,
   avatarOpen,
   avatarSetAlwaysOnTop,
+  avatarSetAnchor,
   avatarSetClickThrough,
+  avatarSetPose,
   avatarSetModel,
   avatarStatus,
   calendarAccounts,
@@ -55,6 +57,8 @@ import {
   wakeEnrollRecord,
   wakeForget,
   wakeStatus,
+  type AvatarAnchor,
+  type AvatarPose,
   type AvatarStatus,
   type BackgroundStatus,
   type CalendarAccount,
@@ -590,6 +594,50 @@ function Avatar() {
         </button>
       </div>
 
+      <p className="settings__hint" style={{ marginTop: 'var(--space-4)' }}>
+        Во весь рост аватар становится не собеседником в рамке, а существом,
+        которое стоит на краю экрана. «На панели задач» прижимает окно к верху
+        панели — и он стоит на ней, а не висит в случайном месте.
+      </p>
+
+      <div className="provider__row">
+        {POSES.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className="settings__button"
+            data-active={status.pose === item.value}
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await avatarSetPose(item.value)
+                return null
+              })
+            }
+          >
+            {item.label}
+          </button>
+        ))}
+
+        {ANCHORS.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className="settings__button"
+            data-active={status.anchor === item.value}
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await avatarSetAnchor(item.value)
+                return null
+              })
+            }
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
       <div className="provider__row">
         <button
           type="button"
@@ -746,6 +794,16 @@ function Hotkey() {
 }
 
 // ── Внешний вид (docs/GAPS.md §8) ────────────────────────────────────────
+
+const POSES: { value: AvatarPose; label: string }[] = [
+  { value: 'portrait', label: 'По пояс' },
+  { value: 'full', label: 'Во весь рост' },
+]
+
+const ANCHORS: { value: AvatarAnchor; label: string }[] = [
+  { value: 'free', label: 'Где поставлю' },
+  { value: 'taskbar', label: 'На панели задач' },
+]
 
 const THEMES: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'Тёмная' },

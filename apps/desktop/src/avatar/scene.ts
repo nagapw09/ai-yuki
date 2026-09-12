@@ -139,6 +139,31 @@ export function measureUpperBody(vrm: VRM, head: THREE.Object3D | null | undefin
 }
 
 /**
+ * Считает кадр во весь рост.
+ *
+ * Это не «то же, только дальше»: аватар в полный рост — не собеседник в
+ * портрете, а существо, стоящее на краю экрана, и кадр строится от пола до
+ * макушки по габаритам модели. Запас снизу нулевой намеренно: ноги должны
+ * стоять на нижней границе окна, иначе фигура висит в воздухе над панелью
+ * задач вместо того, чтобы стоять на ней.
+ */
+export function measureWholeBody(vrm: VRM): Framing | null {
+  const box = new THREE.Box3().setFromObject(vrm.scene)
+  const height = box.max.y - box.min.y
+
+  if (height <= 0.01) return null
+
+  const top = box.max.y + height * 0.04
+  const bottom = box.min.y
+
+  return {
+    centerY: (top + bottom) / 2,
+    halfHeight: (top - bottom) / 2,
+    halfWidth: Math.max(Math.abs(box.min.x), Math.abs(box.max.x)) * 1.06,
+  }
+}
+
+/**
  * Отодвигает камеру на расстояние, с которого кадр влезает целиком.
  *
  * Считаются оба требования — по высоте и по ширине — и берётся большее.
@@ -155,9 +180,14 @@ export function placeCamera(camera: THREE.PerspectiveCamera, framing: Framing): 
   camera.updateProjectionMatrix()
 }
 
+/** Что показывать в окне. */
+export type AvatarPose = 'portrait' | 'full'
+
 export interface AvatarScene {
   /** Меняет состояние: мимика и темп подхватываются плавно. */
   setState: (state: OrbState) => void
+  /** Переключает кадр: голова и торс или во весь рост. */
+  setPose: (pose: AvatarPose) => void
   /** Громкость 0…1, если она известна (микрофон в режиме LISTENING). */
   setAudioLevel: (level: number) => void
   /** Подгоняет рендер под новый размер окна. */
@@ -174,6 +204,7 @@ export interface AvatarScene {
 export async function createScene(
   canvas: HTMLCanvasElement,
   model: ArrayBuffer,
+  pose: AvatarPose = 'portrait',
 ): Promise<AvatarScene> {
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -255,8 +286,19 @@ export async function createScene(
   // по ней, отодвинул бы камеру далеко назад ради пустоты по бокам.
   relaxArms(vrm)
 
-  const framing = measureUpperBody(vrm, head)
-  if (framing) placeCamera(camera, framing)
+  // Оба кадра считаются один раз: замер идёт по габаритам модели, которые от
+  // выбора кадра не зависят, а переключение должно быть мгновенным.
+  const framings: Record<AvatarPose, Framing | null> = {
+    portrait: measureUpperBody(vrm, head),
+    full: measureWholeBody(vrm),
+  }
+
+  let currentPose: AvatarPose = pose
+  const applyFraming = () => {
+    const framing = framings[currentPose] ?? framings.portrait
+    if (framing) placeCamera(camera, framing)
+  }
+  applyFraming()
 
   // Взгляд следует за камерой: аватар смотрит на пользователя, а не сквозь него.
   if (vrm.lookAt) {
@@ -360,6 +402,10 @@ export async function createScene(
     setState: (next) => {
       state.current = next
     },
+    setPose: (next) => {
+      currentPose = next
+      applyFraming()
+    },
     setAudioLevel: (level) => {
       state.audioLevel = Math.max(0, Math.min(1, level))
     },
@@ -370,7 +416,7 @@ export async function createScene(
       // Окно можно тянуть за угол, и узкое требует другого расстояния, чем
       // широкое. Без пересчёта аватар вылезал бы за края после каждого
       // изменения размера.
-      if (framing) placeCamera(camera, framing)
+      applyFraming()
     },
     dispose: () => {
       state.running = false

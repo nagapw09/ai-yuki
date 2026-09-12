@@ -16,7 +16,7 @@
 //! WebView и не требует ослаблять CSP.
 
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::state::AppState;
 
@@ -29,6 +29,36 @@ const KEY_MODEL: &str = "avatar.model";
 const KEY_CLICK_THROUGH: &str = "avatar.click_through";
 const KEY_ON_TOP: &str = "avatar.always_on_top";
 const KEY_PLACEMENT: &str = "avatar.placement";
+const KEY_POSE: &str = "avatar.pose";
+const KEY_ANCHOR: &str = "avatar.anchor";
+
+/// Событие смены кадра: окно аватара пересчитывает камеру, получив его.
+pub const POSE_EVENT: &str = "yuki://avatar-pose";
+
+/// Что показывать в окне.
+///
+/// `portrait` — голова и торс: так аватар читается как собеседник, и лицо видно
+/// даже в маленьком окне. `full` — во весь рост: так он становится существом,
+/// которое стоит на краю экрана, и для этого его и держат на рабочем столе.
+const POSE_PORTRAIT: &str = "portrait";
+const POSE_FULL: &str = "full";
+
+/// Где держать окно.
+///
+/// `taskbar` прижимает его к нижней границе рабочей области — той самой, выше
+/// которой начинается панель задач. Аватар получается стоящим на панели, а не
+/// висящим в случайном месте, и не закрывает её собой.
+const ANCHOR_FREE: &str = "free";
+const ANCHOR_TASKBAR: &str = "taskbar";
+
+/// Размеры окна по умолчанию для каждого кадра.
+///
+/// У полного роста окно узкое и высокое: человек в полный рост занимает по
+/// вертикали вчетверо больше, чем по горизонтали, и квадратное окно вокруг него
+/// было бы прозрачным на три четверти — то есть перехватывало бы клики там, где
+/// ничего не нарисовано.
+const SIZE_PORTRAIT: (u32, u32) = (320, 480);
+const SIZE_FULL: (u32, u32) = (200, 420);
 
 /// Расширение единственного поддерживаемого формата.
 const MODEL_EXTENSION: &str = "vrm";
@@ -58,6 +88,10 @@ pub struct AvatarStatus {
     pub always_on_top: bool,
     /// Открыто ли окно в данный момент.
     pub open: bool,
+    /// `portrait` или `full`.
+    pub pose: String,
+    /// `free` или `taskbar`.
+    pub anchor: String,
 }
 
 fn setting(state: &AppState, key: &str) -> Option<String> {
@@ -115,7 +149,82 @@ pub fn avatar_status(app: tauri::AppHandle, state: State<'_, AppState>) -> Avata
         click_through: flag(&state, KEY_CLICK_THROUGH, false),
         always_on_top: flag(&state, KEY_ON_TOP, true),
         open: app.get_webview_window(WINDOW_LABEL).is_some(),
+        pose: pose(&state),
+        anchor: anchor(&state),
     }
+}
+
+/// Текущий кадр, с приведением незнакомого значения к умолчанию.
+///
+/// Настройку можно поправить руками в базе, и «portret» с опечаткой не должен
+/// оставлять окно без камеры вообще.
+fn pose(state: &AppState) -> String {
+    match setting(state, KEY_POSE).as_deref() {
+        Some(POSE_FULL) => POSE_FULL.into(),
+        _ => POSE_PORTRAIT.into(),
+    }
+}
+
+fn anchor(state: &AppState) -> String {
+    match setting(state, KEY_ANCHOR).as_deref() {
+        Some(ANCHOR_TASKBAR) => ANCHOR_TASKBAR.into(),
+        _ => ANCHOR_FREE.into(),
+    }
+}
+
+/// Прижимает окно к нижней границе рабочей области монитора, на котором оно стоит.
+///
+/// Рабочая область, а не весь экран: её нижняя граница — это верх панели задач,
+/// и аватар встаёт на панель, а не поверх неё. Если монитор спросить не удалось
+/// (окно только что создано, монитор отключили), окно остаётся там, где было:
+/// поставить его наугад хуже, чем не двигать.
+fn snap_to_taskbar(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let Some(monitor) = window.current_monitor().map_err(err)? else {
+        return Ok(());
+    };
+
+    let area = monitor.work_area();
+    let size = window.outer_size().map_err(err)?;
+    let position = window.outer_position().map_err(err)?;
+
+    let (x, y) = anchored_position(
+        (area.position.x, area.position.y),
+        (area.size.width, area.size.height),
+        (size.width, size.height),
+        position.x,
+    );
+
+    window
+        .set_position(tauri::PhysicalPosition { x, y })
+        .map_err(err)
+}
+
+/// Куда встанет окно, прижатое к нижней границе рабочей области.
+///
+/// Отдельной функцией, потому что вся содержательная часть здесь — арифметика,
+/// а её можно проверить тестом; спрашивать у системы монитор ради этого не надо.
+///
+/// По горизонтали окно остаётся там, куда его поставил человек, но не уезжает
+/// за край: аватар, наполовину вышедший за экран, выглядит поломкой, а не
+/// задумкой. Окно шире экрана прижимается к левому краю — показать его целиком
+/// всё равно нельзя, а уехавший влево левый край хуже уехавшего вправо правого,
+/// потому что слева у фигуры лицо.
+fn anchored_position(
+    area_origin: (i32, i32),
+    area_size: (u32, u32),
+    window_size: (u32, u32),
+    x: i32,
+) -> (i32, i32) {
+    let clamp = |value: u32| i32::try_from(value).unwrap_or(i32::MAX);
+
+    let (origin_x, origin_y) = area_origin;
+    let free_x = (clamp(area_size.0) - clamp(window_size.0)).max(0);
+    let free_y = (clamp(area_size.1) - clamp(window_size.1)).max(0);
+
+    (
+        x.clamp(origin_x, origin_x + free_x),
+        origin_y + free_y,
+    )
 }
 
 /// Открывает окно аватара, восстанавливая прежние размер и место.
@@ -130,13 +239,19 @@ pub async fn avatar_open(
         return Ok(avatar_status(app, state));
     }
 
+    let (default_width, default_height) = if pose(&state) == POSE_FULL {
+        SIZE_FULL
+    } else {
+        SIZE_PORTRAIT
+    };
+
     let placement: Placement = setting(&state, KEY_PLACEMENT)
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or(Placement {
             x: 80,
             y: 80,
-            width: 320,
-            height: 480,
+            width: default_width,
+            height: default_height,
         });
 
     let mut builder = WebviewWindowBuilder::new(
@@ -165,6 +280,13 @@ pub async fn avatar_open(
         window.set_ignore_cursor_events(true).map_err(err)?;
     }
 
+    // Прижатие после создания, а не вместо запомненного места: монитор мог
+    // отключиться или сменить разрешение, и запомненные координаты оказались бы
+    // за краем экрана.
+    if anchor(&state) == ANCHOR_TASKBAR {
+        snap_to_taskbar(&window)?;
+    }
+
     set_setting(&state, KEY_ENABLED, "on")?;
     Ok(avatar_status(app, state))
 }
@@ -191,6 +313,63 @@ pub fn avatar_set_click_through(
         window.set_ignore_cursor_events(enabled).map_err(err)?;
     }
     set_setting(&state, KEY_CLICK_THROUGH, if enabled { "on" } else { "off" })
+}
+
+/// Меняет кадр: по пояс или во весь рост.
+///
+/// Размер окна меняется вместе с кадром, потому что это одно решение, а не
+/// два: в окне 320×480 фигура в полный рост занимает узкую полоску посередине,
+/// а остальное — прозрачная область, которая всё равно висит поверх окон.
+#[tauri::command]
+pub fn avatar_set_pose(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    pose: String,
+) -> Result<AvatarStatus, String> {
+    let pose = if pose == POSE_FULL { POSE_FULL } else { POSE_PORTRAIT };
+    set_setting(&state, KEY_POSE, pose)?;
+
+    let (width, height) = if pose == POSE_FULL { SIZE_FULL } else { SIZE_PORTRAIT };
+
+    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+        window
+            .set_size(tauri::LogicalSize {
+                width: f64::from(width),
+                height: f64::from(height),
+            })
+            .map_err(err)?;
+
+        if anchor(&state) == ANCHOR_TASKBAR {
+            snap_to_taskbar(&window)?;
+        }
+
+        let _ = remember_placement(&window, &state);
+        // Камера в окне пересчитывается сама: размеры фигуры в кадре считает
+        // сцена, и знать о них Rust не должен.
+        let _ = window.emit(POSE_EVENT, pose);
+    }
+
+    Ok(avatar_status(app, state))
+}
+
+/// Прижимать ли окно к панели задач.
+#[tauri::command]
+pub fn avatar_set_anchor(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    anchor: String,
+) -> Result<AvatarStatus, String> {
+    let value = if anchor == ANCHOR_TASKBAR { ANCHOR_TASKBAR } else { ANCHOR_FREE };
+    set_setting(&state, KEY_ANCHOR, value)?;
+
+    if value == ANCHOR_TASKBAR {
+        if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+            snap_to_taskbar(&window)?;
+            let _ = remember_placement(&window, &state);
+        }
+    }
+
+    Ok(avatar_status(app, state))
 }
 
 #[tauri::command]
@@ -300,6 +479,43 @@ pub fn restore(app: tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Прижатое окно стоит ногами на верхней границе панели задач.
+    #[test]
+    fn the_anchored_window_stands_on_the_taskbar() {
+        // Экран 1920×1080, панель задач 48 пикселей: рабочая область 1032.
+        let (x, y) = anchored_position((0, 0), (1920, 1032), (200, 420), 600);
+        assert_eq!(x, 600, "по горизонтали окно не должно двигаться");
+        assert_eq!(y, 612, "низ окна должен совпасть с низом рабочей области");
+        assert_eq!(y + 420, 1032, "ноги стоят ровно на панели задач");
+    }
+
+    /// За край экрана окно не уезжает.
+    #[test]
+    fn the_anchored_window_stays_on_screen() {
+        let (right, _) = anchored_position((0, 0), (1920, 1032), (200, 420), 5000);
+        assert_eq!(right, 1720, "правый край окна упирается в правый край экрана");
+
+        let (left, _) = anchored_position((0, 0), (1920, 1032), (200, 420), -300);
+        assert_eq!(left, 0, "левый край окна упирается в левый край экрана");
+    }
+
+    /// Второй монитор со сдвинутым началом координат считается так же.
+    #[test]
+    fn the_anchored_window_respects_a_second_monitor() {
+        // Монитор справа от основного: начало координат сдвинуто на 1920.
+        let (x, y) = anchored_position((1920, 0), (2560, 1392), (200, 420), 1000);
+        assert_eq!(x, 1920, "окно с чужого монитора притягивается к этому");
+        assert_eq!(y, 972);
+    }
+
+    /// Окно шире экрана прижимается к левому краю, а не уезжает за оба.
+    #[test]
+    fn a_window_wider_than_the_screen_hugs_the_left_edge() {
+        let (x, y) = anchored_position((0, 0), (800, 600), (1200, 900), 400);
+        assert_eq!(x, 0);
+        assert_eq!(y, 0);
+    }
 
     /// Политика окна должна разрешать `blob:` в `connect-src`.
     ///

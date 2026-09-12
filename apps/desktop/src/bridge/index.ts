@@ -624,7 +624,17 @@ export interface AvatarStatus {
   clickThrough: boolean
   alwaysOnTop: boolean
   open: boolean
+  /** Что в кадре: `portrait` — голова и торс, `full` — во весь рост. */
+  pose: AvatarPose
+  /** `taskbar` прижимает окно к панели задач, `free` оставляет где поставили. */
+  anchor: AvatarAnchor
 }
+
+export type AvatarPose = 'portrait' | 'full'
+export type AvatarAnchor = 'free' | 'taskbar'
+
+/** Событие смены кадра: окно аватара пересчитывает по нему камеру. */
+export const AVATAR_POSE_EVENT = 'yuki://avatar-pose'
 
 /** Состояние, которое главное окно транслирует аватару. */
 export interface AvatarSignal {
@@ -641,6 +651,10 @@ export const avatarOpen = () => invoke<AvatarStatus>('avatar_open')
 export const avatarClose = () => invoke<void>('avatar_close')
 export const avatarSetModel = (path: string) =>
   invoke<AvatarStatus>('avatar_set_model', { path })
+export const avatarSetPose = (pose: AvatarPose) =>
+  invoke<AvatarStatus>('avatar_set_pose', { pose })
+export const avatarSetAnchor = (anchor: AvatarAnchor) =>
+  invoke<AvatarStatus>('avatar_set_anchor', { anchor })
 export const avatarSetClickThrough = (enabled: boolean) =>
   invoke<void>('avatar_set_click_through', { enabled })
 export const avatarSetAlwaysOnTop = (enabled: boolean) =>

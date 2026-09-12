@@ -1,7 +1,15 @@
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useRef, useState } from 'react'
 
-import { avatarModelBytes, avatarRememberPlacement, AVATAR_EVENT, type AvatarSignal } from '../bridge'
+import {
+  avatarModelBytes,
+  avatarRememberPlacement,
+  avatarStatus,
+  AVATAR_EVENT,
+  AVATAR_POSE_EVENT,
+  type AvatarPose,
+  type AvatarSignal,
+} from '../bridge'
 import { listen } from '@tauri-apps/api/event'
 
 import type { AvatarScene } from './scene'
@@ -35,6 +43,16 @@ export function AvatarWindow() {
     }
   }, [])
 
+  // Кадр меняется из настроек в главном окне и приходит событием.
+  useEffect(() => {
+    const pending = listen<AvatarPose>(AVATAR_POSE_EVENT, (event) => {
+      sceneRef.current?.setPose(event.payload)
+    })
+    return () => {
+      void pending.then((unlisten) => unlisten())
+    }
+  }, [])
+
   // Модель грузится один раз при открытии окна.
   useEffect(() => {
     let disposed = false
@@ -47,13 +65,20 @@ export function AvatarWindow() {
         const bytes = await avatarModelBytes()
         if (disposed) return
 
+        // Кадр спрашиваем до создания сцены: поставить камеру сразу дешевле,
+        // чем показать портрет и через кадр переставить на полный рост.
+        const pose = await avatarStatus()
+          .then((status) => status.pose)
+          .catch(() => 'portrait' as AvatarPose)
+        if (disposed) return
+
         // three.js весит больше всего остального интерфейса вместе взятого.
         // Главному окну он не нужен, а бюджет запуска из ТЗ §37 общий —
         // поэтому сцена грузится отдельным куском и только здесь.
         const { createScene } = await import('./scene')
         if (disposed) return
 
-        const scene = await createScene(canvas, bytes)
+        const scene = await createScene(canvas, bytes, pose)
         if (disposed) {
           scene.dispose()
           return

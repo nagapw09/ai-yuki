@@ -10,7 +10,7 @@ import type { VRM } from '@pixiv/three-vrm'
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
-import { measureUpperBody, placeCamera, relaxArms } from './scene'
+import { measureUpperBody, measureWholeBody, placeCamera, relaxArms } from './scene'
 
 /** Рука из трёх костей, вытянутая вдоль X — ровно так лежит Т-поза в файле. */
 function arm(side: number) {
@@ -150,6 +150,30 @@ describe('кадр аватара', () => {
 
     expect(top).toBeGreaterThan(1.55) // макушка в кадре
     expect(bottom).toBeGreaterThan(0.4) // ноги — нет
+  })
+
+  // Во весь рост ноги обязаны стоять на нижней границе кадра: приподнятая над
+  // краем окна фигура висит в воздухе над панелью задач вместо того, чтобы
+  // стоять на ней, и вся затея с «питомцем на панели» рассыпается.
+  it('во весь рост ставит ноги на нижнюю границу кадра', () => {
+    const { vrm } = model(1)
+    relaxArms(vrm)
+
+    const framing = measureWholeBody(vrm)!
+    const bottom = framing.centerY - framing.halfHeight
+
+    expect(bottom).toBeCloseTo(0, 2)
+  })
+
+  it('во весь рост показывает модель целиком, а не по пояс', () => {
+    const { vrm, head } = model(1)
+    relaxArms(vrm)
+
+    const whole = measureWholeBody(vrm)!
+    const portrait = measureUpperBody(vrm, head)!
+
+    expect(whole.halfHeight).toBeGreaterThan(portrait.halfHeight * 2)
+    expect(whole.centerY + whole.halfHeight).toBeGreaterThan(1.6)
   })
 
   it('молчит про модель без габаритов', () => {

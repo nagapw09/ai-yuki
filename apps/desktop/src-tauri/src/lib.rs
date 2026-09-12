@@ -262,6 +262,8 @@ pub fn run() {
             avatar::avatar_close,
             avatar::avatar_set_click_through,
             avatar::avatar_set_always_on_top,
+            avatar::avatar_set_pose,
+            avatar::avatar_set_anchor,
             avatar::avatar_set_model,
             avatar::avatar_model_bytes,
             avatar::avatar_remember_placement,
