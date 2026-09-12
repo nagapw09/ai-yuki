@@ -122,6 +122,59 @@ const setVolume: Tool = {
   execute: (input) => bridge.setVolume((input as { level: number }).level),
 }
 
+// ── Аватар (ТЗ §12) ─────────────────────────────────────────────────────────────
+
+/**
+ * Анимация аватара.
+ *
+ * Это не украшение и не отладочная кнопка: Yuki задумана как существо, которое
+ * живёт в компьютере, а «потанцуй» — такая же просьба, как «открой браузер».
+ * Без инструмента модель могла бы только описать танец словами.
+ *
+ * Список доступных клипов возвращается при каждом вызове, включая неудачный:
+ * какие файлы человек положил в папку, заранее не знает никто, а описание
+ * инструмента статично и перечислить их не может.
+ */
+const avatarAnimate: Tool = {
+  id: 'avatar_animate',
+  name: 'Анимация аватара',
+  description:
+    'Проигрывает анимацию аватара по имени — например «потанцуй». Пустое имя ' +
+    'возвращает аватар в покой. В ответе приходит список доступных анимаций: ' +
+    'если имя не подошло, выбрать из этого списка и позвать снова. Клип ' +
+    'повторяется, пока его не остановят. Работает только когда окно аватара ' +
+    'открыто и в настройках выбрана папка с файлами .vrma.',
+  permissions: [],
+  risk: 'low',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Имя анимации без расширения; пустая строка — вернуться в покой',
+      },
+    },
+    required: ['name'],
+    additionalProperties: false,
+  },
+  execute: async (input) => {
+    const name = (input as { name: string }).name.trim()
+    const available = (await bridge.avatarAnimations().catch(() => [])).map((clip) => clip.name)
+
+    if (name !== '' && !available.includes(name)) {
+      throw new Error(
+        available.length === 0
+          ? 'анимаций нет: в настройках не выбрана папка с файлами .vrma'
+          : `анимации «${name}» нет; есть: ${available.join(', ')}`,
+      )
+    }
+
+    await bridge.avatarPlay(name)
+    return { playing: name === '' ? null : name, available }
+  },
+}
+
 // ── Файлы (ТЗ §8) ───────────────────────────────────────────────────────────────
 
 const fileSearch: Tool = {
@@ -545,6 +598,7 @@ export const BUILTIN_TOOLS: readonly Tool[] = [
   focusWindow,
   systemInfo,
   setVolume,
+  avatarAnimate,
   fileSearch,
   fileRead,
   fileWrite,

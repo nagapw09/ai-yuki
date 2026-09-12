@@ -2,10 +2,13 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  avatarAnimationBytes,
+  avatarAnimations,
   avatarModelBytes,
   avatarRememberPlacement,
   avatarStatus,
   AVATAR_EVENT,
+  AVATAR_PLAY_EVENT,
   AVATAR_POSE_EVENT,
   type AvatarPose,
   type AvatarSignal,
@@ -37,6 +40,17 @@ export function AvatarWindow() {
       setState(event.payload.state)
       sceneRef.current?.setState(event.payload.state)
       sceneRef.current?.setAudioLevel(event.payload.audioLevel)
+    })
+    return () => {
+      void pending.then((unlisten) => unlisten())
+    }
+  }, [])
+
+  // Просьба потанцевать приходит событием — из настроек или от самой модели,
+  // которой доступен инструмент `avatar_play`.
+  useEffect(() => {
+    const pending = listen<string>(AVATAR_PLAY_EVENT, (event) => {
+      sceneRef.current?.play(event.payload)
     })
     return () => {
       void pending.then((unlisten) => unlisten())
@@ -78,7 +92,13 @@ export function AvatarWindow() {
         const { createScene } = await import('./scene')
         if (disposed) return
 
-        const scene = await createScene(canvas, bytes, pose)
+        // Анимации читаются все сразу: их единицы, каждая — десятки
+        // килобайт, а догружать танец в момент, когда о нём попросили,
+        // означало бы паузу вместо движения.
+        const clips = await loadClips()
+        if (disposed) return
+
+        const scene = await createScene(canvas, bytes, pose, clips)
         if (disposed) {
           scene.dispose()
           return
@@ -149,4 +169,25 @@ function describe(error: unknown): string {
   if (typeof error === 'string') return error
   if (error instanceof Error) return error.message
   return 'не удалось показать аватар'
+}
+
+/**
+ * Читает все анимации из выбранной папки.
+ *
+ * Сбой одного файла не должен лишать аватар остальных: каждый читается
+ * отдельно, и неудачный просто не попадает в список.
+ */
+async function loadClips(): Promise<{ name: string; bytes: ArrayBuffer }[]> {
+  const found = await avatarAnimations().catch(() => [])
+  const clips: { name: string; bytes: ArrayBuffer }[] = []
+
+  for (const clip of found) {
+    try {
+      clips.push({ name: clip.name, bytes: await avatarAnimationBytes(clip.name) })
+    } catch (error) {
+      console.warn(`анимация «${clip.name}» не прочиталась`, error)
+    }
+  }
+
+  return clips
 }

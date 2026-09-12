@@ -30,6 +30,7 @@ const KEY_CLICK_THROUGH: &str = "avatar.click_through";
 const KEY_ON_TOP: &str = "avatar.always_on_top";
 const KEY_PLACEMENT: &str = "avatar.placement";
 const KEY_POSE: &str = "avatar.pose";
+const KEY_ANIMATIONS: &str = "avatar.animations";
 const KEY_ANCHOR: &str = "avatar.anchor";
 
 /// Событие смены кадра: окно аватара пересчитывает камеру, получив его.
@@ -60,8 +61,19 @@ const ANCHOR_TASKBAR: &str = "taskbar";
 const SIZE_PORTRAIT: (u32, u32) = (320, 480);
 const SIZE_FULL: (u32, u32) = (200, 420);
 
-/// Расширение единственного поддерживаемого формата.
+/// Расширение единственного поддерживаемого формата модели.
 const MODEL_EXTENSION: &str = "vrm";
+
+/// Расширение файлов анимации.
+///
+/// `.vrma` — формат анимаций VRM: те же кости гуманоида, что у модели, поэтому
+/// один и тот же танец подходит любой модели. Unity-клипы `.anim` и FBX сюда не
+/// годятся: первые — формат чужого движка, вторые несут свой скелет, который
+/// надо переносить на гуманоида отдельной работой.
+const ANIMATION_EXTENSION: &str = "vrma";
+
+/// Событие «проиграй анимацию»: окно аватара получает имя клипа.
+pub const PLAY_EVENT: &str = "yuki://avatar-play";
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -92,6 +104,16 @@ pub struct AvatarStatus {
     pub pose: String,
     /// `free` или `taskbar`.
     pub anchor: String,
+    /// Папка с файлами анимаций; пустая строка — папка не выбрана.
+    pub animations: String,
+}
+
+/// Найденный файл анимации.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnimationClip {
+    /// Имя без расширения — под ним анимацию просят проиграть.
+    pub name: String,
 }
 
 fn setting(state: &AppState, key: &str) -> Option<String> {
@@ -151,7 +173,121 @@ pub fn avatar_status(app: tauri::AppHandle, state: State<'_, AppState>) -> Avata
         open: app.get_webview_window(WINDOW_LABEL).is_some(),
         pose: pose(&state),
         anchor: anchor(&state),
+        animations: setting(&state, KEY_ANIMATIONS).unwrap_or_default(),
     }
+}
+
+/// Папка с анимациями.
+///
+/// Своих клипов в поставке нет по той же причине, по какой нет модели: у
+/// анимаций свои лицензии, и класть чужие в дистрибутив нельзя. Человек даёт
+/// папку, Yuki читает из неё файлы сама.
+#[tauri::command]
+pub fn avatar_set_animations(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<AvatarStatus, String> {
+    let trimmed = path.trim();
+
+    if !trimmed.is_empty() && !std::path::Path::new(trimmed).is_dir() {
+        return Err(format!("{trimmed} — не папка"));
+    }
+
+    set_setting(&state, KEY_ANIMATIONS, trimmed)?;
+    Ok(avatar_status(app, state))
+}
+
+/// Перечисляет анимации в выбранной папке.
+///
+/// Пустой список — нормальный ответ, а не ошибка: папку могли выбрать заранее,
+/// а файлы положить потом. Вложенные папки не обходятся: аватару нужен плоский
+/// набор клипов, а рекурсия по чужой папке — это чтение того, о чём не просили.
+#[tauri::command]
+pub fn avatar_animations(state: State<'_, AppState>) -> Result<Vec<AnimationClip>, String> {
+    let folder = setting(&state, KEY_ANIMATIONS).unwrap_or_default();
+    if folder.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let entries = std::fs::read_dir(&folder).map_err(|e| format!("{folder}: {e}"))?;
+    let mut clips: Vec<AnimationClip> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case(ANIMATION_EXTENSION))
+        })
+        .filter_map(|path| {
+            path.file_stem()
+                .and_then(|name| name.to_str())
+                .map(|name| AnimationClip { name: name.to_string() })
+        })
+        .collect();
+
+    // Порядок файловой системы произволен, а список показывается человеку.
+    clips.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(clips)
+}
+
+/// Отдаёт файл анимации окну аватара.
+///
+/// Имя, а не путь: путь из окна означал бы, что страница может попросить любой
+/// файл на диске. Имя склеивается с выбранной папкой здесь, и всё, что вышло за
+/// её пределы, отвергается.
+#[tauri::command]
+pub fn avatar_animation_bytes(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<tauri::ipc::Response, String> {
+    let folder = setting(&state, KEY_ANIMATIONS).unwrap_or_default();
+    if folder.trim().is_empty() {
+        return Err("папка с анимациями не выбрана".into());
+    }
+
+    let path = animation_path(std::path::Path::new(folder.trim()), &name)?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Собирает путь к файлу анимации и проверяет, что он не вышел из папки.
+///
+/// Отдельной функцией, потому что это граница доверия: имя приходит из окна, а
+/// `..` в нём означало бы чтение любого файла на диске. Проверка идёт по
+/// составу имени, а не по получившемуся пути: канонизация требует, чтобы файл
+/// уже существовал, и на несуществующем имени молча пропускала бы проверку.
+fn animation_path(folder: &std::path::Path, name: &str) -> Result<std::path::PathBuf, String> {
+    let trimmed = name.trim();
+
+    if trimmed.is_empty() {
+        return Err("не указано имя анимации".into());
+    }
+
+    let looks_like_a_path = trimmed.contains('/')
+        || trimmed.contains('\\')
+        || trimmed.contains("..")
+        || std::path::Path::new(trimmed).components().count() != 1;
+
+    if looks_like_a_path {
+        return Err(format!("«{trimmed}» не имя анимации"));
+    }
+
+    Ok(folder.join(format!("{trimmed}.{ANIMATION_EXTENSION}")))
+}
+
+/// Просит окно аватара проиграть анимацию.
+///
+/// Пустое имя означает «вернись к покою»: у анимации есть конец, а у покоя нет,
+/// и отдельная команда «останови» заставляла бы вызывающего помнить, что
+/// играло.
+#[tauri::command]
+pub fn avatar_play(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let window = app
+        .get_webview_window(WINDOW_LABEL)
+        .ok_or("окно аватара закрыто")?;
+
+    window.emit(PLAY_EVENT, name).map_err(err)
 }
 
 /// Текущий кадр, с приведением незнакомого значения к умолчанию.
@@ -479,6 +615,45 @@ pub fn restore(app: tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Имя анимации складывается с папкой и получает нужное расширение.
+    #[test]
+    fn an_animation_name_becomes_a_file_in_the_chosen_folder() {
+        let folder = std::path::Path::new("D:/clips");
+        let path = animation_path(folder, "dance").expect("имя должно приняться");
+        assert_eq!(path, folder.join("dance.vrma"));
+
+        // Пробелы по краям — опечатка человека, а не часть имени.
+        let trimmed = animation_path(folder, "  wave  ").expect("имя должно приняться");
+        assert_eq!(trimmed, folder.join("wave.vrma"));
+    }
+
+    /// Из папки с анимациями выйти нельзя.
+    ///
+    /// Имя приходит из окна, то есть со страницы. Если бы `..` или разделитель
+    /// пути в нём проходили, страница могла бы попросить любой файл на диске —
+    /// и получить его байтами через тот же канал, которым забирает анимацию.
+    #[test]
+    fn an_animation_name_cannot_escape_the_folder() {
+        let folder = std::path::Path::new("D:/clips");
+
+        for evil in [
+            "../secrets",
+            r"..\secrets",
+            "sub/dance",
+            r"sub\dance",
+            "..",
+            "C:/Windows/win",
+            "/etc/passwd",
+            "",
+            "   ",
+        ] {
+            assert!(
+                animation_path(folder, evil).is_err(),
+                "имя «{evil}» не должно приниматься"
+            );
+        }
+    }
 
     /// Прижатое окно стоит ногами на верхней границе панели задач.
     #[test]

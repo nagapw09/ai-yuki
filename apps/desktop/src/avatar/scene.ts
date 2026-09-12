@@ -21,6 +21,11 @@ import {
   VRMUtils,
   type VRM,
 } from '@pixiv/three-vrm'
+import {
+  createVRMAnimationClip,
+  VRMAnimationLoaderPlugin,
+  type VRMAnimation,
+} from '@pixiv/three-vrm-animation'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
@@ -180,14 +185,96 @@ export function placeCamera(camera: THREE.PerspectiveCamera, framing: Framing): 
   camera.updateProjectionMatrix()
 }
 
+/**
+ * Разбирает файл `.vrma` и превращает его в действие микшера.
+ *
+ * Возвращает `null`, а не бросает: один испорченный файл в папке не должен
+ * оставлять аватар вообще без анимаций. Причина уходит в консоль окна —
+ * человеку она ничего не скажет, а при разборе поможет.
+ */
+async function loadAnimation(
+  vrm: VRM,
+  mixer: THREE.AnimationMixer,
+  source: AnimationSource,
+): Promise<THREE.AnimationAction | null> {
+  try {
+    const loader = new GLTFLoader()
+    loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
+
+    const gltf = await loader.parseAsync(source.bytes, '')
+    const list = gltf.userData.vrmAnimations as VRMAnimation[] | undefined
+    const first = list?.[0]
+    if (!first) return null
+
+    return mixer.clipAction(createVRMAnimationClip(first, vrm))
+  } catch (error) {
+    console.warn(`анимация «${source.name}» не разобралась`, error)
+    return null
+  }
+}
+
+/** Снимок поворотов всех костей гуманоида. */
+type Pose = { node: THREE.Object3D; quaternion: THREE.Quaternion }[]
+
+function capturePose(vrm: VRM): Pose {
+  const snapshot: Pose = []
+  const root = vrm.humanoid?.normalizedHumanBonesRoot
+  if (!root) return snapshot
+
+  root.traverse((node) => {
+    snapshot.push({ node, quaternion: node.quaternion.clone() })
+  })
+
+  return snapshot
+}
+
+function restorePose(snapshot: Pose): void {
+  for (const { node, quaternion } of snapshot) {
+    node.quaternion.copy(quaternion)
+  }
+}
+
 /** Что показывать в окне. */
 export type AvatarPose = 'portrait' | 'full'
+
+/** Файл анимации: имя, под которым его просят, и содержимое. */
+export interface AnimationSource {
+  name: string
+  bytes: ArrayBuffer
+}
+
+/** Сколько длится переход между покоем и анимацией, секунды. */
+const CROSSFADE = 0.35
+
+/**
+ * Как клип находит своё состояние.
+ *
+ * Клип, названный именем состояния — `idle`, `thinking`, `sleeping`, — играет
+ * сам, без всякой настройки. Иначе пришлось бы заводить таблицу «какой файл на
+ * какое состояние», и человеку, положившему в папку восемь файлов, надо было бы
+ * ещё восемь раз щёлкнуть. Имя файла и есть эта таблица.
+ *
+ * Своего движения Yuki при этом не теряет: состояние без клипа по-прежнему
+ * живёт дыханием и покачиванием, которые считаются каждый кадр.
+ */
+function clipForState(state: OrbState): string {
+  return state
+}
 
 export interface AvatarScene {
   /** Меняет состояние: мимика и темп подхватываются плавно. */
   setState: (state: OrbState) => void
   /** Переключает кадр: голова и торс или во весь рост. */
   setPose: (pose: AvatarPose) => void
+  /**
+   * Проигрывает анимацию по имени; пустое имя возвращает в покой.
+   *
+   * Клип повторяется, пока его не остановят: у танца нет естественного конца,
+   * а «сыграть один раз и замереть» выглядит обрывом.
+   */
+  play: (name: string) => void
+  /** Имена загруженных анимаций — в том порядке, в каком их дали. */
+  readonly clips: readonly string[]
   /** Громкость 0…1, если она известна (микрофон в режиме LISTENING). */
   setAudioLevel: (level: number) => void
   /** Подгоняет рендер под новый размер окна. */
@@ -205,6 +292,7 @@ export async function createScene(
   canvas: HTMLCanvasElement,
   model: ArrayBuffer,
   pose: AvatarPose = 'portrait',
+  animations: readonly AnimationSource[] = [],
 ): Promise<AvatarScene> {
   const renderer = new THREE.WebGLRenderer({
     canvas,
@@ -320,6 +408,67 @@ export async function createScene(
     running: true,
   }
 
+  // ── Анимации ───────────────────────────────────────────────────────────────
+  //
+  // Поза покоя запоминается до первой анимации: клип перезаписывает повороты
+  // костей, и после остановки без этого снимка руки остались бы там, где их
+  // бросил танец, — то есть в произвольном месте, а не вдоль тела.
+  const restPose = capturePose(vrm)
+
+  const mixer = new THREE.AnimationMixer(vrm.scene)
+  const actions = new Map<string, THREE.AnimationAction>()
+
+  for (const source of animations) {
+    const action = await loadAnimation(vrm, mixer, source)
+    if (action) actions.set(source.name, action)
+  }
+
+  /** Играющая анимация; `null` — только своё движение. */
+  let playing: THREE.AnimationAction | null = null
+
+  /**
+   * Анимация, которую попросили явно.
+   *
+   * Она важнее состояния: если человек сказал «потанцуй», а Yuki в этот момент
+   * что-то обдумывает, танец не должен подменяться клипом раздумий. Пустая
+   * строка возвращает управление состоянию.
+   */
+  let requested = ''
+
+  function apply(name: string) {
+    const next = name ? actions.get(name) ?? null : null
+
+    if (next === playing) return
+
+    if (playing) playing.fadeOut(CROSSFADE)
+
+    if (next) {
+      next.reset()
+      next.setLoop(THREE.LoopRepeat, Infinity)
+      next.fadeIn(CROSSFADE).play()
+    }
+
+    playing = next
+
+    // Возврат к своему движению: снимок восстанавливается сразу, а микшер
+    // догасит собственный вклад за время перехода.
+    if (!next) restorePose(restPose)
+  }
+
+  /** Что должно играть прямо сейчас: просьба важнее состояния. */
+  function resolve() {
+    apply(requested || clipForState(state.current))
+  }
+
+  function play(name: string) {
+    requested = name.trim()
+    resolve()
+  }
+
+  // Клип состояния начинается сразу: без него аватар стоял бы в покое до
+  // первой просьбы, хотя движение у него уже есть.
+  resolve()
+
   const clock = new THREE.Clock()
 
   function applyExpression(name: string, value: number) {
@@ -334,14 +483,20 @@ export async function createScene(
     const look = LOOKS[state.current]
 
     // ── Дыхание и покачивание ──────────────────────────────────────────────
-    const breath = Math.sin(time * Math.PI * 2 * look.breath)
-    if (chest) chest.rotation.x = breath * 0.02
-    if (spine) spine.rotation.z = Math.sin(time * 0.7) * 0.01 * look.sway
-    if (head) {
-      head.rotation.y = Math.sin(time * 0.53) * 0.04 * look.sway
-      head.rotation.x = Math.sin(time * 0.41) * 0.03 * look.sway
-      // Спящий аватар роняет голову — это читается даже без выражения лица.
-      if (look.asleep) head.rotation.x += 0.18
+    //
+    // Только в покое: пока играет анимация, эти строки спорили бы с ней за те
+    // же кости и превращали движение в дрожь. Мимика и моргание остаются —
+    // они живут на других каналах и танцу не мешают.
+    if (!playing) {
+      const breath = Math.sin(time * Math.PI * 2 * look.breath)
+      if (chest) chest.rotation.x = breath * 0.02
+      if (spine) spine.rotation.z = Math.sin(time * 0.7) * 0.01 * look.sway
+      if (head) {
+        head.rotation.y = Math.sin(time * 0.53) * 0.04 * look.sway
+        head.rotation.x = Math.sin(time * 0.41) * 0.03 * look.sway
+        // Спящий аватар роняет голову — это читается даже без выражения лица.
+        if (look.asleep) head.rotation.x += 0.18
+      }
     }
 
     // ── Моргание ───────────────────────────────────────────────────────────
@@ -391,6 +546,9 @@ export async function createScene(
       applyExpression(VRMExpressionPresetName.Ih, 0)
     }
 
+    // Микшер до vrm.update: он пишет в нормализованные кости, а vrm.update
+    // переносит их в настоящий скелет. Обратный порядок отставал на кадр.
+    mixer.update(delta)
     vrm.update(delta)
     renderer.render(scene, camera)
     requestAnimationFrame(frame)
@@ -401,11 +559,14 @@ export async function createScene(
   return {
     setState: (next) => {
       state.current = next
+      resolve()
     },
     setPose: (next) => {
       currentPose = next
       applyFraming()
     },
+    play,
+    clips: [...actions.keys()],
     setAudioLevel: (level) => {
       state.audioLevel = Math.max(0, Math.min(1, level))
     },
@@ -420,6 +581,7 @@ export async function createScene(
     },
     dispose: () => {
       state.running = false
+      mixer.stopAllAction()
       VRMUtils.deepDispose(vrm.scene)
       renderer.dispose()
     },

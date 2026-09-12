@@ -16,8 +16,11 @@ import {
   backgroundStatus,
   onboardingReset,
   avatarOpen,
+  avatarAnimations,
+  avatarPlay,
   avatarSetAlwaysOnTop,
   avatarSetAnchor,
+  avatarSetAnimations,
   avatarSetClickThrough,
   avatarSetPose,
   avatarSetModel,
@@ -57,6 +60,7 @@ import {
   wakeEnrollRecord,
   wakeForget,
   wakeStatus,
+  type AnimationClip,
   type AvatarAnchor,
   type AvatarPose,
   type AvatarStatus,
@@ -529,6 +533,8 @@ function CalendarRow({
 function Avatar() {
   const [status, setStatus] = useState<AvatarStatus | null>(null)
   const [model, setModel] = useState('')
+  const [folder, setFolder] = useState('')
+  const [clips, setClips] = useState<AnimationClip[]>([])
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -537,7 +543,11 @@ function Avatar() {
       const next = await avatarStatus()
       setStatus(next)
       setModel(next.model)
+      setFolder(next.animations)
       setNote(null)
+      // Список клипов перечитывается вместе со статусом: файлы в папке могли
+      // появиться после того, как её выбрали.
+      setClips(next.animations === '' ? [] : await avatarAnimations().catch(() => []))
     } catch (e) {
       setNote(describe(e))
     }
@@ -690,6 +700,99 @@ function Avatar() {
 
         {note && <span className="provider__status">{note}</span>}
       </div>
+
+      <h3 className="settings__title" style={{ marginTop: 'var(--space-6)' }}>
+        Анимации
+      </h3>
+      <p className="settings__hint">
+        Папка с файлами <code>.vrma</code> — формат анимаций VRM: те же кости
+        гуманоида, что у модели, поэтому один танец подходит любой. Своих клипов
+        в поставке нет по той же причине, что и модели: у анимаций свои лицензии.
+        Пока папки нет, аватар живёт дыханием и мимикой.
+      </p>
+
+      <div className="provider__row">
+        <input
+          className="settings__input"
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          placeholder="Папка с файлами .vrma"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            void openDialog({ directory: true, multiple: false }).then((picked) => {
+              if (typeof picked === 'string') {
+                setFolder(picked)
+                run(async () => {
+                  await avatarSetAnimations(picked)
+                  return 'папка сохранена'
+                })
+              }
+            })
+          }
+        >
+          Выбрать…
+        </button>
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              await avatarSetAnimations(folder)
+              return folder.trim() === '' ? 'папка убрана' : 'папка сохранена'
+            })
+          }
+        >
+          Сохранить
+        </button>
+      </div>
+
+      {status.animations !== '' && clips.length === 0 && (
+        <p className="settings__hint">
+          В папке нет файлов <code>.vrma</code>. Клипы из Unity (<code>.anim</code>)
+          и FBX сюда не подойдут: первые — формат чужого движка, вторые несут свой
+          скелет, который надо переносить на гуманоида отдельной работой.
+        </p>
+      )}
+
+      {clips.length > 0 && (
+        <div className="provider__row">
+          {clips.map((clip) => (
+            <button
+              key={clip.name}
+              type="button"
+              className="settings__button"
+              disabled={busy || !status.open}
+              onClick={() =>
+                run(async () => {
+                  await avatarPlay(clip.name)
+                  return clip.name
+                })
+              }
+            >
+              {clip.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="settings__button"
+            disabled={busy || !status.open}
+            onClick={() =>
+              run(async () => {
+                await avatarPlay('')
+                return 'покой'
+              })
+            }
+          >
+            Хватит
+          </button>
+        </div>
+      )}
 
       {status.model !== '' && !status.modelPresent && (
         <p className="settings__error">

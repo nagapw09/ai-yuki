@@ -628,6 +628,14 @@ export interface AvatarStatus {
   pose: AvatarPose
   /** `taskbar` прижимает окно к панели задач, `free` оставляет где поставили. */
   anchor: AvatarAnchor
+  /** Папка с файлами анимаций; пустая строка — папка не выбрана. */
+  animations: string
+}
+
+/** Найденный файл анимации. */
+export interface AnimationClip {
+  /** Имя без расширения — под ним анимацию просят проиграть. */
+  name: string
 }
 
 export type AvatarPose = 'portrait' | 'full'
@@ -635,6 +643,9 @@ export type AvatarAnchor = 'free' | 'taskbar'
 
 /** Событие смены кадра: окно аватара пересчитывает по нему камеру. */
 export const AVATAR_POSE_EVENT = 'yuki://avatar-pose'
+
+/** Событие «проиграй анимацию»; пустое имя означает возврат в покой. */
+export const AVATAR_PLAY_EVENT = 'yuki://avatar-play'
 
 /** Состояние, которое главное окно транслирует аватару. */
 export interface AvatarSignal {
@@ -653,6 +664,12 @@ export const avatarSetModel = (path: string) =>
   invoke<AvatarStatus>('avatar_set_model', { path })
 export const avatarSetPose = (pose: AvatarPose) =>
   invoke<AvatarStatus>('avatar_set_pose', { pose })
+export const avatarSetAnimations = (path: string) =>
+  invoke<AvatarStatus>('avatar_set_animations', { path })
+export const avatarAnimations = () => invoke<AnimationClip[]>('avatar_animations')
+export const avatarAnimationBytes = (name: string) =>
+  invoke<ArrayBuffer>('avatar_animation_bytes', { name })
+export const avatarPlay = (name: string) => invoke<void>('avatar_play', { name })
 export const avatarSetAnchor = (anchor: AvatarAnchor) =>
   invoke<AvatarStatus>('avatar_set_anchor', { anchor })
 export const avatarSetClickThrough = (enabled: boolean) =>
