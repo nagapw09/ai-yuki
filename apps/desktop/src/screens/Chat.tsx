@@ -40,7 +40,7 @@ function Start() {
             key={text}
             type="button"
             className="chat__starter"
-            onClick={() => void sendMessage(text)}
+            onClick={() => void sendMessage(text).catch(() => undefined)}
           >
             {text}
           </button>
@@ -119,7 +119,7 @@ export function Chat() {
 
       <div className="chat__composer">
         <CommandBar
-          onSubmit={(text) => void sendMessage(text)}
+          onSubmit={(text) => void sendMessage(text).catch(() => undefined)}
           onToggleVoice={() => undefined}
           listening={false}
           disabled={running}

@@ -7,6 +7,7 @@ pub mod ai;
 pub mod automation;
 pub mod avatar;
 pub mod profile;
+pub mod telegram;
 pub mod backup;
 pub mod calendar;
 pub mod capabilities;
@@ -117,6 +118,9 @@ pub fn run() {
             capabilities::connect_enabled(app.handle().clone());
             // Окно аватара возвращается туда же, где его оставили (ТЗ §12).
             avatar::restore(app.handle().clone());
+            // Канал управления с телефона поднимается сам, если был включён
+            // (ТЗ §28). Local Only и отсутствие токена он проверяет внутри.
+            telegram::restore(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -263,6 +267,16 @@ pub fn run() {
             avatar::avatar_close,
             avatar::avatar_set_click_through,
             avatar::avatar_set_always_on_top,
+            telegram::telegram_status,
+            telegram::telegram_set_token,
+            telegram::telegram_clear_token,
+            telegram::telegram_pair,
+            telegram::telegram_approve,
+            telegram::telegram_revoke,
+            telegram::telegram_revoke_all,
+            telegram::telegram_send,
+            telegram::telegram_start,
+            telegram::telegram_stop,
             profile::persona_name,
             profile::persona_set_name,
             profile::profile_list,

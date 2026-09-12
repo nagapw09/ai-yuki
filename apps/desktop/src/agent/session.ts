@@ -48,6 +48,63 @@ export function toolRegistry(): ToolRegistry {
   return registry
 }
 
+/**
+ * Откуда пришла просьба.
+ *
+ * Локальная и удалённая просьбы проходят один и тот же цикл с одним и тем же
+ * Permission Gate — второй путь означал бы вторую реализацию разрешений. Но
+ * набор инструментов у них разный, и журнал должен различать, с чего действие
+ * началось: `docs/REMOTE-CONTROL.md` §4 — «журнал, не различающий локальное и
+ * удалённое, бесполезен ровно тогда, когда нужен».
+ */
+export interface RemoteOrigin {
+  channel: 'telegram'
+  /** Куда отвечать. */
+  chatId: string
+  /** Имя устройства для журнала. */
+  device: string
+  /** Открыт ли полный набор инструментов (`remote.full_access`). */
+  fullAccess: boolean
+  /** Сообщить на телефон, что ждём подтверждения у компьютера. */
+  notify: (text: string) => void
+}
+
+/**
+ * Инструменты, доступные с телефона без особого разрешения.
+ *
+ * `docs/REMOTE-CONTROL.md` §4: по умолчанию — разговор, напоминания, заметки,
+ * статус задач; управление файлами и вводом включается явно. Здесь к ним
+ * добавлены только те, что ничего не меняют: погода, курсы, сведения о
+ * системе, чтение календаря и памяти.
+ *
+ * Удаление из списка отсутствует намеренно: удалённо человек не видит экрана и
+ * не может проверить, что удаляется именно то, что он имел в виду.
+ */
+const REMOTE_TOOLS: readonly string[] = [
+  'create_reminder',
+  'list_reminders',
+  'save_note',
+  'list_notes',
+  'list_commands',
+  'calendar_events',
+  'recall',
+  'remember',
+  'weather',
+  'currency_rates',
+  'system_info',
+  'notify',
+  'avatar_animate',
+]
+
+/** Реестр для удалённого хода: тот же набор инструментов, но урезанный. */
+function remoteRegistry(origin: RemoteOrigin): ToolRegistry {
+  if (origin.fullAccess) return registry
+
+  return new ToolRegistry().registerAll(
+    registry.list().filter((tool) => REMOTE_TOOLS.includes(tool.id)),
+  )
+}
+
 interface ChatDeltaEvent {
   requestId: string
   text: string
@@ -157,10 +214,13 @@ function describePlan(tool: Tool, input: unknown): string {
  * Возвращается после того, как ход завершён: и успех, и ошибка уже отражены
  * в состоянии — вызывающему коду ничего доделывать не нужно.
  */
-export async function sendMessage(text: string): Promise<void> {
+export async function sendMessage(
+  text: string,
+  origin?: RemoteOrigin,
+): Promise<string | null> {
   // Сначала команды (ТЗ §16): записанная последовательность выполняется сразу,
   // без обращения к модели — в этом весь её смысл.
-  if (await tryRun(text).catch(() => false)) return
+  if (await tryRun(text).catch(() => false)) return null
 
   const chat = useChatStore.getState()
   const ui = useUiStore.getState()
@@ -178,7 +238,7 @@ export async function sendMessage(text: string): Promise<void> {
   } catch (error) {
     chat.failTurn(describeError(error))
     ui.flashResult('error')
-    return
+    return null
   }
 
   const systemExtra = await buildSystemExtra()
@@ -186,13 +246,22 @@ export async function sendMessage(text: string): Promise<void> {
 
   try {
     const outcome = await runAgent(history, {
-      chat: createChat(systemExtra),
-      registry,
+      chat: createChat(origin ? remoteExtra(systemExtra, origin) : systemExtra),
+      registry: origin ? remoteRegistry(origin) : registry,
       decide: (tool) => evaluate(tool, settings),
 
       confirm: async (tool, input) => {
         // Пока пользователь думает, Orb не должен изображать работу.
         useUiStore.getState().setOrbState('idle')
+
+        // Подтверждение спрашивается у компьютера, а не у телефона
+        // (docs/REMOTE-CONTROL.md §4): удалённое подтверждение опасного
+        // действия означает, что укравший телефон получил права владельца.
+        // Но молчать нельзя — иначе с телефона это выглядит как зависание.
+        origin?.notify(
+          `Нужно подтверждение на компьютере: ${tool.name}. ` +
+            'Пока его нет, действие не выполняется.',
+        )
         const approved = await useChatStore.getState().askConfirmation({
           toolId: tool.id,
           toolName: tool.name,
@@ -243,23 +312,58 @@ export async function sendMessage(text: string): Promise<void> {
       log: (entry) => {
         // Журнал не должен ронять ход: ТЗ §23 требует записи, но потеря строки
         // журнала — меньшая беда, чем потеря результата уже выполненной работы.
-        void activityRecord(entry).catch(() => undefined)
+        void activityRecord(
+          origin
+            ? { ...entry, target: `${origin.channel} · ${origin.device}${entry.target ? ` · ${entry.target}` : ''}` }
+            : entry,
+        ).catch(() => undefined)
       },
     })
 
     chat.finishTurn(outcome.reply, outcome.messages)
     ui.flashResult('success')
-    // Озвучивание не должно задерживать возврат: ход уже закрыт, а Orb
-    // переключится в SPEAKING сам.
-    void speakIfVoice(outcome.reply)
+
+    // Удалённую просьбу вслух не читаем: человека у компьютера нет, и говорить
+    // в пустую комнату незачем.
+    if (!origin) {
+      // Озвучивание не должно задерживать возврат: ход уже закрыт, а Orb
+      // переключится в SPEAKING сам.
+      void speakIfVoice(outcome.reply)
+    }
+
+    return outcome.reply
   } catch (error) {
     const message = describeError(error)
     useChatStore.getState().failTurn(message)
     useUiStore.getState().flashResult('error')
-    void activityRecord({ tool: 'agent', status: 'error', result: message }).catch(
-      () => undefined,
-    )
+    void activityRecord({
+      tool: 'agent',
+      status: 'error',
+      result: message,
+      target: origin ? `${origin.channel} · ${origin.device}` : undefined,
+    }).catch(() => undefined)
+
+    throw error
   }
+}
+
+/**
+ * Добавка к системной инструкции для удалённого хода.
+ *
+ * Без неё модель предлагала бы недоступные действия и объясняла отказ
+ * собственными догадками: инструмента в списке нет, а почему — неизвестно.
+ */
+function remoteExtra(base: string | undefined, origin: RemoteOrigin): string {
+  const note =
+    `Эта просьба пришла с телефона через ${origin.channel}, человека у компьютера нет. ` +
+    (origin.fullAccess
+      ? 'Доступны все инструменты, но действия высокого риска ждут подтверждения у компьютера — предупреди об этом, если оно понадобится.'
+      : 'Доступна только часть инструментов: напоминания, заметки, память, календарь на чтение, погода, курсы, сведения о системе. Файлы, ввод и управление окнами закрыты. Если просьба требует закрытого — скажи об этом прямо, не изображай выполнение.') +
+    ' Отвечай коротко: ответ читают в мессенджере.'
+
+  return base ? `${base}
+
+${note}` : note
 }
 
 function describeError(error: unknown): string {

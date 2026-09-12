@@ -139,7 +139,7 @@ export async function startVoice(mode: ListenMode): Promise<void> {
     // Пользователь заговорил — Yuki замолкает, даже если ещё отвечает (ТЗ §10).
     void voiceStopSpeaking().catch(() => undefined)
     useUiStore.getState().setScreen('chat')
-    void sendMessage(said)
+    void sendMessage(said).catch(() => undefined)
   })
 
   unlisteners = [level, state, text]

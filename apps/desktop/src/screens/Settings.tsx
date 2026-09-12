@@ -24,6 +24,14 @@ import {
   profileDelete,
   profileList,
   profileSave,
+  telegramClearToken,
+  telegramPair,
+  telegramRevoke,
+  telegramRevokeAll,
+  telegramSetToken,
+  telegramStart,
+  telegramStatus,
+  telegramStop,
   avatarSetAlwaysOnTop,
   avatarSetAnchor,
   avatarSetAnimations,
@@ -69,6 +77,7 @@ import {
   type AnimationClip,
   type AvatarAnchor,
   type Profile,
+  type TelegramStatus,
   type AvatarPose,
   type AvatarStatus,
   type BackgroundStatus,
@@ -111,6 +120,7 @@ export function Settings() {
         <PersonaSection />
         <Everyday />
         <Privacy />
+        <Remote />
         <Providers />
         <Voice />
         <WakeWord />
@@ -290,6 +300,249 @@ function Character() {
             </div>
           ))}
         </div>
+      )}
+    </section>
+  )
+}
+
+// ── Управление с телефона (ТЗ §28, docs/REMOTE-CONTROL.md) ──────────────────────
+
+/**
+ * Канал Telegram.
+ *
+ * Про серверы Telegram сказано здесь, а не в документации: `docs/REMOTE-CONTROL.md`
+ * §5 требует говорить об этом прямо при подключении. Человек, включающий канал,
+ * должен знать, что его просьбы проходят через чужую инфраструктуру, до того как
+ * включит, а не после.
+ */
+function Remote() {
+  const [status, setStatus] = useState<TelegramStatus | null>(null)
+  const [token, setToken] = useState('')
+  const [fullAccess, setFullAccess] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(async () => {
+    try {
+      setStatus(await telegramStatus())
+      setFullAccess((await settingGet('remote.full_access')) === 'on')
+    } catch (e) {
+      setNote(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  // Код живёт минуты, и обратный отсчёт должен идти сам: показывать «осталось
+  // 300 секунд» всё время его жизни — значит врать через минуту.
+  useEffect(() => {
+    if (!status?.pairingCode) return
+    const timer = setInterval(() => void reload(), 1000)
+    return () => clearInterval(timer)
+  }, [status?.pairingCode, reload])
+
+  const run = (action: () => Promise<string | null>) => {
+    setBusy(true)
+    action()
+      .then((message) => {
+        setNote(message)
+        return reload()
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  if (!status) return null
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Управление с телефона</h3>
+      <p className="settings__hint">
+        Yuki отвечает на сообщения в Telegram: можно попросить что-нибудь из дома
+        или из дороги. <strong>Сообщения проходят через серверы Telegram</strong> —
+        сквозного шифрования между телефоном и этим компьютером здесь нет и быть
+        не может. Поэтому канал несовместим с режимом Local Only.
+      </p>
+
+      {status.localOnly ? (
+        <p className="settings__hint">
+          Включён режим Local Only, и канал выключен им. Это не поломка: режим
+          обещает, что наружу ничего не уходит, а Telegram — это «наружу».
+        </p>
+      ) : (
+        <>
+          <p className="settings__hint">
+            Нужен свой бот: напишите <code>@BotFather</code>, команда{' '}
+            <code>/newbot</code>, и вставьте сюда выданный токен. Токен ложится в
+            хранилище ключей операционной системы, а не в базу.
+          </p>
+
+          <div className="provider__row">
+            <input
+              className="settings__input"
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={status.hasToken ? 'токен сохранён' : 'Токен бота'}
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy || token.trim() === ''}
+              onClick={() =>
+                run(async () => {
+                  const bot = await telegramSetToken(token)
+                  setToken('')
+                  return 'бот @' + bot + ' подключён'
+                })
+              }
+            >
+              Сохранить
+            </button>
+            {status.hasToken && (
+              <button
+                type="button"
+                className="settings__button"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    await telegramClearToken()
+                    return 'токен убран'
+                  })
+                }
+              >
+                Убрать токен
+              </button>
+            )}
+          </div>
+
+          <div className="provider__row">
+            <button
+              type="button"
+              className="settings__button"
+              data-active={status.running}
+              disabled={busy || !status.hasToken}
+              onClick={() =>
+                run(async () => {
+                  if (status.running) {
+                    await telegramStop()
+                    return 'канал выключен'
+                  }
+                  await telegramStart()
+                  return 'канал работает'
+                })
+              }
+            >
+              {status.running ? 'Выключить канал' : 'Включить канал'}
+            </button>
+
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy || !status.running}
+              onClick={() =>
+                run(async () => {
+                  const code = await telegramPair()
+                  return 'код: ' + code
+                })
+              }
+            >
+              Подключить устройство
+            </button>
+
+            {note && <span className="provider__status">{note}</span>}
+          </div>
+
+          {status.pairingCode && (
+            <p className="settings__hint">
+              Отправьте боту код <strong>{status.pairingCode}</strong> — он
+              действует{' '}
+              {status.pairingSecondsLeft !== null
+                ? status.pairingSecondsLeft + ' с'
+                : 'считанные минуты'}{' '}
+              и только один раз. Подключение придётся подтвердить здесь, на
+              компьютере.
+            </p>
+          )}
+
+          <label className="hub__checkbox">
+            <input
+              type="checkbox"
+              checked={fullAccess}
+              disabled={busy}
+              onChange={(e) =>
+                run(async () => {
+                  await settingSet('remote.full_access', e.target.checked ? 'on' : 'off')
+                  return e.target.checked
+                    ? 'удалённо открыты все инструменты'
+                    : 'удалённо доступен обычный набор'
+                })
+              }
+            />
+            открыть удалённо все инструменты — файлы, ввод, управление окнами
+          </label>
+
+          <p className="settings__hint">
+            По умолчанию с телефона доступны напоминания, заметки, память,
+            календарь на чтение, погода и сведения о системе. Файлы и ввод
+            закрыты: удалённо человек не видит экрана и не может проверить, что
+            происходит именно то, что он имел в виду. Действия высокого риска в
+            любом случае ждут подтверждения здесь, а не на телефоне.
+          </p>
+
+          {status.devices.length === 0 ? (
+            <p className="settings__hint">Подключённых устройств нет.</p>
+          ) : (
+            <div className="settings__list">
+              {status.devices.map((device) => (
+                <div className="provider__row" key={device.id}>
+                  <span className="settings__hint" style={{ minWidth: '16ch' }}>
+                    {device.name}
+                  </span>
+                  <span className="provider__status">
+                    {device.lastSeen
+                      ? 'был на связи ' + new Date(device.lastSeen * 1000).toLocaleString()
+                      : 'ещё не выходил на связь'}
+                  </span>
+                  <button
+                    type="button"
+                    className="settings__button"
+                    disabled={busy}
+                    onClick={() =>
+                      run(async () => {
+                        await telegramRevoke(device.id)
+                        return 'отозван: ' + device.name
+                      })
+                    }
+                  >
+                    Отозвать
+                  </button>
+                </div>
+              ))}
+
+              <div className="provider__row">
+                {/* Отдельная кнопка на случай украденного телефона: отзывать по
+                    одному в такой момент — это время, которого нет. */}
+                <button
+                  type="button"
+                  className="settings__button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await telegramRevokeAll()
+                      return 'все устройства отозваны'
+                    })
+                  }
+                >
+                  Отозвать все
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </section>
   )

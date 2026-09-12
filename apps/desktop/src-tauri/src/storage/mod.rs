@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 /// Версия схемы. Инкрементируется вместе с добавлением шага в [`MIGRATIONS`].
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 /// Шаги миграции. Индекс в массиве + 1 = версия, до которой шаг поднимает базу.
 const MIGRATIONS: &[&str] = &[
@@ -19,6 +19,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("004_commands.sql"),
     include_str!("005_calendar.sql"),
     include_str!("006_profiles.sql"),
+    include_str!("007_remote.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]

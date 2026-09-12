@@ -5,6 +5,7 @@ import { initTriggers } from './agent/commands'
 import { sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { startAvatarBroadcast } from './avatar/broadcast'
+import { startRemote } from './agent/remote'
 import { startTheme } from './design-system/theme'
 import { startVisibility } from './design-system/visibility'
 import {
@@ -50,6 +51,10 @@ export function App() {
   // Аватар живёт в соседнем окне и состояние знает только отсюда (ТЗ §12).
   useEffect(() => startAvatarBroadcast(), [])
 
+  // Просьбы с телефона выполняет этот же цикл (ТЗ §28): Rust только принимает
+  // сообщение и проверяет, что чат сопряжён.
+  useEffect(() => startRemote(), [])
+
   // Тема применяется до первого кадра и следит за системной (docs/GAPS.md §8).
   useEffect(() => startTheme(), [])
 
@@ -75,7 +80,7 @@ export function App() {
       // Разговор ведётся в чате, а Orbital остаётся экраном состояния (ТЗ §13):
       // как только появляется что обсуждать, переключаемся туда.
       setScreen('chat')
-      void sendMessage(text)
+      void sendMessage(text).catch(() => undefined)
     },
     [setScreen],
   )

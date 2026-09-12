@@ -668,6 +668,46 @@ export interface Profile {
   updatedAt: number
 }
 
+/** Устройство, подключённое к удалённому каналу (ТЗ §28). */
+export interface RemoteDevice {
+  id: string
+  name: string
+  createdAt: number
+  lastSeen: number | null
+}
+
+/** Состояние канала Telegram. */
+export interface TelegramStatus {
+  enabled: boolean
+  hasToken: boolean
+  running: boolean
+  /** При Local Only канал работать не может (docs/REMOTE-CONTROL.md §5). */
+  localOnly: boolean
+  devices: RemoteDevice[]
+  pairingCode: string | null
+  pairingSecondsLeft: number | null
+}
+
+/** Сообщение из сопряжённого чата. */
+export const TELEGRAM_MESSAGE_EVENT = 'yuki://telegram-message'
+
+/** Незнакомый чат назвал код сопряжения — подтверждать на этой машине. */
+export const TELEGRAM_PAIRING_EVENT = 'yuki://telegram-pairing'
+
+export const telegramStatus = () => invoke<TelegramStatus>('telegram_status')
+export const telegramSetToken = (token: string) =>
+  invoke<string>('telegram_set_token', { token })
+export const telegramClearToken = () => invoke<void>('telegram_clear_token')
+export const telegramPair = () => invoke<string>('telegram_pair')
+export const telegramApprove = (chatId: string, name: string) =>
+  invoke<RemoteDevice[]>('telegram_approve', { chatId, name })
+export const telegramRevoke = (id: string) => invoke<RemoteDevice[]>('telegram_revoke', { id })
+export const telegramRevokeAll = () => invoke<RemoteDevice[]>('telegram_revoke_all')
+export const telegramSend = (chatId: string, text: string) =>
+  invoke<void>('telegram_send', { chatId, text })
+export const telegramStart = () => invoke<void>('telegram_start')
+export const telegramStop = () => invoke<void>('telegram_stop')
+
 /** Имя ассистента; пустая строка — «как в поставке». */
 export const personaName = () => invoke<string>('persona_name')
 export const personaSetName = (name: string) => invoke<void>('persona_set_name', { name })
