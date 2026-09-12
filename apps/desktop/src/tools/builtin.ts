@@ -175,6 +175,54 @@ const avatarAnimate: Tool = {
   },
 }
 
+/**
+ * Место аватара на экране.
+ *
+ * Названия, а не координаты: «встань справа» — это то, что человек говорит, а
+ * «встань в 1712, 972» — то, что он не скажет никогда. Мышью окно тоже
+ * тянется, но словами это быстрее, и в этом весь смысл существа, которым можно
+ * командовать.
+ *
+ * Сторона без уточнения высоты означает низ: аватар стоит на рабочем столе, и
+ * «слева» — это слева на полу, а не слева в воздухе.
+ */
+const avatarPlace: Tool = {
+  id: 'avatar_place',
+  name: 'Место аватара',
+  description:
+    'Переставляет окно аватара в названное место экрана: left, right, center, ' +
+    'top-left, top-right, bottom-left, bottom-right. Сторона без высоты значит ' +
+    'низ экрана. Работает только когда окно аватара открыто.',
+  permissions: [],
+  risk: 'low',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      spot: {
+        type: 'string',
+        enum: [
+          'left',
+          'right',
+          'center',
+          'top-left',
+          'top-right',
+          'bottom-left',
+          'bottom-right',
+        ],
+        description: 'Куда встать',
+      },
+    },
+    required: ['spot'],
+    additionalProperties: false,
+  },
+  execute: async (input) => {
+    const spot = (input as { spot: string }).spot
+    await bridge.avatarMove(spot)
+    return { spot }
+  },
+}
+
 // ── Файлы (ТЗ §8) ───────────────────────────────────────────────────────────────
 
 const fileSearch: Tool = {
@@ -599,6 +647,7 @@ export const BUILTIN_TOOLS: readonly Tool[] = [
   systemInfo,
   setVolume,
   avatarAnimate,
+  avatarPlace,
   fileSearch,
   fileRead,
   fileWrite,

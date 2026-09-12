@@ -729,6 +729,7 @@ export const avatarAnimations = () => invoke<AnimationClip[]>('avatar_animations
 export const avatarAnimationBytes = (name: string) =>
   invoke<ArrayBuffer>('avatar_animation_bytes', { name })
 export const avatarPlay = (name: string) => invoke<void>('avatar_play', { name })
+export const avatarMove = (spot: string) => invoke<void>('avatar_move', { spot })
 export const avatarSetAnchor = (anchor: AvatarAnchor) =>
   invoke<AvatarStatus>('avatar_set_anchor', { anchor })
 export const avatarSetClickThrough = (enabled: boolean) =>

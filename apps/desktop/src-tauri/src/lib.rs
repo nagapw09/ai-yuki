@@ -289,6 +289,7 @@ pub fn run() {
             avatar::avatar_animations,
             avatar::avatar_animation_bytes,
             avatar::avatar_play,
+            avatar::avatar_move,
             avatar::avatar_set_anchor,
             avatar::avatar_set_model,
             avatar::avatar_model_bytes,

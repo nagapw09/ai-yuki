@@ -18,15 +18,6 @@
   overflow: hidden;
 }
 
-/* Полоса для перетаскивания сверху. Узкая: она забирает клики у аватара,
-   и делать её на всё окно значило бы лишить его любой другой реакции. */
-.avatar__drag {
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 28px;
-  z-index: 2;
-}
-
 .avatar__canvas {
   display: block;
   width: 100%;

@@ -59,7 +59,14 @@ const ANCHOR_TASKBAR: &str = "taskbar";
 /// было бы прозрачным на три четверти — то есть перехватывало бы клики там, где
 /// ничего не нарисовано.
 const SIZE_PORTRAIT: (u32, u32) = (320, 480);
-const SIZE_FULL: (u32, u32) = (200, 420);
+/// Полный рост: окно шире, чем кажется нужным.
+///
+/// Фигура со опущенными руками узкая, но анимации разводят руки в стороны, и
+/// кадр приходится строить по самой размашистой позе. В окне 200×420 такая поза
+/// влезает только целиком уменьшившись — фигура становится вдвое мельче окна и
+/// половину времени висит в пустоте. При отношении сторон около двух третей
+/// запас по ширине и по высоте выходит одинаковым, и фигура заполняет кадр.
+const SIZE_FULL: (u32, u32) = (280, 440);
 
 /// Расширение единственного поддерживаемого формата модели.
 const MODEL_EXTENSION: &str = "vrm";
@@ -274,6 +281,98 @@ fn animation_path(folder: &std::path::Path, name: &str) -> Result<std::path::Pat
     }
 
     Ok(folder.join(format!("{trimmed}.{ANIMATION_EXTENSION}")))
+}
+
+/// Названные места экрана, куда можно попросить аватар встать.
+///
+/// Названия, а не координаты: «встань справа» — это то, что человек говорит, а
+/// «встань в 1712, 972» — то, что он не скажет никогда. Координаты остаются в
+/// перетаскивании мышью.
+const SPOTS: &[&str] = &[
+    "left",
+    "right",
+    "center",
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+];
+
+/// Куда встанет окно в названном месте рабочей области.
+///
+/// Отдельной функцией, потому что вся содержательная часть — арифметика, и её
+/// можно проверить тестом, не спрашивая систему про мониторы.
+///
+/// Рабочая область, а не весь экран: её границы — это то, что не закрыто
+/// панелью задач. Аватар, поставленный «внизу», должен стоять на панели, а не
+/// прятаться за ней.
+fn spot_position(
+    area_origin: (i32, i32),
+    area_size: (u32, u32),
+    window_size: (u32, u32),
+    spot: &str,
+) -> Option<(i32, i32)> {
+    let clamp = |value: u32| i32::try_from(value).unwrap_or(i32::MAX);
+
+    let (origin_x, origin_y) = area_origin;
+    let free_x = (clamp(area_size.0) - clamp(window_size.0)).max(0);
+    let free_y = (clamp(area_size.1) - clamp(window_size.1)).max(0);
+
+    let left = origin_x;
+    let right = origin_x + free_x;
+    let middle = origin_x + free_x / 2;
+    let top = origin_y;
+    let bottom = origin_y + free_y;
+
+    match spot {
+        // Без уточнения по вертикали — низ: аватар стоит на панели задач, а не
+        // висит в середине экрана.
+        "left" => Some((left, bottom)),
+        "right" => Some((right, bottom)),
+        "center" => Some((middle, bottom)),
+        "top-left" => Some((left, top)),
+        "top-right" => Some((right, top)),
+        "bottom-left" => Some((left, bottom)),
+        "bottom-right" => Some((right, bottom)),
+        _ => None,
+    }
+}
+
+/// Ставит аватар в названное место экрана.
+#[tauri::command]
+pub fn avatar_move(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    spot: String,
+) -> Result<(), String> {
+    let window = app
+        .get_webview_window(WINDOW_LABEL)
+        .ok_or("окно аватара закрыто")?;
+
+    let monitor = window
+        .current_monitor()
+        .map_err(err)?
+        .ok_or("не удалось спросить монитор")?;
+
+    let area = monitor.work_area();
+    let size = window.outer_size().map_err(err)?;
+
+    let (x, y) = spot_position(
+        (area.position.x, area.position.y),
+        (area.size.width, area.size.height),
+        (size.width, size.height),
+        spot.trim(),
+    )
+    .ok_or_else(|| format!("не знаю места «{spot}»; есть: {}", SPOTS.join(", ")))?;
+
+    window
+        .set_position(tauri::PhysicalPosition { x, y })
+        .map_err(err)?;
+
+    // Место запоминается сразу: попросив встать справа, человек ждёт, что там
+    // она и окажется после перезапуска.
+    let _ = remember_placement(&window, &state);
+    Ok(())
 }
 
 /// Просит окно аватара проиграть анимацию.
@@ -615,6 +714,90 @@ pub fn restore(app: tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Названные места считаются от рабочей области.
+    #[test]
+    fn spots_are_measured_from_the_work_area() {
+        // Экран 1920×1080 с панелью задач 48: рабочая область 1032.
+        let area = ((0, 0), (1920u32, 1032u32));
+        let window = (200u32, 420u32);
+
+        assert_eq!(
+            spot_position(area.0, area.1, window, "left"),
+            Some((0, 612)),
+            "слева и на панели задач"
+        );
+        assert_eq!(spot_position(area.0, area.1, window, "right"), Some((1720, 612)));
+        assert_eq!(spot_position(area.0, area.1, window, "center"), Some((860, 612)));
+        assert_eq!(spot_position(area.0, area.1, window, "top-left"), Some((0, 0)));
+        assert_eq!(spot_position(area.0, area.1, window, "top-right"), Some((1720, 0)));
+    }
+
+    /// «Слева» без уточнения — это низ, а не середина.
+    ///
+    /// Аватар — существо, стоящее на рабочем столе: «встань слева» означает
+    /// «слева на полу», а не «слева в воздухе».
+    #[test]
+    fn a_side_without_a_height_means_the_floor() {
+        let same = |a: &str, b: &str| {
+            assert_eq!(
+                spot_position((0, 0), (1920, 1032), (200, 420), a),
+                spot_position((0, 0), (1920, 1032), (200, 420), b),
+                "{a} и {b} должны совпадать"
+            );
+        };
+
+        same("left", "bottom-left");
+        same("right", "bottom-right");
+    }
+
+    /// Второй монитор со сдвинутым началом координат считается так же.
+    #[test]
+    fn spots_respect_a_second_monitor() {
+        assert_eq!(
+            spot_position((1920, 0), (2560, 1392), (200, 420), "left"),
+            Some((1920, 972))
+        );
+        assert_eq!(
+            spot_position((1920, 0), (2560, 1392), (200, 420), "right"),
+            Some((4280, 972))
+        );
+    }
+
+    /// Окно больше экрана прижимается к началу, а не уезжает за оба края.
+    #[test]
+    fn a_window_larger_than_the_screen_stays_put() {
+        assert_eq!(
+            spot_position((0, 0), (800, 600), (1200, 900), "right"),
+            Some((0, 0))
+        );
+    }
+
+    /// Незнакомое место — отказ, а не движение наугад.
+    #[test]
+    fn an_unknown_spot_is_refused() {
+        for spot in ["", "куда-нибудь", "middle", "LEFT"] {
+            assert_eq!(
+                spot_position((0, 0), (1920, 1032), (200, 420), spot),
+                None,
+                "«{spot}» не должно приниматься"
+            );
+        }
+    }
+
+    /// Список мест и разбор не расходятся.
+    ///
+    /// Список показывается в ошибке и в описании инструмента: место, которое
+    /// он обещает, а разбор не понимает, — это обещание, которое не работает.
+    #[test]
+    fn every_listed_spot_is_understood() {
+        for spot in SPOTS {
+            assert!(
+                spot_position((0, 0), (1920, 1032), (200, 420), spot).is_some(),
+                "место «{spot}» обещано, но не понято"
+            );
+        }
+    }
 
     /// Имя анимации складывается с папкой и получает нужное расширение.
     #[test]

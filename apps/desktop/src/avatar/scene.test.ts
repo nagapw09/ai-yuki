@@ -10,7 +10,14 @@ import type { VRM } from '@pixiv/three-vrm'
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 
-import { measureUpperBody, measureWholeBody, placeCamera, relaxArms } from './scene'
+import {
+  isCyclic,
+  measureUpperBody,
+  measureWholeBody,
+  placeCamera,
+  relaxArms,
+  widen,
+} from './scene'
 
 /** Рука из трёх костей, вытянутая вдоль X — ровно так лежит Т-поза в файле. */
 function arm(side: number) {
@@ -179,5 +186,87 @@ describe('кадр аватара', () => {
   it('молчит про модель без габаритов', () => {
     const vrm = { scene: new THREE.Object3D() } as unknown as VRM
     expect(measureUpperBody(vrm, null)).toBeNull()
+  })
+})
+
+describe('повтор анимации', () => {
+  /** Дорожка поворота из двух кадров: начало и конец задаются явно. */
+  function track(first: number[], last: number[]): THREE.QuaternionKeyframeTrack {
+    return new THREE.QuaternionKeyframeTrack('bone.quaternion', [0, 1], [...first, ...last])
+  }
+
+  it('замкнутый клип повторяется как есть', () => {
+    const clip = new THREE.AnimationClip('шаг', 1, [
+      track([0, 0, 0, 1], [0, 0, 0, 1]),
+    ])
+
+    expect(isCyclic(clip)).toBe(true)
+  })
+
+  // Ровно то, что выглядело поломкой: клип «потянуться» кончается руками
+  // вверху, а повтор роняет их рывком и поднимает снова.
+  it('незамкнутый клип виден как незамкнутый', () => {
+    const clip = new THREE.AnimationClip('потянуться', 1, [
+      track([0, 0, 0, 1], [0.7, 0, 0, 0.7]),
+    ])
+
+    expect(isCyclic(clip)).toBe(false)
+  })
+
+  it('мелкое расхождение не считается разрывом', () => {
+    const clip = new THREE.AnimationClip('дыхание', 1, [
+      track([0, 0, 0, 1], [0.01, 0, 0, 0.999]),
+    ])
+
+    expect(isCyclic(clip)).toBe(true)
+  })
+
+  it('клип без дорожек не ломает проверку', () => {
+    expect(isCyclic(new THREE.AnimationClip('пустой', 1, []))).toBe(true)
+  })
+})
+
+describe('запас кадра под анимации', () => {
+  const base = { centerY: 0.8, halfHeight: 0.8, halfWidth: 0.25 }
+
+  it('поднимает верх кадра под поднятые руки', () => {
+    // Кисти уходят выше макушки — кадр обязан вырасти вверх.
+    const reach = new THREE.Box3(
+      new THREE.Vector3(-0.3, 0, -0.2),
+      new THREE.Vector3(0.3, 2.1, 0.2),
+    )
+
+    const wide = widen(base, reach)!
+
+    expect(wide.centerY + wide.halfHeight).toBeCloseTo(2.1, 3)
+    expect(wide.centerY - wide.halfHeight).toBeCloseTo(0, 3)
+  })
+
+  it('расширяет кадр под разведённые руки', () => {
+    const reach = new THREE.Box3(
+      new THREE.Vector3(-0.7, 0, -0.2),
+      new THREE.Vector3(0.7, 1.6, 0.2),
+    )
+
+    expect(widen(base, reach)!.halfWidth).toBeCloseTo(0.7, 3)
+  })
+
+  it('никогда не сужает кадр', () => {
+    // Анимация, которая целиком внутри покоя, не должна ничего менять.
+    const reach = new THREE.Box3(
+      new THREE.Vector3(-0.1, 0.5, -0.1),
+      new THREE.Vector3(0.1, 1.0, 0.1),
+    )
+
+    const same = widen(base, reach)!
+
+    expect(same.halfWidth).toBe(base.halfWidth)
+    expect(same.centerY + same.halfHeight).toBeCloseTo(1.6, 3)
+    expect(same.centerY - same.halfHeight).toBeCloseTo(0, 3)
+  })
+
+  it('молчит там, где кадра нет', () => {
+    expect(widen(null, new THREE.Box3())).toBeNull()
+    expect(widen(base, new THREE.Box3())).toBe(base)
   })
 })

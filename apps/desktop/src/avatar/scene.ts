@@ -133,6 +133,7 @@ export interface Framing {
  * и кадр, подогнанный только по высоте, срезает плечи и руки.
  */
 export function measureUpperBody(vrm: VRM, head: THREE.Object3D | null | undefined): Framing | null {
+  refreshBounds(vrm.scene)
   const box = new THREE.Box3().setFromObject(vrm.scene)
   const height = box.max.y - box.min.y
 
@@ -163,6 +164,26 @@ export function measureUpperBody(vrm: VRM, head: THREE.Object3D | null | undefin
 }
 
 /**
+ * Сбрасывает запомненные габариты мешей.
+ *
+ * Three.js считает габариты skinned-меша один раз и кладёт в `boundingBox`;
+ * `Box3.setFromObject` потом берёт готовое значение и пересчитывает его только
+ * если там `null`. Для нас это значит, что без сброса все замеры поз дают одну
+ * и ту же позу — ту, что попалась первой. Именно поэтому кадр строился по позе
+ * покоя, а поднятые руки уходили за края окна.
+ *
+ * Вызов не бесплатный: он заставляет пройтись по всем вершинам. Поэтому
+ * используется только при замерах — при загрузке и при смене кадра, — а не
+ * каждый кадр отрисовки.
+ */
+export function refreshBounds(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh & { boundingBox?: THREE.Box3 | null }
+    if (mesh.boundingBox !== undefined) mesh.boundingBox = null
+  })
+}
+
+/**
  * Считает кадр во весь рост.
  *
  * Это не «то же, только дальше»: аватар в полный рост — не собеседник в
@@ -172,6 +193,7 @@ export function measureUpperBody(vrm: VRM, head: THREE.Object3D | null | undefin
  * задач вместо того, чтобы стоять на ней.
  */
 export function measureWholeBody(vrm: VRM): Framing | null {
+  refreshBounds(vrm.scene)
   const box = new THREE.Box3().setFromObject(vrm.scene)
   const height = box.max.y - box.min.y
 
@@ -232,6 +254,36 @@ async function loadAnimation(
   }
 }
 
+/**
+ * Замыкается ли клип сам на себя.
+ *
+ * Это решает, как его повторять. Клип «потянуться» начинается с рук внизу и
+ * заканчивается руками вверху: повторённый по кругу, он на стыке роняет руки
+ * рывком и снова поднимает — именно это и выглядит поломкой. Ходьба, наоборот,
+ * замкнута, и разворачивать её назад было бы странно.
+ *
+ * Сравниваются первое и последнее значение каждой дорожки — то есть данные
+ * самого клипа, без его проигрывания. Поза здесь не нужна, и трогать ради
+ * проверки живую модель незачем.
+ */
+export function isCyclic(clip: THREE.AnimationClip, tolerance = 0.05): boolean {
+  let worst = 0
+
+  for (const track of clip.tracks) {
+    const values = track.values
+    const stride = track.getValueSize()
+    if (values.length < stride * 2) continue
+
+    for (let index = 0; index < stride; index += 1) {
+      const first = values[index] ?? 0
+      const last = values[values.length - stride + index] ?? 0
+      worst = Math.max(worst, Math.abs(first - last))
+    }
+  }
+
+  return worst <= tolerance
+}
+
 /** Снимок поворотов всех костей гуманоида. */
 type Pose = { node: THREE.Object3D; quaternion: THREE.Quaternion }[]
 
@@ -250,6 +302,30 @@ function capturePose(vrm: VRM): Pose {
 function restorePose(snapshot: Pose): void {
   for (const { node, quaternion } of snapshot) {
     node.quaternion.copy(quaternion)
+  }
+}
+
+/**
+ * Расширяет кадр так, чтобы в него влезли габариты `reach`.
+ *
+ * Только расширяет: кадр, ставший от анимаций уже, означал бы, что в покое
+ * модель обрезана ради движения, которого сейчас нет.
+ */
+export function widen(framing: Framing | null, reach: THREE.Box3): Framing | null {
+  if (!framing) return null
+  if (reach.isEmpty()) return framing
+
+  const top = Math.max(framing.centerY + framing.halfHeight, reach.max.y)
+  const bottom = Math.min(framing.centerY - framing.halfHeight, reach.min.y)
+
+  return {
+    centerY: (top + bottom) / 2,
+    halfHeight: (top - bottom) / 2,
+    halfWidth: Math.max(
+      framing.halfWidth,
+      Math.abs(reach.min.x),
+      Math.abs(reach.max.x),
+    ),
   }
 }
 
@@ -393,14 +469,14 @@ export async function createScene(
   // по ней, отодвинул бы камеру далеко назад ради пустоты по бокам.
   relaxArms(vrm)
 
-  // Оба кадра считаются один раз: замер идёт по габаритам модели, которые от
-  // выбора кадра не зависят, а переключение должно быть мгновенным.
-  const framings: Record<AvatarPose, Framing | null> = {
+  let currentPose: AvatarPose = pose
+
+  // Кадры считаются ниже, после загрузки анимаций: их размах входит в замер.
+  let framings: Record<AvatarPose, Framing | null> = {
     portrait: measureUpperBody(vrm, head),
     full: measureWholeBody(vrm),
   }
 
-  let currentPose: AvatarPose = pose
   const applyFraming = () => {
     const framing = framings[currentPose] ?? framings.portrait
     if (framing) placeCamera(camera, framing)
@@ -444,6 +520,52 @@ export async function createScene(
     if (action) actions.set(source.name, action)
   }
 
+  // Кадр пересчитывается по размаху анимаций.
+  //
+  // Замер по одной позе покоя обрезал поднятые руки: клип «потянуться»
+  // выводит кисти выше макушки и шире плеч, а камера стояла так, будто руки
+  // всегда внизу. Теперь каждый клип прогоняется по нескольким моментам, и
+  // кадр строится по самому размашистому из них — тогда за края не выходит
+  // ничто и никогда.
+  //
+  // Цена — аватар немного мельче в покое. Это дешевле, чем исчезающие кисти:
+  // обрезанная рука читается как поломка, а полсантиметра запаса не читается
+  // вовсе.
+  if (actions.size > 0) {
+    const reach = new THREE.Box3()
+
+    for (const action of actions.values()) {
+      const clip = action.getClip()
+      action.reset().play()
+
+      // Десять моментов на клип: чаще — лишняя работа при загрузке, реже —
+      // можно проскочить мимо самой размашистой позы.
+      for (let step = 0; step <= 10; step += 1) {
+        mixer.setTime((clip.duration * step) / 10)
+        vrm.update(0)
+        vrm.scene.updateMatrixWorld(true)
+        refreshBounds(vrm.scene)
+        reach.union(new THREE.Box3().setFromObject(vrm.scene))
+      }
+
+      action.stop()
+    }
+
+    // Возврат в покой: после прогона кости остались там, где их бросил
+    // последний клип.
+    mixer.setTime(0)
+    restorePose(restPose)
+    vrm.update(0)
+    vrm.scene.updateMatrixWorld(true)
+
+    framings = {
+      portrait: measureUpperBody(vrm, head),
+      full: widen(measureWholeBody(vrm), reach),
+    }
+
+    applyFraming()
+  }
+
   /** Играющая анимация; `null` — только своё движение. */
   let playing: THREE.AnimationAction | null = null
 
@@ -465,7 +587,12 @@ export async function createScene(
 
     if (next) {
       next.reset()
-      next.setLoop(THREE.LoopRepeat, Infinity)
+      // Незамкнутый клип идёт туда и обратно: так его конец всегда совпадает
+      // с началом следующего повтора, и рывка на стыке нет.
+      next.setLoop(
+        isCyclic(next.getClip()) ? THREE.LoopRepeat : THREE.LoopPingPong,
+        Infinity,
+      )
       next.fadeIn(CROSSFADE).play()
     }
 
