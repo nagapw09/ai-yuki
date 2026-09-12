@@ -25,6 +25,7 @@ export function TitleBar() {
   const { locale } = useI18n()
   const connection = useUiStore((s) => s.connection)
   const setScreen = useUiStore((s) => s.setScreen)
+  const name = useUiStore((s) => s.assistantName)
   const now = useClock()
 
   const time = new Intl.DateTimeFormat(locale, {
@@ -35,7 +36,7 @@ export function TitleBar() {
   return (
     <header className="titlebar" data-tauri-drag-region>
       <span className="titlebar__mark" data-tauri-drag-region>
-        {t('app.name')}
+        {name || t('app.name')}
       </span>
 
       <span className="titlebar__spacer" data-tauri-drag-region />

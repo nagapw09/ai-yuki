@@ -29,8 +29,18 @@ interface UiState {
   activity: ActivityItem[]
   nextEvent: UpcomingEvent | null
   connection: ConnectionState
+  /**
+   * Как зовут ассистента.
+   *
+   * Пустая строка означает «как в поставке»: подставить сюда «Yuki» нельзя,
+   * иначе будущее переименование приложения прошло бы мимо тех, кто имя не
+   * менял. Имя живёт в store, а не читается каждым экраном отдельно, потому
+   * что его показывают и строка заголовка, и главный экран одновременно.
+   */
+  assistantName: string
 
   setScreen: (screen: ScreenId) => void
+  setAssistantName: (name: string) => void
   setOrbState: (state: OrbState) => void
   setAudioLevel: (level: number) => void
   setHeadline: (headline: string | null) => void
@@ -49,6 +59,7 @@ let flashTimer: ReturnType<typeof setTimeout> | undefined
 export const useUiStore = create<UiState>((set, get) => ({
   screen: 'orbital',
   orbState: 'idle',
+  assistantName: '',
   audioLevel: 0,
   headline: null,
   tasks: [],
@@ -103,6 +114,8 @@ export const useUiStore = create<UiState>((set, get) => ({
   setConnection: (connection) => set({ connection }),
 
   setNextEvent: (nextEvent) => set({ nextEvent }),
+
+  setAssistantName: (assistantName) => set({ assistantName }),
 }))
 
 /**

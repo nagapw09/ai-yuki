@@ -657,6 +657,25 @@ export interface AvatarSignal {
 /** Имя события состояния аватара. */
 export const AVATAR_EVENT = 'yuki://avatar-state'
 
+/** Профиль персонажа: облик целиком одним набором. */
+export interface Profile {
+  id: string
+  name: string
+  /** Применён ли он прямо сейчас. */
+  active: boolean
+  /** Выбрана ли в нём модель — по этому видно, полон ли облик. */
+  hasModel: boolean
+  updatedAt: number
+}
+
+/** Имя ассистента; пустая строка — «как в поставке». */
+export const personaName = () => invoke<string>('persona_name')
+export const personaSetName = (name: string) => invoke<void>('persona_set_name', { name })
+export const profileList = () => invoke<Profile[]>('profile_list')
+export const profileSave = (name: string) => invoke<Profile[]>('profile_save', { name })
+export const profileApply = (id: string) => invoke<Profile[]>('profile_apply', { id })
+export const profileDelete = (id: string) => invoke<Profile[]>('profile_delete', { id })
+
 export const avatarStatus = () => invoke<AvatarStatus>('avatar_status')
 export const avatarOpen = () => invoke<AvatarStatus>('avatar_open')
 export const avatarClose = () => invoke<void>('avatar_close')

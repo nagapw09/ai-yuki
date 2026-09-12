@@ -11,6 +11,7 @@ import {
   isTauri,
   NAVIGATE_EVENT,
   onboardingCompleted,
+  personaName,
   providerList,
   systemInfo,
 } from './bridge'
@@ -38,6 +39,7 @@ export function App() {
   const setHeadline = useUiStore((s) => s.setHeadline)
 
   useProviderStatus()
+  useAssistantName()
 
   useEffect(() => {
     // Сочетания команд и автозапуск (ТЗ §16). Сбой не должен мешать
@@ -160,6 +162,33 @@ function useOnboarding(): { done: boolean; finish: () => void } | null {
 
   if (done === null) return null
   return { done, finish: () => setDone(true) }
+}
+
+/**
+ * Читает имя ассистента.
+ *
+ * Один раз при запуске и снова при возврате из настроек: переименование
+ * должно быть видно сразу, а следить за настройкой событием ради строки,
+ * которая меняется раз в полгода, не стоит.
+ */
+function useAssistantName() {
+  const setAssistantName = useUiStore((s) => s.setAssistantName)
+  const screen = useUiStore((s) => s.screen)
+
+  useEffect(() => {
+    if (!isTauri()) return
+
+    let cancelled = false
+    personaName()
+      .then((name) => {
+        if (!cancelled) setAssistantName(name)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [setAssistantName, screen])
 }
 
 /**

@@ -18,6 +18,12 @@ import {
   avatarOpen,
   avatarAnimations,
   avatarPlay,
+  personaName,
+  personaSetName,
+  profileApply,
+  profileDelete,
+  profileList,
+  profileSave,
   avatarSetAlwaysOnTop,
   avatarSetAnchor,
   avatarSetAnimations,
@@ -62,6 +68,7 @@ import {
   wakeStatus,
   type AnimationClip,
   type AvatarAnchor,
+  type Profile,
   type AvatarPose,
   type AvatarStatus,
   type BackgroundStatus,
@@ -99,6 +106,7 @@ export function Settings() {
     <div className="settings">
       <div className="settings__inner">
         <CapabilitiesEntry />
+        <Character />
         <Appearance />
         <PersonaSection />
         <Everyday />
@@ -116,6 +124,174 @@ export function Settings() {
         <DataTransfer />
       </div>
     </div>
+  )
+}
+
+// ── Персонаж (ТЗ §11) ───────────────────────────────────────────────────────────
+
+/**
+ * Имя ассистента и профили облика.
+ *
+ * Модель, анимации, характер, обращение и слово пробуждения — это не пять
+ * независимых настроек, а один облик. Пока они лежали отдельно, смена
+ * персонажа складывалась из пяти походов в разные части этой страницы, и
+ * половина забывалась: новая модель говорила прежним голосом и откликалась на
+ * прежнее имя.
+ *
+ * Профиль — снимок настроек целиком, а не список ссылок на них: иначе профиль,
+ * сделанный полгода назад, менялся бы сам вслед за появлением новых настроек.
+ */
+function Character() {
+  const storedName = useUiStore((s) => s.assistantName)
+  const setAssistantName = useUiStore((s) => s.setAssistantName)
+
+  const [name, setName] = useState(storedName)
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [title, setTitle] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setName(storedName)
+  }, [storedName])
+
+  useEffect(() => {
+    void profileList()
+      .then(setProfiles)
+      .catch((e: unknown) => setNote(describe(e)))
+  }, [])
+
+  const run = (action: () => Promise<string | null>) => {
+    setBusy(true)
+    action()
+      .then(setNote)
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  const active = profiles.find((profile) => profile.active)
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Персонаж</h3>
+      <p className="settings__hint">
+        Имя видно в строке заголовка и на главном экране. Слово пробуждения при
+        переименовании не меняется само: его надо переобучить в разделе
+        «Обращение», иначе Yuki под новым именем продолжит откликаться на старое.
+      </p>
+
+      <div className="provider__row">
+        <input
+          className="settings__input settings__input--narrow"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Yuki"
+          maxLength={32}
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              await personaSetName(name)
+              setAssistantName(name.trim())
+              return name.trim() === '' ? 'имя как в поставке' : 'имя сохранено'
+            })
+          }
+        >
+          Переименовать
+        </button>
+      </div>
+
+      <p className="settings__hint" style={{ marginTop: 'var(--space-4)' }}>
+        Профиль запоминает облик целиком: модель, папку с анимациями, кадр,
+        характер, обращение, имя и слово пробуждения. Переключение возвращает
+        всё это одним щелчком. Положение окна и тема интерфейса в профиль не
+        входят — это про рабочее место, а не про персонажа.
+      </p>
+
+      <div className="provider__row">
+        <input
+          className="settings__input settings__input--narrow"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={active ? active.name : 'Название профиля'}
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy || (title.trim() === '' && !active)}
+          onClick={() =>
+            run(async () => {
+              const target = title.trim() || active?.name || ''
+              setProfiles(await profileSave(target))
+              setTitle('')
+              return `сохранён: ${target}`
+            })
+          }
+        >
+          {title.trim() === '' && active ? `Обновить «${active.name}»` : 'Сохранить профиль'}
+        </button>
+        {note && <span className="provider__status">{note}</span>}
+      </div>
+
+      {profiles.length === 0 ? (
+        <p className="settings__hint">
+          Профилей пока нет. Настройте облик как нравится и сохраните — тогда к
+          нему можно будет вернуться после любых опытов.
+        </p>
+      ) : (
+        <div className="settings__list">
+          {profiles.map((profile) => (
+            <div className="provider__row" key={profile.id}>
+              <span className="settings__hint" style={{ minWidth: '14ch' }}>
+                {profile.name}
+                {profile.active && ' · сейчас'}
+              </span>
+
+              {/* Профиль без модели — это характер и голос без облика; сказать
+                  об этом честнее, чем показать пустое окно после применения. */}
+              {!profile.hasModel && (
+                <span className="provider__status">без модели</span>
+              )}
+
+              <button
+                type="button"
+                className="settings__button"
+                disabled={busy || profile.active}
+                onClick={() =>
+                  run(async () => {
+                    setProfiles(await profileApply(profile.id))
+                    const applied = await personaName()
+                    setAssistantName(applied)
+                    return `применён: ${profile.name}`
+                  })
+                }
+              >
+                Применить
+              </button>
+
+              <button
+                type="button"
+                className="settings__button"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    setProfiles(await profileDelete(profile.id))
+                    return `удалён: ${profile.name}`
+                  })
+                }
+              >
+                Удалить
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

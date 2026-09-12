@@ -6,6 +6,7 @@
 pub mod ai;
 pub mod automation;
 pub mod avatar;
+pub mod profile;
 pub mod backup;
 pub mod calendar;
 pub mod capabilities;
@@ -262,6 +263,12 @@ pub fn run() {
             avatar::avatar_close,
             avatar::avatar_set_click_through,
             avatar::avatar_set_always_on_top,
+            profile::persona_name,
+            profile::persona_set_name,
+            profile::profile_list,
+            profile::profile_save,
+            profile::profile_apply,
+            profile::profile_delete,
             avatar::avatar_set_pose,
             avatar::avatar_set_animations,
             avatar::avatar_animations,

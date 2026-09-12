@@ -54,6 +54,7 @@ export function Orbital({ onSubmit, onToggleVoice }: OrbitalProps) {
   const nextEvent = useUiStore((s) => s.nextEvent)
   const tasks = useUiStore((s) => s.tasks)
   const setScreen = useUiStore((s) => s.setScreen)
+  const name = useUiStore((s) => s.assistantName)
 
   const running = useMemo(() => activeTasks(tasks), [tasks])
 
@@ -98,7 +99,7 @@ export function Orbital({ onSubmit, onToggleVoice }: OrbitalProps) {
       <main className="orbital__stage">
         <Orb state={orbState} level={audioLevel} onClick={onToggleVoice} />
 
-        <h1 className="orbital__wordmark">{t('app.name')}</h1>
+        <h1 className="orbital__wordmark">{name || t('app.name')}</h1>
 
         <p className="orbital__tagline" data-phrase={phrase ? 'true' : undefined}>
           {phrase ?? t('orbital.tagline')}
