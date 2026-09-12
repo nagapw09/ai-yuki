@@ -38,6 +38,25 @@ const EXPRESSION_EASE = 6
 /** Средняя длительность слога при озвучке, секунды. */
 const SYLLABLE = 0.14
 
+/**
+ * Во сколько раз усилить громкость, прежде чем открывать рот.
+ *
+ * Среднеквадратичная громкость речи держится около 0.1: если открывать рот
+ * ровно на неё, он будет едва шевелиться. Пятикратное усиление даёт на громких
+ * слогах примерно половину раскрытия, что похоже на человека.
+ */
+const MOUTH_GAIN = 5
+
+/**
+ * Сколько секунд громкость считается свежей.
+ *
+ * По этому и определяется, настоящий ли lip-sync: если громкость приходит —
+ * рот идёт за звуком, если перестала — за ритмом слогов. Отдельного
+ * переключателя нет намеренно: он был бы третьим местом, где хранится то же
+ * самое знание, и однажды разошёлся бы с действительностью.
+ */
+const LEVEL_FRESH = 0.25
+
 /** Насколько руки опускаются из Т-позы, радианы (около 72 градусов). */
 const ARM_DOWN = 1.26
 
@@ -400,6 +419,8 @@ export async function createScene(
   const state = {
     current: 'idle' as OrbState,
     audioLevel: 0,
+    /** Когда громкость обновляли последний раз, по часам сцены. */
+    audioLevelAt: -1,
     /** Текущие веса выражений — они догоняют целевые, а не переключаются рывком. */
     weights: new Map<string, number>(),
     /** Момент следующего моргания. */
@@ -534,11 +555,19 @@ export async function createScene(
 
     // ── Рот ────────────────────────────────────────────────────────────────
     if (look.speaking) {
-      // Слоговый ритм плюс вторая, более медленная волна — иначе рот стучит
-      // как метроном и выглядит хуже, чем неподвижный.
+      // Настоящая громкость, если она есть: рот открывается ровно на звуке.
+      // Так работает синтез, который проигрывает Yuki сама (`HttpTts`).
+      const fresh = time - state.audioLevelAt < LEVEL_FRESH
+
+      // Иначе — слоговый ритм плюс вторая, более медленная волна: иначе рот
+      // стучит как метроном и выглядит хуже, чем неподвижный. Это приближение,
+      // и оно остаётся для системного синтеза, который звука не отдаёт.
       const syllable = Math.abs(Math.sin((time * Math.PI) / SYLLABLE))
       const phrase = 0.55 + 0.45 * Math.sin(time * 1.7)
-      const openness = Math.max(state.audioLevel, syllable * phrase)
+
+      const openness = fresh
+        ? Math.min(1, state.audioLevel * MOUTH_GAIN)
+        : syllable * phrase
       applyExpression(VRMExpressionPresetName.Aa, openness * 0.7)
       applyExpression(VRMExpressionPresetName.Ih, openness * 0.25)
     } else {
@@ -569,6 +598,7 @@ export async function createScene(
     clips: [...actions.keys()],
     setAudioLevel: (level) => {
       state.audioLevel = Math.max(0, Math.min(1, level))
+      state.audioLevelAt = clock.elapsedTime
     },
     resize: (width, height) => {
       renderer.setSize(width, height, false)

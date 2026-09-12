@@ -903,11 +903,17 @@ export interface VoiceStatus {
   inputDevice: string | null
   devices: string[]
   voices: string[]
+  /** Чем говорит: `system` или `http`. */
+  engine: 'system' | 'http'
+  /** Отдаёт ли движок громкость — от этого зависит, настоящий ли lip-sync. */
+  hasLevel: boolean
   /** Настроено ли распознавание: без него голосовой ввод невозможен. */
   sttReady: boolean
 }
 
 export const voiceStatus = () => invoke<VoiceStatus>('voice_status')
+/** Громкость речи 0…1; `null` — движок звука не отдаёт. */
+export const voiceSpeakingLevel = () => invoke<number | null>('voice_speaking_level')
 export const voiceStart = (mode: ListenMode) => invoke<void>('voice_start', { mode })
 export const voiceStop = () => invoke<void>('voice_stop')
 /** Отпущена кнопка push-to-talk: отдать накопленное, не дожидаясь паузы. */

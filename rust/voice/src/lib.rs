@@ -29,6 +29,7 @@ pub mod mfcc;
 pub mod session;
 pub mod stt;
 pub mod tts;
+pub mod tts_http;
 pub mod vad;
 pub mod wake;
 
@@ -37,5 +38,6 @@ pub use error::{VoiceError, VoiceResult};
 pub use session::{strip_wake_phrase, ListenMode, Utterance, VoiceEvent, VoiceSession};
 pub use stt::{encode_wav, HttpStt, SpeechToText};
 pub use tts::{SystemTts, TextToSpeech};
+pub use tts_http::{HttpTts, HttpTtsConfig};
 pub use vad::{EnergyVad, SpeechDetector, VadConfig, VadEvent};
 pub use wake::{WakeDetector, WakeModel, ENROLL_SAMPLES};

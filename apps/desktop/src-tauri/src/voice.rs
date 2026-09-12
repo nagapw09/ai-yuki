@@ -9,7 +9,8 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use yuki_voice::{
-    strip_wake_phrase, HttpStt, ListenMode, SpeechToText, SystemTts, TextToSpeech, VoiceEvent,
+    strip_wake_phrase, HttpStt, HttpTts, HttpTtsConfig, ListenMode, SpeechToText, SystemTts,
+    TextToSpeech, VoiceEvent,
     WakeModel, ENROLL_SAMPLES,
     VoiceSession,
 };
@@ -56,6 +57,10 @@ pub struct VoiceStatus {
     pub voices: Vec<String>,
     /// Настроено ли распознавание: без него голосовой ввод невозможен.
     pub stt_ready: bool,
+    /// Чем говорит: `system` или `http`.
+    pub engine: String,
+    /// Отдаёт ли движок громкость — от этого зависит, настоящий ли lip-sync.
+    pub has_level: bool,
 }
 
 /// Всё, что нужно, чтобы обратиться к сервису распознавания.
@@ -183,8 +188,46 @@ pub struct VoiceState {
     /// перезапуск — человек и так начнёт заново.
     enrollment: Mutex<Vec<Vec<f32>>>,
     session: Mutex<Option<VoiceSession>>,
-    tts: Mutex<Option<SystemTts>>,
+    tts: Mutex<Option<TtsEngine>>,
 }
+
+/// Чем говорить.
+///
+/// Перечисление, а не `Box<dyn TextToSpeech>`, потому что у сервиса есть то,
+/// чего нет у системного движка: громкость звука прямо сейчас. Через типаж её
+/// пришлось бы или добавлять всем, или достукиваться приведением типа — и то,
+/// и другое хуже двух явных вариантов.
+enum TtsEngine {
+    /// Синтез средствами ОС: работает всегда, звука не отдаёт.
+    System(SystemTts),
+    /// Чужой сервис по HTTP: отдаёт WAV, поэтому у нас есть громкость.
+    Http(HttpTts),
+}
+
+impl TtsEngine {
+    fn as_speech(&self) -> &dyn TextToSpeech {
+        match self {
+            Self::System(engine) => engine,
+            Self::Http(engine) => engine,
+        }
+    }
+
+    /// Громкость речи 0…1; у системного синтеза её нет.
+    fn level(&self) -> Option<f32> {
+        match self {
+            Self::System(_) => None,
+            Self::Http(engine) => Some(engine.level()),
+        }
+    }
+}
+
+/// Ключи настроек синтеза.
+const SETTING_TTS_ENGINE: &str = "voice.tts.engine";
+const SETTING_TTS_URL: &str = "voice.tts.url";
+const SETTING_TTS_DIR: &str = "voice.tts.samples";
+const SETTING_TTS_SAMPLE: &str = "voice.tts.sample";
+const SETTING_TTS_PROMPT: &str = "voice.tts.prompt";
+const SETTING_TTS_LANG: &str = "voice.tts.lang";
 
 impl VoiceState {
     /// Создаёт синтезатор при первом обращении.
@@ -192,16 +235,61 @@ impl VoiceState {
     /// Лениво, потому что движок ОС инициализируется небыстро, а пользователь
     /// может вообще не включать голос — платить за это стартом приложения
     /// (бюджет ТЗ §37) незачем.
-    fn with_tts<T>(&self, f: impl FnOnce(&SystemTts) -> Result<T, String>) -> Result<T, String> {
+    fn with_tts<T>(
+        &self,
+        state: &AppState,
+        f: impl FnOnce(&TtsEngine) -> Result<T, String>,
+    ) -> Result<T, String> {
         let mut guard = self
             .tts
             .lock()
             .map_err(|_| "состояние синтезатора повреждено".to_string())?;
 
-        if guard.is_none() {
-            *guard = Some(SystemTts::new().map_err(err)?);
+        let wanted_http = setting(state, SETTING_TTS_ENGINE).as_deref() == Some("http");
+
+        // Движок пересоздаётся при смене выбора: менять его на месте значило бы
+        // держать внутри оба и решать, кто из них говорит, на каждом вызове.
+        let mismatch = match guard.as_ref() {
+            Some(TtsEngine::Http(_)) => !wanted_http,
+            Some(TtsEngine::System(_)) => wanted_http,
+            None => true,
+        };
+
+        if mismatch {
+            // Прежний движок обязан замолчать: иначе две фразы наложатся.
+            if let Some(previous) = guard.as_ref() {
+                let _ = previous.as_speech().stop();
+            }
+
+            *guard = Some(if wanted_http {
+                TtsEngine::Http(HttpTts::new(http_tts_config(state)))
+            } else {
+                TtsEngine::System(SystemTts::new().map_err(err)?)
+            });
+        } else if wanted_http {
+            // Настройки сервиса могли измениться, пока движок уже жил.
+            if let Some(TtsEngine::Http(engine)) = guard.as_ref() {
+                engine.configure(http_tts_config(state));
+            }
         }
+
         f(guard.as_ref().expect("синтезатор только что создан"))
+    }
+}
+
+/// Настройки сервиса синтеза из базы.
+fn http_tts_config(state: &AppState) -> HttpTtsConfig {
+    let language = setting(state, SETTING_TTS_LANG).unwrap_or_else(|| "ru".into());
+
+    HttpTtsConfig {
+        base_url: setting(state, SETTING_TTS_URL)
+            .filter(|url| !url.trim().is_empty())
+            .unwrap_or_else(|| "http://127.0.0.1:9880".into()),
+        reference_dir: setting(state, SETTING_TTS_DIR).unwrap_or_default(),
+        reference: setting(state, SETTING_TTS_SAMPLE).unwrap_or_default(),
+        prompt_text: setting(state, SETTING_TTS_PROMPT).unwrap_or_default(),
+        text_lang: language.clone(),
+        prompt_lang: language,
     }
 }
 
@@ -218,12 +306,40 @@ pub fn voice_status(state: State<'_, AppState>) -> Result<VoiceStatus, String> {
     Ok(VoiceStatus {
         listening: session.is_some(),
         mode: session.as_ref().map(|s| s.mode()),
-        speaking: state.voice.with_tts(|t| Ok(t.is_speaking())).unwrap_or(false),
+        speaking: state
+            .voice
+            .with_tts(&state, |t| Ok(t.as_speech().is_speaking()))
+            .unwrap_or(false),
         input_device: yuki_voice::default_input_name(),
         devices: yuki_voice::input_devices(),
-        voices: state.voice.with_tts(|t| Ok(t.voices())).unwrap_or_default(),
+        voices: state
+            .voice
+            .with_tts(&state, |t| Ok(t.as_speech().voices()))
+            .unwrap_or_default(),
         stt_ready: stt_config(&state).is_ok(),
+        engine: if setting(&state, SETTING_TTS_ENGINE).as_deref() == Some("http") {
+            "http".into()
+        } else {
+            "system".into()
+        },
+        has_level: state
+            .voice
+            .with_tts(&state, |t| Ok(t.level().is_some()))
+            .unwrap_or(false),
     })
+}
+
+/// Громкость речи прямо сейчас, 0…1.
+///
+/// Отдельной командой, а не полем статуса: её спрашивают десятки раз в секунду,
+/// чтобы рот аватара шёл за звуком, а статус попутно читает настройки из базы —
+/// шестнадцать запросов в секунду ради одного числа.
+///
+/// `None` означает «движок звука не отдаёт» — у системного синтеза буфера нет,
+/// и рот в этом случае работает по ритму слогов.
+#[tauri::command]
+pub fn voice_speaking_level(state: State<'_, AppState>) -> Option<f32> {
+    state.voice.tts.lock().ok()?.as_ref()?.level()
 }
 
 /// Начинает слушать.
@@ -428,18 +544,20 @@ pub fn voice_finish_utterance(state: State<'_, AppState>) -> Result<(), String> 
 
 #[tauri::command]
 pub fn voice_speak(state: State<'_, AppState>, text: String) -> Result<(), String> {
-    state.voice.with_tts(|tts| tts.speak(&text).map_err(err))
+    state.voice.with_tts(&state, |tts| tts.as_speech().speak(&text).map_err(err))
 }
 
 /// Замолчать немедленно — перебивание из ТЗ §10.
 #[tauri::command]
 pub fn voice_stop_speaking(state: State<'_, AppState>) -> Result<(), String> {
-    state.voice.with_tts(|tts| tts.stop().map_err(err))
+    state.voice.with_tts(&state, |tts| tts.as_speech().stop().map_err(err))
 }
 
 #[tauri::command]
 pub fn voice_set_voice(state: State<'_, AppState>, name: String) -> Result<(), String> {
-    state.voice.with_tts(|tts| tts.set_voice(&name).map_err(err))?;
+    state
+        .voice
+        .with_tts(&state, |tts| tts.as_speech().set_voice(&name).map_err(err))?;
     state
         .storage
         .with_conn(|conn| {
@@ -501,7 +619,9 @@ pub fn shutdown(app: &AppHandle) {
             let _ = session.stop();
         }
     }
-    let _ = state.voice.with_tts(|tts| tts.stop().map_err(err));
+    let _ = state
+        .voice
+        .with_tts(&state, |tts| tts.as_speech().stop().map_err(err));
 }
 
 // ── Слово пробуждения (ТЗ §37) ──────────────────────────────────────────────────

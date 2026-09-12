@@ -10,6 +10,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import {
   voiceFinishUtterance,
   voiceSpeak,
+  voiceSpeakingLevel,
   voiceStart,
   voiceStop,
   voiceStatus,
@@ -69,6 +70,11 @@ export async function speakIfVoice(text: string): Promise<void> {
     return
   }
 
+  // Громкость опрашивается чаще, чем состояние: рот аватара должен идти за
+  // звуком, а не за фактом «говорит». Если движок громкости не отдаёт, опрос
+  // сам прекращается — тогда рот работает по ритму слогов, как раньше.
+  void followLevel()
+
   useUiStore.getState().setOrbState('speaking')
 
   while (speakReplies) {
@@ -76,6 +82,8 @@ export async function speakIfVoice(text: string): Promise<void> {
     const status = await voiceStatus().catch(() => null)
     if (!status?.speaking) break
   }
+
+  useUiStore.getState().setAudioLevel(0)
 
   // Режим мог выключиться, пока Yuki говорила: тогда состояние Orb уже задано.
   if (speakReplies) useUiStore.getState().setOrbState('listening')
@@ -182,4 +190,34 @@ function describe(error: unknown): string {
   if (typeof error === 'string') return error
   if (error instanceof Error) return error.message
   return 'Не удалось включить микрофон'
+}
+
+/**
+ * Гонит громкость речи в состояние, пока Yuki говорит.
+ *
+ * Шестьдесят миллисекунд — это примерно шестнадцать замеров в секунду: реже
+ * рот отстаёт от звука заметно, чаще — незачем, потому что и сама громкость
+ * считается по кускам буфера такого же порядка.
+ */
+async function followLevel(): Promise<void> {
+  const store = useUiStore.getState()
+
+  for (;;) {
+    const level = await voiceSpeakingLevel().catch(() => null)
+
+    // `null` означает, что движок звука не отдаёт: продолжать опрос нечего.
+    if (level === null) return
+
+    store.setAudioLevel(level)
+
+    // Ноль после начала речи бывает в паузах между словами, поэтому выходим
+    // не по нему, а по состоянию синтезатора.
+    const status = await voiceStatus().catch(() => null)
+    if (!status?.speaking) {
+      store.setAudioLevel(0)
+      return
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 60))
+  }
 }

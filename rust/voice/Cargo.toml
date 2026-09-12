@@ -25,5 +25,8 @@ reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "multipart",
   "rustls-tls",
+  # Блокирующий клиент нужен синтезу: `speak` обязан вернуться сразу, поэтому
+  # запрос и воспроизведение живут в своём потоке — вне асинхронного рантайма.
+  "blocking",
 ] }
 serde_json = { workspace = true }

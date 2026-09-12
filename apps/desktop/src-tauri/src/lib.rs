@@ -203,6 +203,7 @@ pub fn run() {
             hotkeys::hotkey_set,
             // голос (ТЗ §10)
             voice::voice_status,
+            voice::voice_speaking_level,
             voice::voice_start,
             voice::voice_stop,
             voice::voice_finish_utterance,

@@ -69,6 +69,7 @@ import {
   updateStatus,
   voiceConfigureStt,
   voiceSetVoice,
+  voiceSpeak,
   voiceStatus,
   wakeEnrollFinish,
   wakeEnrollRecord,
@@ -123,6 +124,7 @@ export function Settings() {
         <Remote />
         <Providers />
         <Voice />
+        <Speech />
         <WakeWord />
         <Calendar />
         <Avatar />
@@ -693,6 +695,240 @@ function Voice() {
         в ней обращение, поэтому отзыв наступает после того, как вы договорили.
         Мгновенная реакция требует отдельной модели пробуждения — она в планах.
       </p>
+    </section>
+  )
+}
+
+// ── Голос Yuki (ТЗ §10) ─────────────────────────────────────────────────────────
+
+/**
+ * Чем Yuki говорит.
+ *
+ * Системный синтез — SAPI на Windows, AVSpeechSynthesizer на macOS — работает
+ * всегда и ничего не требует, но звука не отдаёт: приложение узнаёт только
+ * «говорю» или «замолчал». Из этого следует и чужой голос, и рот аватара,
+ * который двигался по правдоподобному ритму слогов, а не по звуку.
+ *
+ * Сервис синтеза отдаёт WAV — значит, буфер наш: Yuki играет его сама, считает
+ * громкость и открывает рот ровно на звуке. Голос при этом выбирает человек:
+ * GPT-SoVITS клонирует его по короткому образцу.
+ */
+function Speech() {
+  const [status, setStatus] = useState<VoiceStatusRecord | null>(null)
+  const [url, setUrl] = useState('')
+  const [samples, setSamples] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [note, setNote] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(async () => {
+    try {
+      setStatus(await voiceStatus())
+      setUrl((await settingGet('voice.tts.url')) ?? '')
+      setSamples((await settingGet('voice.tts.samples')) ?? '')
+      setPrompt((await settingGet('voice.tts.prompt')) ?? '')
+    } catch (e) {
+      setNote(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  const run = (action: () => Promise<string | null>) => {
+    setBusy(true)
+    action()
+      .then((message) => {
+        setNote(message)
+        return reload()
+      })
+      .catch((e: unknown) => setNote(describe(e)))
+      .finally(() => setBusy(false))
+  }
+
+  if (!status) return null
+
+  const http = status.engine === 'http'
+
+  return (
+    <section className="settings__section">
+      <h3 className="settings__title">Голос Yuki</h3>
+      <p className="settings__hint">
+        Системный голос работает всегда и ничего не требует, но звука наружу не
+        отдаёт: рот аватара в этом случае двигается по ритму слогов, а не по
+        речи. Сервис синтеза отдаёт запись — Yuki играет её сама, и рот идёт за
+        звуком. Голос задаётся образцом: GPT-SoVITS повторяет тот, что вы дадите.
+      </p>
+
+      <div className="provider__row">
+        {[
+          { value: 'system', label: 'Системный' },
+          { value: 'http', label: 'Сервис синтеза' },
+        ].map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            className="settings__button"
+            data-active={status.engine === item.value}
+            disabled={busy}
+            onClick={() =>
+              run(async () => {
+                await settingSet('voice.tts.engine', item.value)
+                return item.value === 'http' ? 'говорит сервис' : 'говорит система'
+              })
+            }
+          >
+            {item.label}
+          </button>
+        ))}
+
+        <span className="provider__status">
+          {status.hasLevel ? 'lip-sync по звуку' : 'lip-sync по ритму слогов'}
+        </span>
+      </div>
+
+      {http && (
+        <>
+          <p className="settings__hint">
+            Сервис — отдельная программа: <code>GPT-SoVITS</code> поднимает API на
+            порту 9880. Он не входит в поставку и требует своих моделей и,
+            как правило, видеокарты. Образцы голоса — папка с файлами{' '}
+            <code>.wav</code> по несколько секунд каждый; текст образца нужен,
+            чтобы сервис сверил звук со словами.
+          </p>
+
+          <div className="provider__row">
+            <input
+              className="settings__input"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="http://127.0.0.1:9880"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await settingSet('voice.tts.url', url.trim())
+                  return 'адрес сохранён'
+                })
+              }
+            >
+              Сохранить
+            </button>
+          </div>
+
+          <div className="provider__row">
+            <input
+              className="settings__input"
+              value={samples}
+              onChange={(e) => setSamples(e.target.value)}
+              placeholder="Папка с образцами голоса"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() =>
+                void openDialog({ directory: true, multiple: false }).then((picked) => {
+                  if (typeof picked === 'string') {
+                    setSamples(picked)
+                    run(async () => {
+                      await settingSet('voice.tts.samples', picked)
+                      return 'папка сохранена'
+                    })
+                  }
+                })
+              }
+            >
+              Выбрать…
+            </button>
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await settingSet('voice.tts.samples', samples.trim())
+                  return 'папка сохранена'
+                })
+              }
+            >
+              Сохранить
+            </button>
+          </div>
+
+          <div className="provider__row">
+            <input
+              className="settings__input"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Что произнесено в образце"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await settingSet('voice.tts.prompt', prompt.trim())
+                  return 'текст образца сохранён'
+                })
+              }
+            >
+              Сохранить
+            </button>
+          </div>
+
+          {status.voices.length === 0 ? (
+            <p className="settings__hint">
+              В папке нет файлов <code>.wav</code> — сказать нечем: сервис
+              синтезирует по образцу.
+            </p>
+          ) : (
+            <div className="provider__row">
+              {status.voices.map((voice) => (
+                <button
+                  key={voice}
+                  type="button"
+                  className="settings__button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      await voiceSetVoice(voice)
+                      return `голос: ${voice}`
+                    })
+                  }
+                >
+                  {voice}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="provider__row">
+        <button
+          type="button"
+          className="settings__button"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              await voiceSpeak('Привет. Это проверка голоса.')
+              return 'сказала'
+            })
+          }
+        >
+          Проверить голос
+        </button>
+        {note && <span className="provider__status">{note}</span>}
+      </div>
     </section>
   )
 }
