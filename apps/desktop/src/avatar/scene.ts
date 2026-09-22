@@ -28,7 +28,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 import type { OrbState } from '../state/types'
 import { ALL_EXPRESSIONS, LOOKS } from './states'
-import { assignedMotion, isPoseClip, type Action, type MotionMap } from './motions'
+import { isPoseClip, pickMotion, type Action, type MotionMap } from './motions'
 import { acquireModel } from './model-cache'
 import { avatarAnimationBytes } from '../bridge'
 
@@ -597,6 +597,40 @@ export async function createScene(
   const feet = ['leftFoot','rightFoot'].map(name => vrm.humanoid.getNormalizedBoneNode(name as 'leftFoot' | 'rightFoot')).filter((v): v is THREE.Object3D => !!v)
   const feetRest = feet.map(foot => foot.getWorldPosition(new THREE.Vector3()).y)
 
+  // ── Слои живости ────────────────────────────────────────────────────────
+  //
+  // Поверх любого клипа: дыхание, голова за взглядом, мелкие движения головы в
+  // покое, кивки в разговоре, наклон головы в раздумье. Без них модель между
+  // клипами застывала манекеном — клип двигает тело, а живым его делает то,
+  // что никогда не останавливается (разбор Desktop Mate, §21, §35).
+  //
+  // Добавка ложится умножением поверх того, что записал микшер, и снимается в
+  // начале следующего кадра. Иначе там, где клипа нет, повороты копились бы
+  // кадр за кадром и голова уехала бы за спину.
+  const layerBones = {
+    head: vrm.humanoid.getNormalizedBoneNode('head'),
+    neck: vrm.humanoid.getNormalizedBoneNode('neck'),
+    chest: vrm.humanoid.getNormalizedBoneNode('upperChest') ?? vrm.humanoid.getNormalizedBoneNode('chest'),
+    spine: vrm.humanoid.getNormalizedBoneNode('spine'),
+  }
+  const layerApplied = new Map<THREE.Object3D, THREE.Quaternion>()
+  const layerEuler = new THREE.Euler()
+  /** Сглаженные углы головы: цели меняются рывками, голова — нет. */
+  const headLayer = {yaw: 0, pitch: 0, roll: 0}
+
+  function undoLayers() {
+    for (const [node, added] of layerApplied) node.quaternion.multiply(added.invert())
+    layerApplied.clear()
+  }
+
+  function addLayer(node: THREE.Object3D | null, x: number, y: number, z: number) {
+    if (!node) return
+    const q = new THREE.Quaternion().setFromEuler(layerEuler.set(x, y, z))
+    node.quaternion.multiply(q)
+    const before = layerApplied.get(node)
+    layerApplied.set(node, before ? before.multiply(q) : q)
+  }
+
   const mixer = new THREE.AnimationMixer(vrm.scene)
   const actions = new Map<string, THREE.AnimationAction>()
 
@@ -660,10 +694,12 @@ export async function createScene(
     }
     if (name.startsWith('builtin:')) {
       const action=name.slice(8) as Action
-      const clip=assignedMotion(action,animations,motionMap)
+      // Покой не перебирается на каждом тике: смена клипа покоя посреди
+      // стояния выглядит как рывок, а не как разнообразие.
+      const clip=action==='stand'&&gesture==='stand'&&requested?requested:pickMotion(action,animations,motionMap,requested)
       if (!clip) {if(action==='stand') {gesture='stand';requested='';apply('')} return}
       gesture=action
-      wanted=action==='wave'||action==='stretch'||action==='fidget'?'once':action==='sit'||action==='lie'||action==='sleep'?'hold':'loop'
+      wanted=action==='wave'||action==='stretch'||action==='fidget'?'once':action==='sit'||action==='lie'||action==='sleep'||action==='pose'?'hold':'loop'
       name=clip
     } else {
       gesture='stand'
@@ -785,6 +821,7 @@ export async function createScene(
 
     // Микшер до vrm.update: он пишет в нормализованные кости, а vrm.update
     // переносит их в настоящий скелет. Обратный порядок отставал на кадр.
+    undoLayers()
     mixer.update(delta)
     if (!playing) {
       if (transitionFrom) restorePose(restPose)
@@ -798,6 +835,41 @@ export async function createScene(
         if (progress>=1) transitionFrom=null
       }
     }
+    // Слои поверх клипа. Танец и ходьба двигают всё тело сами, и добавка к
+    // ним читалась бы дрожью; во сне голова лежит спокойно.
+    const whole = gesture === 'dance' || gesture === 'walk'
+    if (!whole) {
+      const breath = Math.sin((time * Math.PI * 2) / 4.2)
+      addLayer(layerBones.chest ?? layerBones.spine, breath * 0.018, 0, 0)
+      addLayer(layerBones.spine, breath * 0.008, 0, 0)
+
+      const asleep = look.asleep || gesture === 'sleep' || gesture === 'lie'
+      // Голова идёт за взглядом слабее глаз: смотрят глазами, поворачиваются
+      // головой только на то, что интересно по-настоящему.
+      const busyClip = !!playing && gesture !== 'stand'
+      const reach = asleep ? 0 : busyClip ? 0.5 : 1
+      const yaw = gazeAt.x * 0.5 * reach + Math.sin(time * 0.37) * 0.03 * reach
+      let pitch = -gazeAt.y * 0.35 * reach + Math.sin(time * 0.29 + 1) * 0.015 * reach
+      let roll = Math.sin(time * 0.53 + 2) * 0.02 * reach
+      if (speech && !asleep) {
+        const level = speechLevel ?? state.audioLevel
+        pitch += Math.min(1, level * 2) * 0.07 * Math.abs(Math.sin(time * 4.1)) + Math.sin(time * 2.3) * 0.015
+        roll += Math.sin(time * 1.3) * 0.025
+      }
+      if (state.current === 'thinking' && !asleep) {
+        roll += 0.12
+        pitch -= 0.05
+      }
+      const ease = Math.min(1, delta * 4)
+      headLayer.yaw += (yaw - headLayer.yaw) * ease
+      headLayer.pitch += (pitch - headLayer.pitch) * ease
+      headLayer.roll += (roll - headLayer.roll) * ease
+      // Поворот делится между шеей и головой: одна голова на неподвижной шее
+      // крутится как у совы.
+      addLayer(layerBones.neck, headLayer.pitch * 0.4, headLayer.yaw * 0.4, headLayer.roll * 0.4)
+      addLayer(layerBones.head, headLayer.pitch * 0.6, headLayer.yaw * 0.6, headLayer.roll * 0.6)
+    }
+
     const desiredYaw = baseYaw + (gesture === 'walk' ? facing * Math.PI * 0.38 : 0)
     vrm.scene.rotation.y += (desiredYaw - vrm.scene.rotation.y) * Math.min(1, delta * 7)
     vrm.scene.rotation.z = 0

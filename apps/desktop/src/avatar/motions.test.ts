@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {assignedMotion,isPoseClip} from './motions'
+import {assignedMotion,isPoseClip,pickMotion} from './motions'
 describe('authored motions',()=>{
   it('never substitutes a fake dance or seated pose when assets are absent',()=>{
     expect(assignedMotion('dance',['spin','greeting'],{})).toBeUndefined()
@@ -27,5 +27,19 @@ describe('pose or motion',()=>{
   it('falls back to duration when a clip reports no keyframes',()=>{
     expect(isPoseClip({duration:0.04,tracks:[]})).toBe(true)
     expect(isPoseClip({duration:9,tracks:[]})).toBe(false)
+  })
+})
+
+describe('variety',()=>{
+  const clips=['greeting','peace','NiziPoseSet__NZ_Pose01','_02_FREE_POSESET_Vol1_ver100__5_sit1a','TisyeFreePose__TisyeFree02']
+  it('never repeats the same clip twice in a row when there is a choice',()=>{
+    for(let i=0;i<20;i++) expect(pickMotion('wave',clips,{},'greeting')).toBe('peace')
+  })
+  it('finds poses by set name and keeps seated ones out of standing poses',()=>{
+    const seen=new Set(Array.from({length:40},(_,i)=>pickMotion('pose',clips,{},'',()=>i/40)))
+    expect(seen).toEqual(new Set(['NiziPoseSet__NZ_Pose01','TisyeFreePose__TisyeFree02']))
+  })
+  it('an explicit assignment wins over variety',()=>{
+    expect(pickMotion('wave',clips,{wave:'peace'},'peace')).toBe('peace')
   })
 })

@@ -124,6 +124,8 @@ export class CompanionBehavior {
     // Живой режим меняет занятия чаще, спокойный — реже.
     const pause = next === 'builtin:walk' ? 7 + this.random() * 8
       : next === 'builtin:stretch' || next === 'builtin:wave' ? 6
+      // Поза держится несколько секунд — дольше она превращается в статую.
+      : next === 'builtin:pose' ? 5 + this.random() * 5
       : next === 'builtin:sleep' ? 60
       : (playful ? 15 : 20) + this.random() * 20
     this.next = now + pause

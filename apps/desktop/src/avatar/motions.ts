@@ -1,10 +1,53 @@
-export const ACTIONS = [['fidget','Размяться'],['wave','Приветствие'],['sit','Сидение'],['stand','Покой'],['walk','Прогулка'],['dance','Танец'],['stretch','Потягивание'],['lie','Лежать'],['sleep','Сон']] as const
+export const ACTIONS = [['fidget','Размяться'],['wave','Приветствие'],['pose','Позировать'],['sit','Сидение'],['stand','Покой'],['walk','Прогулка'],['dance','Танец'],['stretch','Потягивание'],['lie','Лежать'],['sleep','Сон']] as const
 export type Action = typeof ACTIONS[number][0]
 export type MotionMap = Partial<Record<Action,string>>
-const defaults:Partial<Record<Action,string[]>>={wave:['greeting'],stand:['Arisa__NewIdle02','Arisa__NewIdle'],fidget:['showcase'],sit:['chair_sit__chair_sit'],walk:['Arisa__NewWalk'],dance:['Meme_Animation__Unwelcome School_dance','VRSuya_INTERNET_YAMERO_Released_260709__VRSuya_INTERNET_YAMERO']}
+
+/**
+ * Наборы клипов по умолчанию.
+ *
+ * У каждого действия несколько вариантов, а не один: персонаж, который
+ * двадцатый раз подряд машет одним и тем же жестом, выглядит заводной куклой.
+ * Порядок важен только для первого варианта — он же проверяется на наличие.
+ */
+const defaults:Partial<Record<Action,string[]>>={
+  wave:['greeting','peace','bn0010_hands_heart__bn0010_hands_heart'],
+  stand:['Arisa__NewIdle02','Arisa__NewIdle'],
+  fidget:['showcase','spin','squat','peace','shoot','Meme_Animation__kyofu_allback_step','Meme_Animation__INTERNET YAMERO_up_down'],
+  sit:['chair_sit__chair_sit'],
+  walk:['Arisa__NewWalk'],
+  dance:['Meme_Animation__Unwelcome School_dance','VRSuya_INTERNET_YAMERO_Released_260709__VRSuya_INTERNET_YAMERO','VRSuya_Loli_Kami_Requiem_Released_260709__VRSuya_Loli_Kami_Requiem','_AFK_うまぴょい__うまぴょい'],
+}
+
+/**
+ * Позы узнаются по имени набора: их в библиотеке десятки, и перечислять каждую
+ * вручную значит забыть новые. Сидячие позы сюда не входят — стоя «сидеть»
+ * в воздухе хуже, чем не позировать вовсе.
+ */
+const POSE_NAME=/(pose|stand\d|TisyeFree|kasa)/i
+const SEATED=/sit/i
+
+function pool(action:Action,clips:readonly string[]):string[] {
+  if(action==='pose') return clips.filter(name=>POSE_NAME.test(name)&&!SEATED.test(name))
+  return (defaults[action]??[]).filter(name=>clips.includes(name))
+}
+
+/** Какой клип отвечает за действие — для проверки, доступно ли оно вообще. */
 export function assignedMotion(action:Action,clips:readonly string[],map:MotionMap):string|undefined {
   if(Object.prototype.hasOwnProperty.call(map,action)) return clips.includes(map[action]||'')?map[action]:undefined
-  return defaults[action]?.find(name=>clips.includes(name))
+  return pool(action,clips)[0]
+}
+
+/**
+ * Какой клип сыграть сейчас: случайный из набора, но не тот, что был только что.
+ *
+ * Назначенный человеком клип — единственный: раз выбрал сам, подменять его
+ * разнообразием значит спорить с ним.
+ */
+export function pickMotion(action:Action,clips:readonly string[],map:MotionMap,last='',random:()=>number=Math.random):string|undefined {
+  if(Object.prototype.hasOwnProperty.call(map,action)) return assignedMotion(action,clips,map)
+  const options=pool(action,clips)
+  const fresh=options.length>1?options.filter(name=>name!==last):options
+  return fresh[Math.floor(random()*fresh.length)]
 }
 export function parseMotionMap(value:string|null):MotionMap {try{return JSON.parse(value||'{}') as MotionMap}catch{return {}}}
 export function motionLabel(name:string){return name.replace(/^.*?__/,'').replaceAll('_',' ')}

@@ -38,7 +38,7 @@ export function AvatarWindow() {
   const [clips, setClips] = useState<string[]>([])
   const [mapping, setMapping] = useState<MotionMap>({})
   const availableActions = useRef<string[]>(['builtin:stand'])
-  availableActions.current = (['stand','fidget','wave','sit','walk','dance','stretch','lie','sleep'] as Action[]).filter(action=>action==='stand'||!!assignedMotion(action,clips,mapping)).map(action=>`builtin:${action}`)
+  availableActions.current = (['stand','fidget','wave','pose','sit','walk','dance','stretch','lie','sleep'] as Action[]).filter(action=>action==='stand'||!!assignedMotion(action,clips,mapping)).map(action=>`builtin:${action}`)
   const dragging=useRef(false)
   /** Курсор в долях окна: нужен и взгляду, и выбору занятия. */
   const cursor=useRef<{x:number;y:number}|undefined>(undefined)
@@ -227,7 +227,16 @@ export function AvatarWindow() {
         // Персонаж встаёт: ехать в окне сидя или танцуя он не должен.
         brain.current.manual('builtin:stand',performance.now()/1000)
         sceneRef.current?.play('builtin:stand')
-        void avatarSetAnchor('free').then(()=>getCurrentWindow().startDragging()).catch(err=>setProblem(String(err))).finally(()=>{dragging.current=false})
+        // Подняли — удивилась, поставили — обрадовалась вниманию (VPet §7,
+        // разбор Desktop Mate §19): перенос это тоже взаимодействие, а не
+        // перемещение окна с картинкой.
+        const face=(names:string[])=>{const scene=sceneRef.current;const found=names.find(name=>scene?.hasExpression(name));if(found)scene?.play(`emotion:${found}`)}
+        face(['surprised','happy'])
+        void avatarSetAnchor('free').then(()=>getCurrentWindow().startDragging()).catch(err=>setProblem(String(err))).finally(()=>{
+          dragging.current=false
+          brain.current.touched(0.03)
+          face(['happy','relaxed'])
+        })
       }}
       onPointerUp={e=>{
         const start=press.current

@@ -13,7 +13,7 @@ import type { AvatarScene } from '../avatar/scene'
 import { assignedMotion,parseMotionMap,motionLabel,type Action,type MotionMap } from '../avatar/motions'
 import './Companion.css'
 
-const ACTIONS = [['fidget','Размяться'],['wave','Помахать'],['sit','Сесть'],['stand','Встать'],['walk','Прогуляться'],['dance','Танцевать'],['stretch','Потянуться'],['lie','Лечь'],['sleep','Поспать']] as const
+const ACTIONS = [['fidget','Размяться'],['wave','Помахать'],['pose','Позировать'],['sit','Сесть'],['stand','Встать'],['walk','Прогуляться'],['dance','Танцевать'],['stretch','Потянуться'],['lie','Лечь'],['sleep','Поспать']] as const
 const EXPRESSIONS = [['happy','Улыбка'],['surprised','Удивление'],['sad','Грусть'],['relaxed','Спокойствие']] as const
 
 export function Companion() {

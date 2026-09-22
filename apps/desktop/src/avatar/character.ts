@@ -153,6 +153,9 @@ export function rank(input: ChoiceInput): Choice[] {
     // От скуки тянет двигаться.
     'builtin:walk': v.boredom * 0.6 * (input.canWalk ? 1 : 0),
     'builtin:fidget': v.boredom * 0.45 + 0.15,
+    // Встать в позу — от скуки и хорошего настроения, охотнее, когда человек
+    // рядом и смотрит.
+    'builtin:pose': v.boredom * 0.35 + v.affection * 0.15 + cursor * 0.2,
     'builtin:stretch': v.boredom * 0.3 + (1 - v.energy) * 0.35,
     // Когда человека нет, персонаж устраивается поудобнее.
     'builtin:sit': (away ? 0.5 : 0.2) + (1 - v.energy) * 0.3,
