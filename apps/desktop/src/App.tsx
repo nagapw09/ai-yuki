@@ -31,7 +31,7 @@ import { Memory } from './screens/Memory'
 import { Onboarding } from './screens/Onboarding'
 import { Notes } from './screens/Notes'
 import { Orbital } from './screens/Orbital'
-import { Settings, Remote } from './screens/Settings'
+import { AiPage, SettingsPage, VoicePage } from './screens/Pages'
 import { useUiStore } from './state/store'
 import './App.css'
 
@@ -131,14 +131,14 @@ export function App() {
   // запереть человека в окне, которое ничем не управляется.
   return (
     <div className="app">
-      <div className="app__glow" aria-hidden="true" />
-      <TitleBar />
+      <TitleBar>
+        {onboarded?.done && <Tabs current={screen} onNavigate={setScreen} />}
+      </TitleBar>
 
       {onboarded === null ? (
         <div className="app__content" />
       ) : onboarded.done ? (
         <>
-          <Tabs current={screen} onNavigate={setScreen} />
           <div className="app__content">
             {screen === 'orbital' && (
               <Orbital onSubmit={handleSubmit} onToggleVoice={handleToggleVoice} />
@@ -149,9 +149,11 @@ export function App() {
             {screen === 'memory' && <Memory />}
             {screen === 'notes' && <Notes />}
             {screen === 'capabilities' && <Capabilities />}
-            {screen === 'settings' && <Settings />}
+            {screen === 'ai' && <AiPage />}
+            {screen === 'voice' && <VoicePage />}
+            {screen === 'settings' && <SettingsPage />}
             {screen === 'commands' && <Commands />}
-            {screen === 'telegram' && <div className="settings"><div className="settings__inner"><header><h1>Telegram</h1><p>Управление Yuki с телефона и состояние подключения.</p></header><Remote /><section className="settings__section"><h2>Telegram на компьютере</h2><p>Работа с вашим аккаунтом выполняется через установленный Telegram Desktop. Разрешите чтение интерфейса, управление вводом и доступ к файлам в настройках.</p><button className="settings__button" onClick={()=>handleSubmit('Найди открытое окно Telegram Desktop и прочитай его интерфейс. Ничего не отправляй.')}>Проверить доступ к Telegram Desktop</button></section></div></div>}
+            {screen === 'telegram' && <SettingsPage initial="connections" />}
           </div>
         </>
       ) : (

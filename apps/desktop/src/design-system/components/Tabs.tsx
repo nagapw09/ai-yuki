@@ -23,19 +23,25 @@ interface Entry {
 }
 
 const ENTRIES: Entry[] = [
-  { id: 'orbital', labelKey: 'rail.home', icon: <HomeIcon /> },
-  { id: 'chat', labelKey: 'rail.chat', icon: <ChatIcon /> },
-  { id: 'companion', labelKey: 'rail.companion', icon: <HomeIcon /> },
-  { id: 'commands', labelKey: 'rail.commands', icon: <CommandsIcon /> },
-  { id: 'telegram', labelKey: 'Telegram', icon: <ChatIcon /> },
-  { id: 'memory', labelKey: 'rail.memory', icon: <MemoryIcon /> },
-  // Заметок в составе навигации из ТЗ §13 нет: это осознанное дополнение
-  // из docs/GAPS.md §5 — без своего места заметки были бы доступны только
-  // через просьбу к модели.
-  { id: 'notes', labelKey: 'rail.notes', icon: <NotesIcon /> },
-  { id: 'activity', labelKey: 'rail.activity', icon: <ActivityIcon /> },
-  { id: 'settings', labelKey: 'rail.settings', icon: <SettingsIcon /> },
+  // Состав и порядок — как у Astra. Чат открывается кнопкой с главной, память
+  // и заметки живут в разделе «ИИ», журнал и Telegram — в настройках.
+  { id: 'orbital', labelKey: 'Главная', icon: <HomeIcon /> },
+  { id: 'commands', labelKey: 'Команды', icon: <CommandsIcon /> },
+  { id: 'ai', labelKey: 'ИИ', icon: <ChipIcon /> },
+  { id: 'voice', labelKey: 'Голос', icon: <MicIcon /> },
+  { id: 'companion', labelKey: 'Персонаж', icon: <PersonIcon /> },
+  { id: 'settings', labelKey: 'Настройки', icon: <SettingsIcon /> },
 ]
+
+/** Какой пункт подсветить: вложенные экраны принадлежат своему разделу. */
+const OWNER: Partial<Record<ScreenId, ScreenId>> = {
+  chat: 'orbital',
+  memory: 'ai',
+  notes: 'ai',
+  activity: 'settings',
+  telegram: 'settings',
+  capabilities: 'settings',
+}
 
 export interface TabsProps {
   current: ScreenId
@@ -54,7 +60,7 @@ export function Tabs({ current, onNavigate }: TabsProps) {
           className="tabs__item"
           title={t(entry.labelKey)}
           aria-label={t(entry.labelKey)}
-          aria-current={current === entry.id ? 'page' : undefined}
+          aria-current={(OWNER[current] ?? current) === entry.id ? 'page' : undefined}
           onClick={() => onNavigate(entry.id)}
         >
           {entry.icon}
@@ -75,60 +81,55 @@ const stroke = {
 
 function HomeIcon() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" {...stroke} />
-      <circle cx="12" cy="12" r="9" {...stroke} strokeDasharray="3 5" opacity="0.6" />
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" {...stroke} />
     </svg>
   )
 }
 
-function ChatIcon() {
+function ChipIcon() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H9l-5 4z" {...stroke} />
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="2" {...stroke} />
+      <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4" {...stroke} />
     </svg>
   )
 }
+
+function MicIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" {...stroke} />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" {...stroke} />
+    </svg>
+  )
+}
+
+function PersonIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="7" r="3.5" {...stroke} />
+      <path d="M5 21c.8-4 3.6-6.5 7-6.5s6.2 2.5 7 6.5" {...stroke} />
+    </svg>
+  )
+}
+
 
 function CommandsIcon() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M5 7l4 4-4 4" {...stroke} />
       <path d="M12 16h7" {...stroke} />
     </svg>
   )
 }
 
-function MemoryIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 4c3 0 5 2 5 4.5 0 1-.4 1.8-1 2.5.6.7 1 1.6 1 2.5C17 16 15 18 12 18s-5-2-5-4.5c0-.9.4-1.8 1-2.5-.6-.7-1-1.5-1-2.5C7 6 9 4 12 4z" {...stroke} />
-      <path d="M12 4v14" {...stroke} opacity="0.5" />
-    </svg>
-  )
-}
 
-function NotesIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" {...stroke} />
-      <path d="M14 3v5h5" {...stroke} />
-      <path d="M9 13h6M9 17h4" {...stroke} opacity="0.7" />
-    </svg>
-  )
-}
 
-function ActivityIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 12h4l3-7 4 14 3-7h4" {...stroke} />
-    </svg>
-  )
-}
 
 function SettingsIcon() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="3" {...stroke} />
       <path
         d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"

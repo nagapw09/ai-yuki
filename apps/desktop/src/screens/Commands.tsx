@@ -65,39 +65,46 @@ export function Commands() {
     }
   }
 
+  const shown = (kind: CommandRecord['triggerKind']) =>
+    commands.filter(c => c.triggerKind === kind && c.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+
+  // Раскладка Astra: слева список с переключателями, справа редактор с
+  // полотном на всю оставшуюся высоту. Отдельного списка карточек с кнопками
+  // «выполнить / изменить / выключить» больше нет — всё это в редакторе.
   return (
     <div className="commands">
-      <div className="commands__inner">
-        <header className="commands__header">
-          <div>
-            <h2 className="commands__title">Команды</h2>
-            <p className="commands__hint">
-              Выберите команду слева, настройте шаги и запустите её.
-            </p>
-          </div>
-          <div className="commands__actions-top">
-            <button
-              type="button"
-              className="commands__button"
-              onClick={() => setLibrary((open) => !open)}
-            >
-              {library ? 'Скрыть библиотеку' : 'Библиотека'}
-            </button>
-            <button type="button" className="commands__button" onClick={create}>
-              Новая команда
-            </button>
-          </div>
-        </header>
-
-        <div className="commands__workspace"><aside className="commands__sidebar">
-          <input className="commands__input" aria-label="Поиск команд" placeholder="Найти команду…" value={query} onChange={e=>setQuery(e.target.value)}/>
-          {(['phrase','hotkey','startup','manual'] as const).map(kind=>{
-            const group=commands.filter(c=>c.triggerKind===kind&&c.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-            return group.length>0&&<section key={kind}><h3>{TRIGGER_LABEL[kind]} <span>{group.length}</span></h3>{group.map(c=><div className="commands__nav-row" data-selected={editing?.id===c.id} key={c.id}><button onClick={()=>{setLibrary(false);setEditing(c)}}><strong>{c.name}</strong><small>{c.steps.length} шагов{c.hotkey?` · ${c.hotkey}`:''}</small></button><input type="checkbox" aria-label={`Включить ${c.name}`} checked={c.enabled} onChange={e=>void toggleEnabled(c,e.target.checked)}/></div>)}</section>
+      <aside className="commands__sidebar">
+        <div className="commands__side-head">
+          <h2>Команды</h2>
+          <button type="button" className="commands__icon" title="Готовые команды" aria-label="Готовые команды" data-active={library} onClick={() => setLibrary(open => !open)}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h6v14H4zM14 5h6v14h-6z" /></svg>
+          </button>
+          <button type="button" className="commands__icon commands__icon--primary" title="Новая команда" aria-label="Новая команда" onClick={create}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </div>
+        <input className="commands__input" aria-label="Поиск команд" placeholder="Поиск…" value={query} onChange={e => setQuery(e.target.value)} />
+        <div className="commands__groups">
+          {(['phrase', 'hotkey', 'startup', 'manual'] as const).map(kind => {
+            const group = shown(kind)
+            return group.length > 0 && <section key={kind}>
+              <h3><span>{TRIGGER_LABEL[kind]}</span><b>{group.length}</b></h3>
+              {group.map(c => <div className="commands__nav-row" data-selected={!library && editing?.id === c.id} key={c.id}>
+                <button onClick={() => { setLibrary(false); setEditing(c) }}>
+                  <strong>{c.name || 'Без названия'}</strong>
+                  <small>{c.triggerKind === 'phrase' && c.phrase ? `«${c.phrase}» · ` : c.hotkey ? `${c.hotkey} · ` : ''}{c.steps.length} действ.</small>
+                </button>
+                <input type="checkbox" role="switch" className="commands__switch" aria-label={`Включить ${c.name}`} checked={c.enabled} onChange={e => void toggleEnabled(c, e.target.checked)} />
+              </div>)}
+            </section>
           })}
-          {!commands.length&&<p className="commands__hint">Начните с готового примера в библиотеке.</p>}
-        </aside><main className="commands__detail">
-        {library && (
+          {!commands.length && <p className="commands__hint">Команд пока нет. Начните с готовой — кнопка слева от «+».</p>}
+        </div>
+      </aside>
+
+      <main className="commands__detail">
+        {error && <p className="commands__error">{error}</p>}
+        {library ? (
           <Library
             onPick={(template) => {
               setLibrary(false)
@@ -115,11 +122,7 @@ export function Commands() {
               })
             }}
           />
-        )}
-
-        {error && <p className="commands__error">{error}</p>}
-
-        {!library && (editing ? (
+        ) : editing ? (
           <Editor
             key={editing.id}
             command={editing}
@@ -129,31 +132,13 @@ export function Commands() {
             }}
           />
         ) : (
-          <div className="commands__list">
-            {commands.length === 0 && (
-              <Empty
-                title="Команд пока нет"
-                body="Команда — это записанная последовательность действий. Она выполняется мгновенно и без расхода токенов, потому что модель в ней не участвует."
-                action={
-                  <button type="button" className="commands__button" onClick={create}>
-                    Новая команда
-                  </button>
-                }
-              />
-            )}
-
-            {commands.map((command) => (
-              <Row
-                key={command.id}
-                command={command}
-                onEdit={() => setEditing(command)}
-                onChanged={reload}
-              />
-            ))}
-          </div>
-        ))}
-        </main></div>
-      </div>
+          <Empty
+            title="Команда не выбрана"
+            body="Команда — записанная последовательность действий. Выполняется мгновенно и без модели: скажите фразу или нажмите сочетание."
+            action={<button type="button" className="commands__button" onClick={create}>Новая команда</button>}
+          />
+        )}
+      </main>
     </div>
   )
 }
@@ -204,76 +189,6 @@ function Library({ onPick }: { onPick: (template: CommandTemplate) => void }) {
   )
 }
 
-function Row({
-  command,
-  onEdit,
-  onChanged,
-}: {
-  command: CommandRecord
-  onEdit: () => void
-  onChanged: () => Promise<void>
-}) {
-  // Ход выполнения виден в чате, но переключать туда экран по нажатию кнопки
-  // на этом же экране — значит уносить пользователя оттуда, где он работает.
-  // Поэтому итог показывается здесь же.
-  const [note, setNote] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const run = () => {
-    setBusy(true)
-    setNote(null)
-    void runById(command.id)
-      .then((outcome) =>
-        setNote(
-          outcome.ok
-            ? `выполнено, шагов: ${outcome.executed}`
-            : (outcome.error ?? 'не выполнено'),
-        ),
-      )
-      .finally(() => setBusy(false))
-  }
-
-  return (
-    <div className="command" data-enabled={command.enabled}>
-      <div className="command__head">
-        <span className="command__name">{command.name}</span>
-        <span className="command__trigger">
-          {TRIGGER_LABEL[command.triggerKind]}
-          {command.triggerKind === 'phrase' && command.phrase ? `: «${command.phrase}»` : ''}
-          {command.triggerKind === 'hotkey' && command.hotkey ? `: ${command.hotkey}` : ''}
-        </span>
-        <span className="command__steps">шагов: {command.steps.length}</span>
-      </div>
-
-      <div className="command__actions">
-        <button type="button" className="commands__link" disabled={busy} onClick={run}>
-          {busy ? 'выполняю…' : 'выполнить'}
-        </button>
-        <button type="button" className="commands__link" onClick={onEdit}>
-          изменить
-        </button>
-        <button
-          type="button"
-          className="commands__link"
-          onClick={() =>
-            void commandSave({ ...command, enabled: !command.enabled }).then(onChanged)
-          }
-        >
-          {command.enabled ? 'выключить' : 'включить'}
-        </button>
-        <button
-          type="button"
-          className="commands__link commands__link--danger"
-          onClick={() => void commandDelete(command.id).then(onChanged)}
-        >
-          удалить
-        </button>
-        {note && <span className="command__note">{note}</span>}
-      </div>
-    </div>
-  )
-}
-
 function Editor({
   command,
   onCancel,
@@ -315,97 +230,98 @@ function Editor({
       .catch((e: unknown) => setNote(describe(e)))
   }
 
+  const run = () => {
+    setRunning(true)
+    setNote(null)
+    void commandSave(draft)
+      .then(() => runById(draft.id))
+      .then(result => {
+        setNote(result.ok ? `Выполнено действий: ${result.executed}` : result.error || 'Не выполнено')
+        return onSaved()
+      })
+      .catch(e => setNote(describe(e)))
+      .finally(() => setRunning(false))
+  }
+
   return (
     <div className="editor">
-      <div className="editor__toolbar"><span>Редактор команды</span><div><button className="commands__button" disabled={running||!draft.name.trim()||!draft.steps.length} onClick={()=>{setRunning(true);setNote(null);void commandSave(draft).then(()=>runById(draft.id)).then(result=>{setNote(result.ok?`Выполнено шагов: ${result.executed}`:result.error||'Не выполнено');return onSaved()}).catch(e=>setNote(describe(e))).finally(()=>setRunning(false))}}>{running?'Выполняется…':'▷ Запустить'}</button><button className="commands__link commands__link--danger" disabled={running} onClick={()=>void commandDelete(draft.id).then(()=>{onCancel();return onSaved()}).catch(e=>setNote(describe(e)))}>Удалить</button></div></div>
-      <div className="editor__row">
+      <div className="editor__head">
         <input
-          className="commands__input"
+          className="commands__input editor__name"
+          aria-label="Название команды"
           value={draft.name}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           placeholder="Название команды"
         />
+        <button type="button" className="commands__button commands__button--go" disabled={running || !draft.name.trim() || !draft.steps.length} onClick={run}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+          {running ? 'Выполняется…' : 'Запустить'}
+        </button>
+        <button type="button" className="commands__button" disabled={draft.name.trim() === ''} onClick={save}>Сохранить</button>
+        <button type="button" className="commands__icon commands__icon--danger" title="Удалить команду" aria-label="Удалить команду" disabled={running} onClick={() => void commandDelete(draft.id).then(() => { onCancel(); return onSaved() }).catch(e => setNote(describe(e)))}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /></svg>
+        </button>
+      </div>
+
+      <div className="editor__bar">
         <select
           className="commands__input"
+          aria-label="Когда запускать"
           value={draft.triggerKind}
           onChange={(e) =>
             setDraft({ ...draft, triggerKind: e.target.value as CommandRecord['triggerKind'] })
           }
         >
-          <option value="phrase">Запуск по фразе</option>
-          <option value="hotkey">Запуск по сочетанию</option>
+          <option value="phrase">По фразе</option>
+          <option value="hotkey">По сочетанию</option>
           <option value="startup">При запуске Yuki</option>
           <option value="manual">Только вручную</option>
         </select>
-      </div>
-
-      {draft.triggerKind === 'phrase' && (
-        <input
-          className="commands__input"
-          value={draft.phrase ?? ''}
-          onChange={(e) => setDraft({ ...draft, phrase: e.target.value })}
-          placeholder="Фраза, например «рабочий режим»"
-        />
-      )}
-
-      {draft.triggerKind === 'hotkey' && (
-        <input
-          className="commands__input"
-          value={draft.hotkey ?? ''}
-          onChange={(e) => setDraft({ ...draft, hotkey: e.target.value })}
-          placeholder="Сочетание, например Ctrl+Alt+W"
-          spellCheck={false}
-        />
-      )}
-
-      <div className="editor__views">
-        <button
-          type="button"
-          className="commands__button"
-          data-active={view === 'canvas'}
-          onClick={() => setView('canvas')}
-        >
-          Полотно
-        </button>
-        <button
-          type="button"
-          className="commands__button"
-          data-active={view === 'list'}
-          onClick={() => setView('list')}
-        >
-          Список
-        </button>
-      </div>
-
-      {view === 'canvas' ? (
-        <CommandCanvas
-          steps={draft.steps as Step[]}
-          trigger={triggerOf(draft)}
-          tools={tools}
-          onChange={(steps) => setDraft({ ...draft, steps: steps as Step[] })}
-        />
-      ) : (
-        <StepList
-          steps={draft.steps as Step[]}
-          tools={tools}
-          depth={0}
-          onChange={(steps) => setDraft({ ...draft, steps })}
-        />
-      )}
-
-      <div className="command__actions">
-        <button
-          type="button"
-          className="commands__button"
-          disabled={draft.name.trim() === ''}
-          onClick={save}
-        >
-          Сохранить
-        </button>
-        <button type="button" className="commands__link" onClick={onCancel}>
-          отмена
-        </button>
+        {draft.triggerKind === 'phrase' && (
+          <input
+            className="commands__input"
+            aria-label="Фраза"
+            value={draft.phrase ?? ''}
+            onChange={(e) => setDraft({ ...draft, phrase: e.target.value })}
+            placeholder="Фраза, например «рабочий режим»"
+          />
+        )}
+        {draft.triggerKind === 'hotkey' && (
+          <input
+            className="commands__input"
+            aria-label="Сочетание клавиш"
+            value={draft.hotkey ?? ''}
+            onChange={(e) => setDraft({ ...draft, hotkey: e.target.value })}
+            placeholder="Например Ctrl+Alt+W"
+            spellCheck={false}
+          />
+        )}
+        <span className="editor__spacer" />
         {note && <span className="command__note">{note}</span>}
+        <div className="editor__views" role="group" aria-label="Вид">
+          <button type="button" data-active={view === 'canvas'} onClick={() => setView('canvas')}>Полотно</button>
+          <button type="button" data-active={view === 'list'} onClick={() => setView('list')}>Список</button>
+        </div>
+      </div>
+
+      <div className="editor__stage">
+        {view === 'canvas' ? (
+          <CommandCanvas
+            steps={draft.steps as Step[]}
+            trigger={triggerOf(draft)}
+            tools={tools}
+            onChange={(steps) => setDraft({ ...draft, steps: steps as Step[] })}
+          />
+        ) : (
+          <div className="editor__list">
+            <StepList
+              steps={draft.steps as Step[]}
+              tools={tools}
+              depth={0}
+              onChange={(steps) => setDraft({ ...draft, steps })}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

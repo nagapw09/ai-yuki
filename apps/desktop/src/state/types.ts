@@ -15,6 +15,10 @@ export type ScreenId =
   | 'chat'
   | 'companion'
   | 'commands'
+  /** Модель, характер, память и заметки. */
+  | 'ai'
+  /** Обращение, распознавание и голос. */
+  | 'voice'
   | 'telegram'
   | 'memory'
   /** Заметки. В ТЗ раздела нет — см. docs/GAPS.md §5. */

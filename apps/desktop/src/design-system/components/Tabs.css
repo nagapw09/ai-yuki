@@ -1,40 +1,36 @@
-/* Горизонтальная навигация вместо боковой рейки.
-
-   Боковая занимала 190 px ширины на всех экранах ради девяти строк, которые
-   читают один раз. Наверху те же девять пунктов стоят 44 px высоты, и экрану
-   остаётся вся ширина окна. */
-.tabs {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 6px 20px 0;
-  position: relative;
-  z-index: 1;
-}
+/* Разделы в строке заголовка. Текущий подчёркнут короткой чертой акцента. */
+.tabs { display: flex; align-items: center; gap: 2px; }
 .tabs__item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 12px 11px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
   color: var(--text-muted);
   white-space: nowrap;
-  transition: color 180ms, border-color 180ms;
+  transition: color var(--duration-fast);
 }
-.tabs__item svg { flex-shrink: 0; width: 15px; height: 15px; }
-.tabs__item:hover { color: var(--text-secondary); }
-.tabs__item[aria-current] { color: var(--text-primary); border-bottom-color: var(--text-primary); }
-.tabs__item[aria-current] svg { color: var(--accent-cool); }
+.tabs__item svg { flex-shrink: 0; }
+.tabs__item:hover { color: var(--text-primary); }
+.tabs__item[aria-current] { color: var(--text-primary); }
+.tabs__item[aria-current]::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 18px;
+  height: 2px;
+  margin-left: -9px;
+  border-radius: 2px;
+  background: var(--accent-cool);
+}
 
-/* Узкое окно: подписи уходят у всего, кроме текущего раздела — иначе строка
-   переносится и съедает высоту, ради которой её и подняли наверх. */
-@media(max-width: 1080px) {
+/* Узкое окно: подписи уходят у всего, кроме текущего раздела. */
+@media (max-width: 960px) {
   .tabs__item span { display: none; }
   .tabs__item[aria-current] span { display: inline; }
-  .tabs__item { padding: 9px 10px 11px; }
+  .tabs__item { padding: 8px 9px; }
 }

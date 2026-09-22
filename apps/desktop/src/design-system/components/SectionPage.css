@@ -1,0 +1,97 @@
+/* Страница с подразделами: слева список, справа карточки выбранного. */
+.section-page {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 16px;
+  height: 100%;
+  padding: 8px 16px 0;
+  box-sizing: border-box;
+}
+
+.section-page__side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+  min-height: 0;
+}
+
+.section-page__side > button {
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  transition: color var(--duration-fast), background var(--duration-fast);
+}
+
+.section-page__side > button:hover { color: var(--text-primary); }
+.section-page__side > button[aria-current] { background: var(--surface-overlay); color: var(--text-primary); }
+
+.section-page__footer {
+  margin-top: auto;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.section-page__body {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 4px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-page__title {
+  margin: 0 0 2px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/*
+  Разделы настроек — карточками.
+
+  Сами блоки написаны формами с длинными пояснениями; здесь они получают
+  рамку, воздух и приглушённые подписи, чтобы читались как отдельные карточки,
+  а не как сплошной текст.
+*/
+.section-page__body .settings__section {
+  background: var(--surface-base);
+  border: 1px solid var(--line-subtle);
+  border-radius: 16px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-page__body .settings__section .settings__title,
+.section-page__body .settings__section h2,
+.section-page__body .settings__section h3 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.section-page__body .settings__section .settings__hint {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: none;
+}
+
+.section-page__body .settings__header { display: none; }
+
+/* Экраны, которые раньше жили отдельно (память, заметки, журнал), встают
+   сюда целиком: у них своя разметка, но без собственных полей и высоты. */
+.section-page__embed { min-height: 0; }
+.section-page__embed > * { height: auto !important; padding: 0 !important; overflow: visible !important; }
+
+.section-page__link { color: var(--accent-cool); font-size: inherit; padding: 0; }
+.section-page__link:hover { text-decoration: underline; }

@@ -13,50 +13,26 @@
  */
 
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 import { isTauri } from '../../bridge'
-import { useI18n, useT } from '../../i18n'
+import { useT } from '../../i18n'
 import { useUiStore } from '../../state/store'
 import './TitleBar.css'
 
-export function TitleBar() {
+export function TitleBar({ children }: { children?: ReactNode }) {
   const t = useT()
-  const { locale } = useI18n()
-  const connection = useUiStore((s) => s.connection)
-  const setScreen = useUiStore((s) => s.setScreen)
   const name = useUiStore((s) => s.assistantName)
-  const now = useClock()
 
-  const time = new Intl.DateTimeFormat(locale, {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(now)
-
+  // Навигация живёт в строке заголовка, как у Astra: отдельная строка вкладок
+  // съедала 44 px высоты окна, которому и так мало места.
   return (
     <header className="titlebar" onPointerDown={event=>{if(event.button===0&&!(event.target as HTMLElement).closest('button')&&isTauri())void getCurrentWindow().startDragging().catch(console.warn)}} onDoubleClick={event=>{if(!(event.target as HTMLElement).closest('button')&&isTauri())void getCurrentWindow().toggleMaximize().catch(console.warn)}}>
       <span className="titlebar__mark">
+        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" /></svg>
         {name || t('app.name')}
       </span>
-
-      <span className="titlebar__spacer" />
-
-      <time className="titlebar__clock">
-        {time}
-      </time>
-
-      {/* Состояние провайдера — кнопка, а не надпись: единственное разумное
-          действие при «не настроен» это пойти и настроить. */}
-      <button
-        type="button"
-        className="titlebar__status"
-        data-online={connection.online || undefined}
-        onClick={() => setScreen('settings')}
-      >
-        <span className="titlebar__dot" />
-        {connection.online ? connection.providerLabel : t('status.offline')}
-      </button>
-
+      <div className="titlebar__nav">{children}</div>
       <WindowButtons />
     </header>
   )
@@ -131,30 +107,4 @@ function WindowButtons() {
       </button>
     </div>
   )
-}
-
-/**
- * Часы, обновляющиеся на границе минуты.
- *
- * Тикать раз в секунду ради часов и минут — значит будить рендер шестьдесят
- * раз впустую, а бюджет простоя задан в ТЗ §37.
- */
-function useClock(): Date {
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>
-
-    const schedule = () => {
-      timer = setTimeout(() => {
-        setNow(new Date())
-        schedule()
-      }, 60_000 - (Date.now() % 60_000))
-    }
-
-    schedule()
-    return () => clearTimeout(timer)
-  }, [])
-
-  return now
 }

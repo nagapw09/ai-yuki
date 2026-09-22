@@ -114,7 +114,7 @@
   /* ── Типографика ──────────────────────────────────────────────────────────
      Системный стек: на Windows и macOS он даёт родной для платформы гротеск
      без единого сетевого запроса, что важно для startup из ТЗ §37. */
-  --font-sans: 'Avenir Next', 'Bahnschrift', 'Segoe UI Variable Text',
+  --font-sans: 'Onest Variable', 'Segoe UI Variable Text',
     'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
 

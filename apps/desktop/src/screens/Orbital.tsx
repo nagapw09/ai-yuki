@@ -13,7 +13,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import {
   isTauri, mediaControl, mediaNowPlaying, providerList, ratesGet, reminderCreate, reminderDelete,
-  reminderList, settingGet, settingSet, weatherGet,
+  reminderList, settingGet, settingSet, wakeStatus, weatherGet,
   type NowPlaying, type ProviderRecord, type Rates, type Reminder, type Weather,
 } from '../bridge'
 import { useUiStore } from '../state/store'
@@ -32,7 +32,11 @@ export function Orbital({ onToggleVoice }: OrbitalProps) {
   const [providers,setProviders]=useState<ProviderRecord[]>([])
   const [error,setError]=useState('')
 
+  const [wakeMissing,setWakeMissing]=useState(false)
   useEffect(()=>{if(isTauri())void providerList().then(setProviders).catch(()=>undefined)},[])
+  // Без записанного обращения Yuki отзывается и на чужой разговор — это главная
+  // причина ложных срабатываний, поэтому подсказка стоит прямо на главной.
+  useEffect(()=>{if(isTauri())void wakeStatus().then(w=>setWakeMissing(!w.enrolled||!!w.legacy)).catch(()=>undefined)},[])
   useEffect(()=>{
     let dead=false,busy=false
     async function refresh(){if(!isTauri()||busy||document.hidden||document.documentElement.dataset.paused)return;busy=true;try{const data=await invoke<Metrics>('system_metrics');if(!dead)setMetrics(data)}catch{/* счётчики подождут следующей секунды */}finally{busy=false}}
@@ -43,7 +47,7 @@ export function Orbital({ onToggleVoice }: OrbitalProps) {
   // Показываем каждый адаптер: на ноутбуке их два, и одно число без имени не с
   // чем сравнить в диспетчере задач.
   const gpus=metrics?.gpus??[]
-  const state=headline||(voiceActive?'Слушаю вас':'Ваш ИИ-компаньон на рабочем столе')
+  const state=headline||(voiceActive?'Скажите «Юки» — я слушаю':'Ваш голосовой помощник на рабочем столе')
 
   return <div className="home">
     <aside className="home__side">
@@ -53,7 +57,7 @@ export function Orbital({ onToggleVoice }: OrbitalProps) {
 
     <section className="home__center">
       <h1 className="home__mark">{assistantName||'Yuki'}<i aria-hidden="true">✦</i></h1>
-      <p className="home__tagline" data-live={voiceActive||undefined}>{state}</p>
+      <p className="home__tagline" data-live={voiceActive||undefined}>{voiceActive&&<i aria-hidden="true"/>}{state}</p>
       <div className="home__actions">
         <button onClick={()=>setScreen('chat')}><ChatIcon/>Чат</button>
         <button className={voiceActive?'home__primary':undefined} onClick={onToggleVoice}><MicIcon/>{voiceActive?'Стоп':'Запуск'}</button>
@@ -71,6 +75,7 @@ export function Orbital({ onToggleVoice }: OrbitalProps) {
         :<Gauge label="GPU" value={metrics?.gpu??null} note={metrics?.gpuName?shortGpu(metrics.gpuName):undefined}/>}
     </aside>
 
+    {wakeMissing&&<button className="home__wake" onClick={()=>setScreen('voice')}>Обращение «Юки» не записано — записать</button>}
     <QuickRow onError={setError}/>
   </div>
 }

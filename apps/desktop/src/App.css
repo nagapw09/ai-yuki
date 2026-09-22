@@ -9,63 +9,32 @@
   и ронять её ради красоты нельзя.
 */
 
+/*
+  Оболочка: строка заголовка с разделами и экран под ней.
+
+  Фон плоский. Раньше под интерфейсом медленно дрейфовали световые пятна и
+  лежал шум — у фонового помощника это постоянная работа композитора ради
+  украшения, которого за окном с делами никто не видит.
+*/
 .app {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 48px auto minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
-  background: var(--surface-base);
+  background: var(--surface-abyss);
 }
 
+.app > .titlebar { grid-row: 1; z-index: 2; }
+
 .app__content {
-  grid-column: 1 / -1;
-  grid-row: 3;
-  flex: 1;
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
-.app__glow {
-  position: absolute;
-  inset: -20%;
-  pointer-events: none;
-  background:
-    radial-gradient(38% 32% at 32% 26%, rgb(108 92 231 / 16%), transparent 70%),
-    radial-gradient(34% 30% at 72% 64%, rgb(127 209 255 / 11%), transparent 70%),
-    radial-gradient(50% 40% at 50% 108%, rgb(94 234 212 / 7%), transparent 70%);
-  animation: app-drift 48s ease-in-out infinite alternate;
-}
-
-@keyframes app-drift {
-  from {
-    transform: translate3d(-1.5%, -1%, 0) scale(1);
-  }
-  to {
-    transform: translate3d(2%, 1.5%, 0) scale(1.08);
-  }
-}
-
-/*
-  Зернистость поверх градиентов. На тёмных плавных переходах WebView2 и WKWebView
-  дают заметный бэндинг — тонкий шум его разбивает.
-*/
-.app::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-.app > .titlebar { grid-column: 1 / -1; grid-row: 1; height: 48px; z-index: 2; background: var(--surface-abyss); padding-left: 28px; }
-.titlebar__mark { font-size: 18px; letter-spacing: .17em; color: var(--text-primary); font-weight: 500; }
-.titlebar__mark::before { content: '✳'; color: var(--accent-cool); font-size: 23px; margin-right: 12px; }
-.titlebar__status { font-size: 10px; border: 0; }
-.app:not(:has(.tabs)) .app__content { grid-row: 2 / -1; }
-.app__glow { animation: none; background: radial-gradient(ellipse at 58% 40%, #a69ccc06, transparent 48%); }
 .setup-field { display: flex; flex-direction: column; gap: 7px; flex: 1; min-width: 0; font-size: 11px; color: var(--text-secondary); margin: 12px 0; }
 .setup-field .settings__input { width: 100%; }
 .cli-help { padding: 18px; border: 1px solid var(--line-default); border-radius: 10px; margin: 14px 0; background: var(--glass-bg); color: var(--text-secondary); font-size: 12px; line-height: 1.65; }

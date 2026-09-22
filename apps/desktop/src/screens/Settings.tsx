@@ -100,7 +100,6 @@ import {
   type VoiceStatus as VoiceStatusRecord,
 } from '../bridge'
 import './Settings.css'
-import { VoiceSetup } from './VoiceSetup'
 import { CliHelp, isCli } from './CliHelp'
 
 /** Подписи категорий разрешений из ТЗ §21. */
@@ -117,42 +116,6 @@ const PERMISSION_LABEL: Record<string, string> = {
   external_services: 'Внешние сервисы',
 }
 
-export function Settings() {
-  return (
-    <div className="settings">
-      <div className="settings__inner">
-        <Providers />
-        <LocalSpeech />
-        <VoiceSetup />
-        <Voice />
-        <WakeWord />
-        <SettingsGroup title="Озвучивание ответов" hint="Системный или внешний голос">
-          <Speech />
-        </SettingsGroup>
-        <SettingsGroup title="Характер и внешний вид" hint="Имя, манера общения, тема и аватар">
-          <Character /><Appearance /><PersonaSection /><Avatar />
-        </SettingsGroup>
-        <SettingsGroup title="Приватность и разрешения" hint="Что Yuki может делать и какие данные отправляет в сеть">
-          <Privacy /><Permissions />
-        </SettingsGroup>
-        <SettingsGroup title="Интеграции" hint="Возможности, календарь, Telegram и повседневные сервисы">
-          <CapabilitiesEntry /><Everyday /><Calendar /><Remote />
-        </SettingsGroup>
-        <SettingsGroup title="Приложение и данные" hint="Горячая клавиша, фоновый режим, перенос настроек">
-          <Hotkey /><Background /><SystemSection /><Updates /><DataTransfer />
-        </SettingsGroup>
-      </div>
-    </div>
-  )
-}
-
-function SettingsGroup({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  return <details className="settings__group" onToggle={e => setOpen(e.currentTarget.open)}>
-    <summary><span>{title}</span><small>{hint}</small></summary>
-    {open && <div className="settings__group-body">{children}</div>}
-  </details>
-}
 
 // ── Персонаж (ТЗ §11) ───────────────────────────────────────────────────────────
 
@@ -168,7 +131,7 @@ function SettingsGroup({ title, hint, children }: { title: string; hint: string;
  * Профиль — снимок настроек целиком, а не список ссылок на них: иначе профиль,
  * сделанный полгода назад, менялся бы сам вслед за появлением новых настроек.
  */
-function Character() {
+export function Character() {
   const storedName = useUiStore((s) => s.assistantName)
   const setAssistantName = useUiStore((s) => s.setAssistantName)
 
@@ -568,7 +531,7 @@ export function Remote() {
 
 // ── Вход в Capability Hub (ТЗ §17) ──────────────────────────────────────────────
 
-function CapabilitiesEntry() {
+export function CapabilitiesEntry() {
   const setScreen = useUiStore((s) => s.setScreen)
 
   return (
@@ -601,7 +564,7 @@ function CapabilitiesEntry() {
  * комнату целиком и платить за это. Локальный движок снимает оба возражения, и
  * ключ ему не нужен. Цена — разовая загрузка модели.
  */
-function LocalSpeech() {
+export function LocalSpeech() {
   const [status, setStatus] = useState<LocalSpeechStatus | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ what: string; downloaded: number; total: number } | null>(null)
@@ -731,7 +694,7 @@ function LocalSpeech() {
 
 // ── Голос (ТЗ §10) ──────────────────────────────────────────────────────────────
 
-function Voice() {
+export function Voice() {
   const [status, setStatus] = useState<VoiceStatusRecord | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [always, setAlways] = useState(false)
@@ -836,7 +799,7 @@ function Voice() {
  * громкость и открывает рот ровно на звуке. Голос при этом выбирает человек:
  * GPT-SoVITS клонирует его по короткому образцу.
  */
-function Speech() {
+export function Speech() {
   const [status, setStatus] = useState<VoiceStatusRecord | null>(null)
   const [url, setUrl] = useState('')
   const [samples, setSamples] = useState('')
@@ -1066,7 +1029,7 @@ function Speech() {
  * выдерживается. С образцами обращение узнаётся локально и по звуку,
  * а фразы без обращения вообще не уходят на распознавание.
  */
-function WakeWord() {
+export function WakeWord() {
   const [status, setStatus] = useState<WakeStatus | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -1185,7 +1148,7 @@ function WakeWord() {
  * через браузер. Вшить учётные данные в открытое приложение нельзя —
  * они мгновенно перестают быть его учётными данными.
  */
-function Calendar() {
+export function Calendar() {
   const [accounts, setAccounts] = useState<CalendarAccount[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -1339,7 +1302,7 @@ function CalendarRow({
  * в дистрибутив нельзя. Без модели окно всё равно работает и показывает
  * те же восемь состояний свечением.
  */
-function Avatar() {
+export function Avatar() {
   const [status, setStatus] = useState<AvatarStatus | null>(null)
   const [model, setModel] = useState('')
   const [folder, setFolder] = useState('')
@@ -1646,7 +1609,7 @@ function shortcutFromEvent(event: React.KeyboardEvent): string | null {
   return parts.join('+')
 }
 
-function Hotkey() {
+export function Hotkey() {
   const [shortcut, setShortcut] = useState('')
   const [capturing, setCapturing] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
@@ -1729,7 +1692,7 @@ const THEMES: { value: ThemeMode; label: string }[] = [
  * Тёмная — база из ТЗ §13, а не один из двух равноправных вариантов:
  * светлая существует для тех, кому тёмный интерфейс физически тяжёл.
  */
-function Appearance() {
+export function Appearance() {
   const [theme, setThemeState] = useState<ThemeMode>('dark')
 
   useEffect(() => {
@@ -1786,7 +1749,7 @@ const VERBOSITY = ['кратко', 'обычно', 'подробно']
  * «не рапортовать о невыполненном» — это не черта характера, которую можно
  * выключить ползунком.
  */
-function PersonaSection() {
+export function PersonaSection() {
   const [persona, setPersona] = useState<Persona | null>(null)
   const [preview, setPreview] = useState('')
   const [note, setNote] = useState<string | null>(null)
@@ -1905,7 +1868,7 @@ function PersonaSection() {
  * Город спрашивается, а не определяется по IP: геолокация по адресу — это
  * отправка данных о местонахождении туда, куда человек её не просил отправлять.
  */
-function Everyday() {
+export function Everyday() {
   const [city, setCity] = useState('')
   const [base, setBase] = useState('USD')
   const [rates, setRates] = useState<Rates | null>(null)
@@ -1986,7 +1949,7 @@ function Everyday() {
  * ошибка настройки, а блокировка запросов, и человек должен видеть это
  * до того, как получит отказ в ответ на реплику.
  */
-function Privacy() {
+export function Privacy() {
   const [status, setStatus] = useState<PrivacyStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -2064,7 +2027,7 @@ function Privacy() {
 
 // ── Провайдеры (ТЗ §4) ────────────────────────────────────────────────────
 
-function Providers() {
+export function Providers() {
   const [providers, setProviders] = useState<ProviderRecord[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -2280,7 +2243,7 @@ function ProviderRow({
 
 // ── Разрешения (ТЗ §21) ─────────────────────────────────────────────────────────
 
-function Permissions() {
+export function Permissions() {
   const [rows, setRows] = useState<PermissionStatus[]>([])
   const [hints, setHints] = useState<Record<string, string>>({})
 
@@ -2344,7 +2307,7 @@ function Permissions() {
  * когда на него смотрят. Поэтому умолчание — прятаться в трей, а
  * полный выход живёт в меню трея, где его видно.
  */
-function Background() {
+export function Background() {
   const [status, setStatus] = useState<BackgroundStatus | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -2426,7 +2389,7 @@ function Background() {
  * Список требований, который негде сверить, читают один раз и забывают,
  * поэтому он сравнивается с настоящей машиной здесь же.
  */
-function SystemSection() {
+export function SystemSection() {
   const [report, setReport] = useState<RequirementsReport | null>(null)
   const [note, setNote] = useState<string | null>(null)
 
@@ -2484,7 +2447,7 @@ function SystemSection() {
  * кнопку, которая молча ничего не делает: обновления — это право
  * запускать код на чужой машине, и без подписи оно выключено целиком.
  */
-function Updates() {
+export function Updates() {
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [found, setFound] = useState<AvailableUpdate | null>(null)
   const [note, setNote] = useState<string | null>(null)
@@ -2577,7 +2540,7 @@ function Updates() {
  * перенос, после которого половина возможностей молча не работает, хуже
  * отсутствия переноса.
  */
-function DataTransfer() {
+export function DataTransfer() {
   const [summary, setSummary] = useState<BackupSummary | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)

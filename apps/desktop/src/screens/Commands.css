@@ -331,3 +331,53 @@
 @media(max-width:950px) {.commands__workspace{grid-template-columns:175px minmax(0,1fr);gap:12px}.commands__sidebar{padding:10px}.editor__row{flex-wrap:wrap}}
 @media(max-width:720px) {.commands__workspace{grid-template-columns:1fr}.commands__sidebar{max-height:190px}}
 
+
+/* ── Выпуск 0.4: раскладка Astra ───────────────────────────────────────────────
+   Две карточки на всю высоту окна: список слева, редактор справа. Полотно
+   занимает всё, что осталось под строкой названия, — раньше оно было окном
+   фиксированной высоты посреди прокручиваемой страницы. */
+.commands{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;padding:6px 16px 16px;overflow:hidden;box-sizing:border-box}
+.commands__sidebar{display:flex;flex-direction:column;gap:10px;min-height:0;max-height:none;padding:12px 10px;background:var(--surface-base);border:1px solid var(--line-subtle);border-radius:16px;overflow:hidden}
+.commands__side-head{display:flex;align-items:center;gap:4px;padding:0 4px}
+.commands__side-head h2{flex:1;margin:0;font-size:15px;font-weight:600}
+.commands__icon{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;color:var(--text-secondary);border:1px solid transparent;transition:background var(--duration-fast),color var(--duration-fast)}
+.commands__icon:hover,.commands__icon[data-active=true]{background:var(--surface-overlay);color:var(--text-primary)}
+.commands__icon--primary{border-radius:50%;background:var(--accent-cool);color:#16121f}
+.commands__icon--primary:hover{background:color-mix(in srgb,var(--accent-cool) 85%,white);color:#16121f}
+.commands__icon--danger{width:40px;height:40px;border-radius:10px;color:var(--accent-error);background:color-mix(in srgb,var(--accent-error) 8%,transparent);border-color:color-mix(in srgb,var(--accent-error) 30%,transparent)}
+.commands__icon--danger:hover{background:color-mix(in srgb,var(--accent-error) 16%,transparent);color:var(--accent-error)}
+.commands__groups{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.commands__groups h3{display:flex;align-items:center;margin:8px 8px 2px;font-size:12.5px;font-weight:600;color:var(--text-secondary)}
+.commands__groups h3 span{flex:1}
+.commands__groups h3 span::first-letter{text-transform:uppercase}
+.commands__groups h3 b{font-weight:500;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--surface-overlay);color:var(--text-muted)}
+.commands__nav-row{padding:6px 8px 6px 10px;border-radius:10px}
+.commands__nav-row[data-selected=true]{background:var(--surface-overlay)}
+.commands__nav-row>button{flex:1;min-width:0;text-align:left;display:flex;flex-direction:column;gap:1px}
+.commands__nav-row strong{font-size:13.5px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.commands__nav-row small{font-size:11.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.commands__switch{appearance:none;flex-shrink:0;width:34px;height:20px;border-radius:999px;background:var(--surface-overlay);position:relative;cursor:pointer;transition:background var(--duration-fast)}
+.commands__switch::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--text-muted);transition:left var(--duration-fast),background var(--duration-fast)}
+.commands__switch:checked{background:var(--accent-cool)}
+.commands__switch:checked::after{left:17px;background:#16121f}
+.commands__switch:focus-visible{outline:2px solid var(--accent-cool);outline-offset:2px}
+
+.commands__detail{min-width:0;min-height:0;display:flex;flex-direction:column}
+.commands__detail>.commands__library,.commands__detail>.empty{background:var(--surface-base);border:1px solid var(--line-subtle);border-radius:16px;padding:18px;overflow:auto}
+.commands .editor{flex:1;min-height:0;padding:0;gap:0;background:var(--surface-base);border:1px solid var(--line-subtle);border-radius:16px;overflow:hidden}
+.editor__head{display:flex;align-items:center;gap:8px;padding:12px}
+.editor__name{flex:1;font-size:15px!important;font-weight:600;height:40px}
+.commands__button--go{color:var(--accent-success);border-color:color-mix(in srgb,var(--accent-success) 35%,transparent)!important;background:color-mix(in srgb,var(--accent-success) 10%,transparent)!important;display:inline-flex;align-items:center;gap:7px}
+.editor__bar{display:flex;align-items:center;gap:8px;padding:0 12px 10px;border-bottom:1px solid var(--line-subtle)}
+.editor__bar .commands__input{height:32px;padding:0 10px}
+.editor__bar select.commands__input{flex:0 0 auto}
+.editor__bar input.commands__input{flex:0 1 280px}
+.editor__spacer{flex:1}
+.commands .editor__views{display:flex;gap:2px;padding:3px;margin:0;border-radius:9px;background:var(--surface-abyss);border:1px solid var(--line-subtle)}
+.commands .editor__views button{height:26px;padding:0 10px;border-radius:7px;font-size:12px;color:var(--text-secondary)}
+.commands .editor__views button[data-active=true]{background:var(--surface-overlay);color:var(--text-primary)}
+.editor__stage{flex:1;min-height:0;display:flex;flex-direction:column}
+.editor__stage .canvas{flex:1;min-height:0;gap:0}
+.editor__stage .canvas__bar{padding:8px 12px}
+.editor__stage .canvas__viewport{flex:1;height:auto;border:0;border-top:1px solid var(--line-subtle);border-radius:0}
+.editor__list{flex:1;min-height:0;overflow:auto;padding:12px}

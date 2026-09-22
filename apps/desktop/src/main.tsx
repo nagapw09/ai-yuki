@@ -6,6 +6,7 @@ import { App } from './App'
 import { AvatarWindow } from './avatar/AvatarWindow'
 import { ErrorBoundary } from './design-system/components/ErrorBoundary'
 import { I18nProvider } from './i18n'
+import '@fontsource-variable/onest'
 import './design-system/tokens.css'
 import './design-system/base.css'
 
