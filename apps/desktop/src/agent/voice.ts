@@ -19,7 +19,8 @@ import {
 } from '../bridge'
 import { useUiStore } from '../state/store'
 import { speakable } from './reply'
-import { sendMessage } from './session'
+import { recognize } from './quick'
+import { cancelCurrentTurn, isTurnActive, sendMessage } from './session'
 
 interface LevelEvent {
   level: number
@@ -50,6 +51,9 @@ let speakReplies = false
 export function isVoiceActive(): boolean {
   return unlisteners.length > 0
 }
+
+/** Что ответить на одно лишь имя. */
+const REPLIES = ['Да?', 'Слушаю.', 'Да-да?', 'М?']
 
 /** Как часто спрашиваем движок, договорил ли он. */
 const SPEAKING_POLL_MS = 250
@@ -141,8 +145,11 @@ export async function startVoice(mode: ListenMode): Promise<void> {
 
     const said = event.payload.text.trim()
     if (!said) {
-      // Оклик без команды: отзываемся, а не молчим.
+      // Оклик без команды: отзываемся вслух, как Джарвис. Пока она говорит
+      // «Да?», микрофон её не слушает, а после ответа открывается окно
+      // продолжения — просьбу можно договорить без имени.
       useUiStore.getState().setHeadline('Слушаю')
+      if (!isTurnActive()) void speakIfVoice(REPLIES[Math.floor(Math.random() * REPLIES.length)]!)
       return
     }
 
@@ -150,6 +157,19 @@ export async function startVoice(mode: ListenMode): Promise<void> {
     // Экран не переключаем: голосом говорят, не глядя в окно, и прыгающий
     // интерфейс только мешает. Ход виден в чате, когда его откроют.
     void voiceStopSpeaking().catch(() => undefined)
+
+    // «Стоп» должен работать и пока Yuki думает: иначе он ждал бы конца хода,
+    // который как раз и просили прервать.
+    if (recognize(said)?.kind === 'stop') {
+      cancelCurrentTurn()
+      return
+    }
+    // Новая просьба посреди хода раньше пропадала молча. Теперь человек хотя
+    // бы видит, что его услышали, но заняты прошлым.
+    if (isTurnActive()) {
+      useUiStore.getState().setHeadline('Секунду, заканчиваю прошлое')
+      return
+    }
     void sendMessage(said).catch(() => undefined)
   })
 

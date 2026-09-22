@@ -233,6 +233,11 @@ function describePlan(tool: Tool, input: unknown): string {
  */
 let activeTurn: AbortController | null = null
 
+/** Идёт ли сейчас ход: модель думает или выполняет действия. */
+export function isTurnActive(): boolean {
+  return activeTurn !== null
+}
+
 export function cancelCurrentTurn() {
   activeTurn?.abort()
   useChatStore.getState().resolveConfirmation(false)
