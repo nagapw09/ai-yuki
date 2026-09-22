@@ -22,12 +22,14 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
-import { activityRecord, memoryContext, permissionsList, settingGet, personaName } from '../bridge'
+import { activityRecord, avatarPlay, memoryContext, permissionsList, settingGet, personaName } from '../bridge'
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { mcpTools } from '../tools/capabilities'
 import { ALL_TOOLS } from '../tools'
 import { tryRun } from './commands'
+import { tryQuick } from './quick'
+import { moodStreamFilter, parseMood, REPLY_STYLE } from './reply'
 import { speakIfVoice } from './voice'
 
 /** Реестр создаётся один раз: инструменты не меняются в течение сессии. */
@@ -123,9 +125,11 @@ function createChat(systemExtra: string | undefined, signal: AbortSignal): ChatF
     const requestId = `req-${(requestCounter += 1)}`
     if (signal.aborted) throw new Error('Запрос остановлен')
 
+    const filter = moodStreamFilter()
     const unlisten = await listen<ChatDeltaEvent>('yuki://chat-delta', (event) => {
       if (event.payload.requestId === requestId) {
-        useChatStore.getState().appendDelta(event.payload.text)
+        const text = filter(event.payload.text)
+        if (text) useChatStore.getState().appendDelta(text)
       }
     })
 
@@ -194,6 +198,11 @@ async function buildSystemExtra(): Promise<string | undefined> {
   )
   parts.push('После создания напоминания назови его точные дату и время из scheduledLocal результата инструмента. Не ограничивайся словом «готово». Для Telegram Desktop сначала прочитай интерфейс целевого окна; проверь название чата перед отправкой. Не путай управление Telegram Desktop с Telegram-ботом для удалённого доступа к Yuki.')
 
+  // Короткие ответы — умолчание для голосового помощника. Кто выбрал
+  // «подробно» в характере, получает развёрнутые ответы без этой строки.
+  const verbosity = await settingGet('persona.verbosity').catch(() => null)
+  if (verbosity !== '2') parts.push(REPLY_STYLE)
+
   const memory = await memoryContext().catch(() => '')
   if (memory) parts.push(memory)
 
@@ -251,6 +260,16 @@ async function performMessage(
   // Сначала команды (ТЗ §16): записанная последовательность выполняется сразу,
   // без обращения к модели — в этом весь её смысл.
   if (await tryRun(text).catch(() => false)) return null
+
+  // Затем частые просьбы, которые понятны без модели: «открой браузер»,
+  // «стоп», «пауза». С телефона этот путь закрыт — там свой набор инструментов.
+  if (!origin) {
+    const quick = await tryQuick(text).catch(() => null)
+    if (quick !== null) {
+      if (quick) void speakIfVoice(quick)
+      return quick
+    }
+  }
 
   const chat = useChatStore.getState()
   const ui = useUiStore.getState()
@@ -351,7 +370,11 @@ async function performMessage(
       },
     })
 
-    chat.finishTurn(outcome.reply, outcome.messages)
+    // Метка настроения — для лица персонажа, а не для глаз и ушей человека.
+    const { text: reply, expression } = parseMood(outcome.reply)
+    if (expression && !origin) void avatarPlay(`emotion:${expression}`).catch(() => undefined)
+
+    chat.finishTurn(reply, outcome.messages)
     ui.flashResult(outcome.completed ? 'success' : 'error')
 
     // Удалённую просьбу вслух не читаем: человека у компьютера нет, и говорить
@@ -359,10 +382,10 @@ async function performMessage(
     if (!origin) {
       // Озвучивание не должно задерживать возврат: ход уже закрыт, а Orb
       // переключится в SPEAKING сам.
-      void speakIfVoice(outcome.reply)
+      void speakIfVoice(reply)
     }
 
-    return outcome.reply
+    return reply
   } catch (error) {
     const message = describeError(error)
     useChatStore.getState().failTurn(message)

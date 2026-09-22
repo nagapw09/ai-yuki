@@ -209,6 +209,9 @@ pub struct VoiceState {
     /// него. Читает его аудиопоток на каждом кадре, поэтому это атомарный
     /// признак, а не замок: ждать чужую блокировку в захвате звука нельзя.
     speaking: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Окно продолжения разговора: после ответа Yuki слушает уточнение без
+    /// повторного «Юки».
+    follow_up: yuki_voice::ConversationWindow,
 }
 
 /// Чем говорить.
@@ -403,6 +406,7 @@ pub fn voice_start(
             mode,
             wake,
             state.voice.speaking.clone(),
+            state.voice.follow_up.clone(),
             move |event| match event {
                 VoiceEvent::Level(level) => {
                     let _ = events.emit(EVENT_LEVEL, LevelEvent { level });
@@ -448,6 +452,7 @@ pub fn voice_start(
     let http = state.http.clone();
     let worker = app.clone();
     let wake_word = mode == ListenMode::WakeWord;
+    let follow_up = state.voice.follow_up.clone();
 
     // Распознавание блокирует поток и ходит в сеть — ему нужен собственный
     // поток, а не аудиопоток и не поток UI.
@@ -509,7 +514,12 @@ pub fn voice_start(
                                 true,
                             )
                         } else if wake_word {
-                            wake_gate.route(&text, utterance.started_at, utterance.ended_at)
+                            let (command, addressed) =
+                                wake_gate.route(&text, utterance.started_at, utterance.ended_at);
+                            (
+                                command,
+                                addressed || follow_up.covers(utterance.started_at),
+                            )
                         } else {
                             (text.clone(), true)
                         };
@@ -556,6 +566,7 @@ pub fn voice_stop(app: AppHandle, state: State<'_, AppState>) -> Result<(), Stri
         .lock()
         .map_err(|_| "состояние голоса повреждено".to_string())?;
 
+    state.voice.follow_up.close();
     match guard.take() {
         Some(session) => {
             session.stop().map_err(err)?;
@@ -623,6 +634,21 @@ pub async fn voice_speak(app: AppHandle, text: String) -> Result<(), String> {
         }
         std::thread::sleep(ECHO_TAIL);
         speaking.store(false, std::sync::atomic::Ordering::Relaxed);
+        // Договорила — теперь можно ответить ей без имени. Только при постоянном
+        // прослушивании: в push-to-talk обращение и так нажатая кнопка.
+        let listening_for_name = state
+            .voice
+            .session
+            .lock()
+            .ok()
+            .and_then(|s| s.as_ref().map(|s| s.mode() == ListenMode::WakeWord))
+            .unwrap_or(false);
+        if listening_for_name && result.is_ok() {
+            state
+                .voice
+                .follow_up
+                .open(yuki_voice::ConversationWindow::FOLLOW_UP);
+        }
         result
     })
     .await

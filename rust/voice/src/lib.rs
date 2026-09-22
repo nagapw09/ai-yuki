@@ -40,7 +40,7 @@ pub use capture::{
     default_input_name, input_devices, input_format, CaptureHandle, FRAME_MS, TARGET_RATE,
 };
 pub use error::{VoiceError, VoiceResult};
-pub use session::{strip_wake_phrase, ListenMode, Utterance, VoiceEvent, VoiceSession};
+pub use session::{strip_wake_phrase, ConversationWindow, ListenMode, Utterance, VoiceEvent, VoiceSession};
 pub use spotter::Spotter;
 pub use stt::{encode_wav, HttpStt, SpeechToText};
 #[cfg(not(windows))]

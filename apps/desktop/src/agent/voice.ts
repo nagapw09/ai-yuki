@@ -18,6 +18,7 @@ import {
   type ListenMode,
 } from '../bridge'
 import { useUiStore } from '../state/store'
+import { speakable } from './reply'
 import { sendMessage } from './session'
 
 interface LevelEvent {
@@ -62,10 +63,11 @@ const SPEAKING_POLL_MS = 250
  * с реальностью на первой же длинной фразе.
  */
 export async function speakIfVoice(text: string): Promise<void> {
-  if (!speakReplies || !text.trim()) return
+  const spoken = speakable(text)
+  if (!speakReplies || !spoken) return
 
   try {
-    await voiceSpeak(text)
+    await voiceSpeak(spoken)
   } catch {
     return
   }
@@ -145,8 +147,9 @@ export async function startVoice(mode: ListenMode): Promise<void> {
     }
 
     // Пользователь заговорил — Yuki замолкает, даже если ещё отвечает (ТЗ §10).
+    // Экран не переключаем: голосом говорят, не глядя в окно, и прыгающий
+    // интерфейс только мешает. Ход виден в чате, когда его откроют.
     void voiceStopSpeaking().catch(() => undefined)
-    useUiStore.getState().setScreen('chat')
     void sendMessage(said).catch(() => undefined)
   })
 

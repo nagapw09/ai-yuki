@@ -58,7 +58,7 @@ async function loadCommands(): Promise<Command[]> {
 }
 
 /** Разрешения и политика подтверждений — те же, что у действий модели. */
-async function gateSettings(): Promise<GateSettings> {
+export async function gateSettings(): Promise<GateSettings> {
   const rows = await permissionsList()
   const entries: Partial<Record<PermissionCategory, PermissionState>> = {}
   for (const row of rows) {

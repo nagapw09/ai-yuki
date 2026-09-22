@@ -4,7 +4,7 @@
 //! сейчас человек или нет. Дальше по цепочке (агент → TTS → динамик) сессия не
 //! идёт намеренно — это уже оркестрация, и она в приложении.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 
@@ -157,6 +157,58 @@ impl WakeTextGate {
     }
 }
 
+/// Окно продолжения разговора.
+///
+/// Без него разговор рвался на каждом ответе: окно после «Юки» отсчитывается
+/// от обращения, а ответ модели приходит через несколько секунд — к моменту,
+/// когда Yuki договорила, окно уже закрыто, и на «а завтра?» она молчала, пока
+/// её снова не позовут по имени.
+///
+/// Открывает его приложение — когда Yuki закончила говорить. Хранится как
+/// срок в миллисекундах от эпохи Unix в атомарной ячейке: читает её
+/// аудиопоток на каждой фразе, и ждать замок там нельзя.
+#[derive(Clone, Default)]
+pub struct ConversationWindow(Arc<AtomicU64>);
+
+impl ConversationWindow {
+    /// Сколько ждать продолжения после ответа.
+    ///
+    /// Семь секунд: хватает, чтобы подумать и задать уточнение, и мало, чтобы
+    /// Yuki приняла на свой счёт разговор, начавшийся после.
+    pub const FOLLOW_UP: std::time::Duration = std::time::Duration::from_secs(7);
+
+    /// Открывает окно на `window` от текущего момента.
+    pub fn open(&self, window: std::time::Duration) {
+        self.0
+            .store(unix_ms() + window.as_millis() as u64, Ordering::Relaxed);
+    }
+
+    /// Закрывает окно: человек сказал «стоп» или голосовой режим выключен.
+    pub fn close(&self) {
+        self.0.store(0, Ordering::Relaxed);
+    }
+
+    /// Началась ли фраза, пока окно было открыто.
+    ///
+    /// Сравнивается момент начала фразы, а не распознавания: медленное
+    /// распознавание не должно закрыть окно для вовремя сказанного.
+    pub fn covers(&self, started_at: std::time::Instant) -> bool {
+        let until = self.0.load(Ordering::Relaxed);
+        if until == 0 {
+            return false;
+        }
+        let ago = started_at.elapsed().as_millis() as u64;
+        unix_ms().saturating_sub(ago) <= until
+    }
+}
+
+fn unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 /// Работающая голосовая сессия.
 /// Сколько времени после обращения фразы считаются адресованными.
 ///
@@ -184,10 +236,12 @@ impl VoiceSession {
     /// ищется в тексте. Это медленнее бюджета ТЗ §37, но не требует настройки.
     /// `speaking` — общий признак «динамик занят собственной речью». Читается
     /// из аудиопотока на каждом кадре, поэтому это атомарный флаг, а не замок.
+    /// `follow_up` — окно продолжения разговора после ответа Yuki.
     pub fn start<F>(
         mode: ListenMode,
         wake: Option<crate::wake::WakeModel>,
         speaking: Arc<AtomicBool>,
+        follow_up: ConversationWindow,
         mut on_event: F,
     ) -> VoiceResult<Self>
     where
@@ -254,7 +308,8 @@ impl VoiceSession {
                             (preroll.len() * FRAME_MS as usize) as u64,
                         );
                     utterance_addressed = detector.is_none()
-                        || addressed_until.is_some_and(|until| started_at <= until);
+                        || addressed_until.is_some_and(|until| started_at <= until)
+                        || follow_up.covers(started_at);
                     buffer.clear();
                     for earlier in &preroll {
                         buffer.extend_from_slice(earlier);
