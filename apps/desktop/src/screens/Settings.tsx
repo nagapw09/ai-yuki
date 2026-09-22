@@ -68,6 +68,7 @@ import {
   ratesGet,
   settingGet,
   settingSet,
+  ttsServerRestart,
   systemRequirements,
   updateCheck,
   updateInstall,
@@ -804,6 +805,8 @@ export function Speech() {
   const [url, setUrl] = useState('')
   const [samples, setSamples] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [python, setPython] = useState('')
+  const [script, setScript] = useState('')
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -813,6 +816,8 @@ export function Speech() {
       setUrl((await settingGet('voice.tts.url')) ?? '')
       setSamples((await settingGet('voice.tts.samples')) ?? '')
       setPrompt((await settingGet('voice.tts.prompt')) ?? '')
+      setPython((await settingGet('voice.tts.server.python')) ?? '')
+      setScript((await settingGet('voice.tts.server.script')) ?? '')
     } catch (e) {
       setNote(describe(e))
     }
@@ -844,13 +849,13 @@ export function Speech() {
         Системный голос работает всегда и ничего не требует, но звука наружу не
         отдаёт: рот аватара в этом случае двигается по ритму слогов, а не по
         речи. Сервис синтеза отдаёт запись — Yuki играет её сама, и рот идёт за
-        звуком. Голос задаётся образцом: GPT-SoVITS повторяет тот, что вы дадите.
+        звуком. Голос задаётся образцом: XTTS повторяет голос из записи в 6–15 секунд.
       </p>
 
       <div className="provider__row">
         {[
           { value: 'system', label: 'Системный' },
-          { value: 'http', label: 'Сервис синтеза' },
+          { value: 'http', label: 'Голос по образцу' },
         ].map((item) => (
           <button
             key={item.value}
@@ -877,12 +882,47 @@ export function Speech() {
       {http && (
         <>
           <p className="settings__hint">
-            Сервис — отдельная программа: <code>GPT-SoVITS</code> поднимает API на
-            порту 9880. Он не входит в поставку и требует своих моделей и,
-            как правило, видеокарты. Образцы голоса — папка с файлами{' '}
-            <code>.wav</code> по несколько секунд каждый; текст образца нужен,
-            чтобы сервис сверил звук со словами.
+            Сервис — отдельная программа (<code>tools/xtts/server.py</code>, XTTS-v2):
+            он слушает порт 9880 и говорит голосом из образца. Образцы — папка с
+            файлами <code>.wav</code> по 6–15 секунд чистой речи без музыки. Если
+            указать, чем его запускать, Yuki поднимет сервис сама при старте.
           </p>
+
+          <div className="provider__row">
+            <input
+              className="settings__input"
+              value={python}
+              onChange={(e) => setPython(e.target.value)}
+              placeholder="Python сервиса, например D:\yuki-voice\xtts\.venv\Scripts\python.exe"
+              spellCheck={false}
+            />
+          </div>
+          <div className="provider__row">
+            <input
+              className="settings__input"
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              placeholder="Скрипт сервиса, например D:\github\yuki-astra\tools\xtts\server.py"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="settings__button"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await settingSet('voice.tts.server.python', python.trim())
+                  await settingSet('voice.tts.server.script', script.trim())
+                  await ttsServerRestart()
+                  return python.trim() && script.trim()
+                    ? 'сервис запускается — первая загрузка модели занимает до минуты'
+                    : 'автозапуск сервиса выключен'
+                })
+              }
+            >
+              Сохранить и запустить
+            </button>
+          </div>
 
           <div className="provider__row">
             <input
@@ -953,7 +993,7 @@ export function Speech() {
               className="settings__input"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Что произнесено в образце"
+              placeholder="Текст образца (нужен только GPT-SoVITS)"
               spellCheck={false}
             />
             <button

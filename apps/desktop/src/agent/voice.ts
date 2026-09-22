@@ -15,6 +15,7 @@ import {
   voiceStop,
   voiceStatus,
   voiceStopSpeaking,
+  voiceInputName,
   type ListenMode,
 } from '../bridge'
 import { useUiStore } from '../state/store'
@@ -38,6 +39,45 @@ interface TranscribedEvent {
 
 /** Подписки живут, пока включён голосовой режим. */
 let unlisteners: UnlistenFn[] = []
+
+/**
+ * Слежение за микрофоном по умолчанию.
+ *
+ * Захват открывает устройство один раз, при включении. Подключённые потом
+ * наушники становились микрофоном системы, а Yuki продолжала слушать
+ * встроенный — человек говорил в наушники, и его не было слышно. Теперь смена
+ * устройства перезапускает прослушивание в том же режиме.
+ */
+let deviceWatch: ReturnType<typeof setInterval> | null = null
+const DEVICE_POLL_MS = 3000
+
+function watchDevice(mode: ListenMode, device: string | null) {
+  stopDeviceWatch()
+  let current = device
+  let restarting = false
+  deviceWatch = setInterval(() => {
+    if (restarting) return
+    void voiceInputName().then(async (name) => {
+      if (!name || name === current || !isVoiceActive()) return
+      restarting = true
+      current = name
+      try {
+        await stopVoice()
+        await startVoice(mode)
+        useUiStore.getState().setHeadline(`Слушаю: ${name}`)
+      } catch {
+        /* startVoice уже показал причину */
+      } finally {
+        restarting = false
+      }
+    }).catch(() => undefined)
+  }, DEVICE_POLL_MS)
+}
+
+function stopDeviceWatch() {
+  if (deviceWatch) clearInterval(deviceWatch)
+  deviceWatch = null
+}
 
 /**
  * Озвучивать ли ответы.
@@ -178,6 +218,7 @@ export async function startVoice(mode: ListenMode): Promise<void> {
 
   try {
     await voiceStart(mode)
+    watchDevice(mode, await voiceInputName().catch(() => null))
     ui.setListenMode(mode)
     ui.setVoiceActive(true)
     ui.setOrbState('listening')
@@ -193,6 +234,7 @@ export async function startVoice(mode: ListenMode): Promise<void> {
 
 /** Выключает голосовой режим и замолкает. */
 export async function stopVoice(): Promise<void> {
+  stopDeviceWatch()
   for (const off of unlisteners) off()
   unlisteners = []
   speakReplies = false

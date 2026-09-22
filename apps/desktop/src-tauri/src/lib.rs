@@ -34,6 +34,7 @@ pub mod system;
 pub mod telegram;
 pub mod telemetry;
 pub mod tray;
+pub mod tts_server;
 pub mod updater;
 pub mod voice;
 pub mod window;
@@ -130,6 +131,9 @@ pub fn run() {
             // модель несколько секунд, и делать это в момент, когда человек уже
             // позвал Yuki, значит опоздать с ответом.
             speech_local::restore(app.handle());
+            // Сервис голоса по образцу — по той же причине: модель грузится
+            // десятки секунд, и первая фраза не должна их ждать.
+            tts_server::restore(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -230,6 +234,8 @@ pub fn run() {
             speech_local::local_speech_install,
             speech_local::local_speech_start,
             speech_local::local_speech_stop,
+            tts_server::tts_server_restart,
+            voice::voice_input_name,
             // слово пробуждения (ТЗ §37)
             voice::wake_status,
             voice::wake_enroll_record,
@@ -364,6 +370,7 @@ pub fn run() {
                 // Дочерний процесс не переживает Yuki: иначе после выхода на
                 // машине остаётся сервер, слушающий порт.
                 speech_local::stop(window.app_handle());
+                tts_server::stop();
             }
         })
         .run(tauri::generate_context!())

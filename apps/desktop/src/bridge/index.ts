@@ -982,6 +982,10 @@ export const localSpeechInstall = (model?: string) =>
   invoke<void>('local_speech_install', { model: model ?? null })
 export const localSpeechStart = () => invoke<void>('local_speech_start')
 export const localSpeechStop = () => invoke<void>('local_speech_stop')
+/** Перезапускает сервис голоса по образцу после смены настроек. */
+export const ttsServerRestart = () => invoke<void>('tts_server_restart')
+/** Микрофон по умолчанию — чтобы заметить подключённые наушники. */
+export const voiceInputName = () => invoke<string | null>('voice_input_name')
 
 export const voiceStatus = () => invoke<VoiceStatus>('voice_status')
 /** Громкость речи 0…1; `null` — движок звука не отдаёт. */
