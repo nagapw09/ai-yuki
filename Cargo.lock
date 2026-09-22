@@ -7972,7 +7972,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-accessibility"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "tracing",
  "uiautomation",
@@ -7981,7 +7981,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-ai"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -7997,7 +7997,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-calendar"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "rand 0.8.8",
@@ -8011,7 +8011,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-desktop"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "image",
@@ -8051,7 +8051,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-filesystem"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "opener",
  "trash",
@@ -8061,7 +8061,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-input"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "arboard",
  "enigo",
@@ -8070,7 +8070,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-macos"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "sysinfo 0.33.1",
  "yuki-system",
@@ -8078,7 +8078,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-mcp"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "reqwest 0.12.28",
@@ -8091,7 +8091,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-screen"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "image",
@@ -8103,7 +8103,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-system"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "serde",
  "thiserror 2.0.20",
@@ -8111,7 +8111,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-voice"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -8131,7 +8131,7 @@ dependencies = [
 
 [[package]]
 name = "yuki-windows"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "sysinfo 0.33.1",
  "windows 0.58.0",

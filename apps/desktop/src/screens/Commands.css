@@ -381,3 +381,5 @@
 .editor__stage .canvas__bar{padding:8px 12px}
 .editor__stage .canvas__viewport{flex:1;height:auto;border:0;border-top:1px solid var(--line-subtle);border-radius:0}
 .editor__list{flex:1;min-height:0;overflow:auto;padding:12px}
+.commands__sidebar>.commands__input{flex:0 0 auto;height:34px;margin:0 2px}
+.commands__detail>.empty{flex:1}

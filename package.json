@@ -1,7 +1,7 @@
 {
   "name": "yuki",
   "private": true,
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Yuki — personal AI voice/desktop assistant for Windows and macOS",
   "license": "MIT",
   "type": "module",

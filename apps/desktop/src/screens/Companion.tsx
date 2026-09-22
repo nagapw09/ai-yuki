@@ -11,6 +11,7 @@ import {
 import { useUiStore } from '../state/store'
 import type { AvatarScene } from '../avatar/scene'
 import { assignedMotion,parseMotionMap,motionLabel,type Action,type MotionMap } from '../avatar/motions'
+import { Avatar } from './Settings'
 import './Companion.css'
 
 const ACTIONS = [['fidget','Размяться'],['wave','Помахать'],['pose','Позировать'],['sit','Сесть'],['stand','Встать'],['walk','Прогуляться'],['dance','Танцевать'],['stretch','Потянуться'],['lie','Лечь'],['sleep','Поспать']] as const
@@ -38,6 +39,7 @@ export function Companion() {
   const [selectedClip,setSelectedClip]=useState('')
   const [assignAction,setAssignAction]=useState<Action>('dance')
   const preview = useRef<AvatarScene | null>(null)
+  const [tab, setTab] = useState<typeof TABS[number][0]>('look')
   const active = profiles.find(p => p.active)
 
   const reload = useCallback(async () => {
@@ -81,45 +83,105 @@ export function Companion() {
     setNote('Имя, характер, голос и облик сохранены в профиле.')
   }, true)
 
+  const clipNames = clips.map(c => c.name)
+  const toggle = (on: boolean, label: string, change: (value: boolean) => void) =>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} className="companion-switch" data-on={on} disabled={busy} onClick={() => change(!on)} />
+
+  // Раскладка по макету: слева персонаж и где он стоит, справа вкладки. Раньше
+  // всё это было одной лентой на три экрана вниз, и нужное приходилось искать.
   return <div className="companion-page">
-    <header className="companion-heading"><div><span>ВАШ КОМПАНЬОН</span><h1>Кто сегодня рядом?</h1><p>Облик, голос и характер — в одном профиле.</p></div><button className="settings__button" disabled={busy} onClick={() => void importAssets()}>＋ Добавить VRM / ZIP</button></header>
-    {note && <p className="companion-note" role="status">{note}</p>}
-    <div className="companion-layout">
-      <section className="companion-stage">
-        <div className="companion-stage__top"><span>{name || 'Ваш персонаж'}</span><small>{status?.open ? 'На рабочем столе' : 'Предпросмотр'}</small></div>
-        {status?.modelPresent ? status.open ? <div className="companion-empty"><span>✧</span><p>Компаньон на рабочем столе</p><small>Выбранные движения проигрываются на нём.</small><button className="settings__button" onClick={()=>void run(async()=>{await avatarClose()})}>Показывать здесь</button></div> : <Preview key={quality} model={status.model} sceneRef={preview} /> : <div className="companion-empty"><span>✧</span><p>Добавьте персонажа в формате VRM</p><small>Можно выбрать несколько моделей или ZIP-архив.</small></div>}
-        <div className="companion-stage__bottom"><button className="companion-primary" disabled={busy || !status?.modelPresent} onClick={() => void run(async () => { if (status?.open) await avatarClose(); else { await avatarSetPose('full'); await avatarOpen() } })}>{status?.open ? 'Скрыть с рабочего стола' : 'Позвать компаньона'}</button></div>
-      </section>
-      <div className="companion-controls">
-        <section><h2>Качество изображения</h2><select className="settings__input" value={quality} disabled={busy} onChange={e=>{const value=e.target.value;void run(async()=>{await settingSet('avatar.quality',value);setQuality(value);await emit('yuki://avatar-reload')})}}><option value="original">Оригинальные текстуры · чёткое изображение</option><option value="economy">Экономия памяти · уменьшенные текстуры</option></select><p className="companion-hint">По умолчанию сохраняется качество исходной модели. Экономный режим уменьшает детали.</p></section>
-        <section><h2>Персонаж</h2><label className="setup-field">Быстрая смена<select className="settings__input" value={active?.id || ''} disabled={busy} onChange={e => void run(async () => { await profileApply(e.target.value) }, true)}><option value="" disabled>Выберите персонажа</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-          <div className="companion-fields"><label className="setup-field">Имя<input className="settings__input" value={name} maxLength={32} onChange={e => setName(e.target.value)} /></label><label className="setup-field">Поведение<select className="settings__input" value={behavior} onChange={e => setBehavior(e.target.value)}><option value="calm">Спокойное</option><option value="playful">Живое</option><option value="quiet">Без случайных жестов</option></select></label></div>
+    <section className="companion-stage">
+      <div className="companion-stage__view">
+        {status?.modelPresent
+          ? status.open
+            ? <div className="companion-empty"><span>✧</span><p>Персонаж на рабочем столе</p><small>Движения и эмоции проигрываются на нём.</small></div>
+            : <Preview key={quality} model={status.model} sceneRef={preview} />
+          : <div className="companion-empty"><span>✧</span><p>Добавьте персонажа в формате VRM</p><small>Можно выбрать несколько моделей или ZIP-архив.</small></div>}
+        {status?.open && <span className="companion-badge">на рабочем столе</span>}
+      </div>
+      <div className="companion-stage__bottom">
+        <div className="companion-segment" role="group" aria-label="Где стоит персонаж">
+          <button type="button" data-active={status?.anchor !== 'free' && !selectedWindow} disabled={busy} onClick={() => void run(async () => { setSelectedWindow(''); await companionAttach(null) })}>Панель задач</button>
+          <button type="button" data-active={!!selectedWindow} disabled={busy} onClick={() => void listWindows().then(items => setWindows(items.filter(w => !w.isMinimized && w.title && w.appName !== 'yuki-desktop.exe'))).catch(e => setNote(String(e)))}>На окне</button>
+          <button type="button" data-active={status?.anchor === 'free'} disabled={busy} onClick={() => void run(async () => { setSelectedWindow(''); await avatarSetAnchor('free') })}>Свободно</button>
+        </div>
+        {!!windows.length && <div className="companion-fields">
+          <select aria-label="Окно для персонажа" className="settings__input" value={selectedWindow} onChange={e => setSelectedWindow(e.target.value)}><option value="">Окно, на которое сесть</option>{windows.map(w => <option key={w.id} value={w.id}>{w.title}</option>)}</select>
+          <button className="settings__button" disabled={!selectedWindow || busy} onClick={() => void run(async () => { await companionAttach(Number(selectedWindow)); if (!status?.open) await avatarOpen(); await avatarSetPose('full'); await avatarPlay('builtin:sit'); setWindows([]) })}>Сесть</button>
+        </div>}
+        <button className="companion-primary" disabled={busy || !status?.modelPresent} onClick={() => void run(async () => { if (status?.open) await avatarClose(); else { await avatarSetPose('full'); await avatarOpen() } })}>{status?.open ? 'Скрыть с рабочего стола' : 'Позвать на рабочий стол'}</button>
+      </div>
+    </section>
+
+    <div className="companion-side">
+      <div className="companion-tabs-row">
+        <div className="companion-segment companion-segment--tabs" role="tablist">
+          {TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} data-active={tab === id} onClick={() => setTab(id)}>{label}</button>)}
+        </div>
+        <button className="settings__button" disabled={busy} onClick={() => void importAssets()}>＋ Добавить VRM</button>
+      </div>
+      {note && <p className="companion-note" role="status">{note}</p>}
+
+      <div className="companion-scroll">
+        {tab === 'look' && <>
+          <div className="companion-models">
+            {profiles.map(p => <button key={p.id} type="button" data-active={p.active} disabled={busy} onClick={() => void run(async () => { await profileApply(p.id) }, true)}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="12" cy="7" r="3.5" /><path d="M5 21c.8-4 3.6-6.5 7-6.5s6.2 2.5 7 6.5" /></svg>
+              <span>{p.name}</span>
+            </button>)}
+            {!profiles.length && <p className="companion-hint">Персонажей пока нет — добавьте файл VRM.</p>}
+          </div>
+          <div className="companion-card">
+            <div className="companion-row"><div><b>Поведение</b><small>Как часто сама меняет занятие</small></div>
+              <div className="companion-segment">{BEHAVIORS.map(([id, label]) => <button key={id} type="button" data-active={behavior === id} disabled={busy} onClick={() => void run(async () => { setBehavior(id); await settingSet('avatar.behavior', id) })}>{label}</button>)}</div></div>
+            <div className="companion-row"><div><b>Танцевать под музыку</b><small>Когда в браузере или плеере играет трек</small></div>
+              {toggle(music, 'Танцевать под музыку', value => void run(async () => { setMusic(value); await settingSet('avatar.music', value ? 'on' : 'off') }))}</div>
+            <div className="companion-row"><div><b>Пропускать клики сквозь персонажа</b><small>Не мешает работать с окнами под ним</small></div>
+              {toggle(status?.clickThrough ?? false, 'Пропускать клики', value => void run(async () => { await avatarSetClickThrough(value) }))}</div>
+            <div className="companion-row"><div><b>Качество изображения</b><small>Экономный режим уменьшает текстуры и память</small></div>
+              <select className="settings__input companion-select" value={quality} disabled={busy} onChange={e => { const value = e.target.value; void run(async () => { await settingSet('avatar.quality', value); setQuality(value); await emit('yuki://avatar-reload') }) }}><option value="original">Оригинал</option><option value="economy">Экономия</option></select></div>
+          </div>
+          <div className="companion-actions-row"><span>Попросить:</span>{ACTIONS.filter(([id]) => id !== 'stand').slice(0, 6).map(([id, label]) => <button className="settings__button" key={id} disabled={busy || !status?.modelPresent || !assignedMotion(id, clipNames, mapping)} onClick={() => void perform(`builtin:${id}`)}>{label}</button>)}<button className="settings__button" disabled={busy || !status?.open} onClick={() => void perform('auto')}>Сама</button></div>
+        </>}
+
+        {tab === 'moves' && <>
+          <div className="companion-card companion-card--pad">
+            <b className="companion-card__title">Действия</b>
+            <div className="companion-buttons">{ACTIONS.map(([id, label]) => <button className="settings__button" key={id} title={assignedMotion(id, clipNames, mapping) || 'Назначьте готовое движение в библиотеке'} disabled={busy || !status?.modelPresent || (id !== 'stand' && !assignedMotion(id, clipNames, mapping))} onClick={() => void perform(`builtin:${id}`)}>{label}</button>)}</div>
+            <b className="companion-card__title">Эмоции</b>
+            <div className="companion-buttons">{EXPRESSIONS.map(([id, label]) => <button className="companion-expression" key={id} disabled={busy || !status?.modelPresent} onClick={() => void perform(`emotion:${id}`)}>{label}</button>)}</div>
+            <details><summary>Выражения этой модели · {expressions.length}</summary><div className="companion-buttons">{expressions.map(name => <button className="companion-expression" key={name} disabled={busy} onClick={() => void perform(`emotion:${name}`)}>{name}</button>)}</div></details>
+          </div>
+          <div className="companion-card companion-card--pad">
+            <b className="companion-card__title">Библиотека движений · {clips.length}</b>
+            <input className="settings__input" aria-label="Поиск движений" placeholder="Найти позу или танец…" value={motionQuery} onChange={e => setMotionQuery(e.target.value)} />
+            <div className="motion-library">{clips.filter(c => c.name.toLowerCase().includes(motionQuery.toLowerCase())).map(c => <button key={c.name} data-selected={selectedClip === c.name} onClick={() => { setSelectedClip(c.name); void perform(`${playMode}:${c.name}`) }}><span>▷</span><strong>{motionLabel(c.name)}</strong><small>{c.name.includes('__') ? c.name.split('__')[0] : 'VRMA Motion Pack'}</small></button>)}</div>
+            <div className="companion-fields">
+              <select className="settings__input" aria-label="Как проигрывать" value={playMode} onChange={e => { setPlayMode(e.target.value); if (selectedClip) void perform(`${e.target.value}:${selectedClip}`) }}><option value="auto">Автоматически</option><option value="once">Один раз</option><option value="loop">Повторять</option><option value="hold">Удерживать позу</option></select>
+              <select className="settings__input" aria-label="Назначить действию" value={assignAction} onChange={e => setAssignAction(e.target.value as Action)}>{ACTIONS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
+              <button className="settings__button" disabled={!selectedClip} onClick={() => void run(async () => { const next = { ...mapping, [assignAction]: selectedClip }; await settingSet('avatar.motionmap', JSON.stringify(next)); setMapping(next); preview.current?.configureMotions(next); await emit('yuki://motion-settings'); setNote(`«${motionLabel(selectedClip)}» назначено: ${ACTIONS.find(a => a[0] === assignAction)?.[1]}`) })}>Назначить</button>
+              <button className="settings__button" onClick={() => void perform('builtin:stand')}>Стоп</button>
+            </div>
+            <p className="companion-hint">Без своего назначения действие берёт случайный клип из подходящего набора — так движения не повторяются.</p>
+          </div>
+        </>}
+
+        {tab === 'character' && <div className="companion-card companion-card--pad">
+          <div className="companion-fields"><label className="setup-field">Имя<input className="settings__input" value={name} maxLength={32} onChange={e => setName(e.target.value)} /></label></div>
           <label className="setup-field">Характер<textarea className="settings__input" rows={3} value={character} onChange={e => setCharacter(e.target.value)} placeholder="Например: дружелюбная, с лёгким юмором, отвечает коротко" /></label>
           <label className="setup-field">Голос<select className="settings__input" value={voice} onChange={e => setVoice(e.target.value)}><option value="">Системный по умолчанию</option>{voices.map(v => <option key={v}>{v}</option>)}</select></label>
-          <label className="companion-hint"><input type="checkbox" checked={music} onChange={e=>setMusic(e.target.checked)} /> Танцевать, когда музыкальный плеер играет</label>
-          <p className="companion-hint">В спокойном и живом режимах компаньон сам меняет занятия. После вашей команды выбранное действие сохраняется на две минуты. Во время разговора он отвлекается на вас.</p>
           <div className="companion-buttons"><button className="settings__button" disabled={busy || !active} onClick={() => void save()}>Сохранить профиль</button><button className="settings__button" disabled={busy} onClick={() => void run(async () => { if (voice) await voiceSetVoice(voice); await voiceSpeak(`Привет! Я ${name || 'Юки'}. Рада тебя видеть.`) })}>Послушать голос</button></div>
-        </section>
-        <section><h2>Движения и эмоции</h2><div className="companion-buttons">{ACTIONS.map(([id,label]) => <button className="settings__button" key={id} title={assignedMotion(id,clips.map(c=>c.name),mapping)||'Назначьте готовое движение в библиотеке'} disabled={busy || !status?.modelPresent || (id!=='stand'&&!assignedMotion(id,clips.map(c=>c.name),mapping))} onClick={() => void perform(`builtin:${id}`)}>{label}</button>)}</div><div className="companion-buttons">{EXPRESSIONS.map(([id,label]) => <button className="companion-expression" key={id} disabled={busy || !status?.modelPresent} onClick={() => void perform(`emotion:${id}`)}>{label}</button>)}</div>
-          <h3>Библиотека движений · {clips.length}</h3>
-          <details><summary>Выражения из выбранной модели · {expressions.length}</summary><div className="companion-buttons">{expressions.map(name=><button className="companion-expression" key={name} disabled={busy} onClick={()=>void perform(`emotion:${name}`)}>{name}</button>)}</div><p className="companion-hint">Это готовые выражения автора VRM. Скачанные Unity-клипы для другого лица требуют соответствующей модели.</p></details>
-          <input className="settings__input" aria-label="Поиск движений" placeholder="Найти позу или танец…" value={motionQuery} onChange={e=>setMotionQuery(e.target.value)}/>
-          <div className="motion-library">{clips.filter(c=>c.name.toLowerCase().includes(motionQuery.toLowerCase())).map(c=><button key={c.name} data-selected={selectedClip===c.name} onClick={()=>{setSelectedClip(c.name);void perform(`${playMode}:${c.name}`)}}><span>▷</span><strong>{motionLabel(c.name)}</strong><small>{c.name.includes('__')?c.name.split('__')[0]:'VRMA Motion Pack'}</small></button>)}</div>
-          <div className="companion-fields"><label className="setup-field">Воспроизведение<select className="settings__input" value={playMode} onChange={e=>{setPlayMode(e.target.value);if(selectedClip)void perform(`${e.target.value}:${selectedClip}`)}}><option value="auto">Автоматически · позу удержать, движение проиграть</option><option value="once">Один раз и вернуться в покой</option><option value="loop">Повторять</option><option value="hold">Удерживать конечную позу</option></select></label><button className="settings__button" onClick={()=>void perform('builtin:stand')}>Остановить</button></div>
-          <div className="companion-fields"><label className="setup-field">Назначить выбранное движение<select className="settings__input" value={assignAction} onChange={e=>setAssignAction(e.target.value as Action)}>{ACTIONS.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><button className="settings__button" disabled={!selectedClip} onClick={()=>void run(async()=>{const next={...mapping,[assignAction]:selectedClip};await settingSet('avatar.motionmap',JSON.stringify(next));setMapping(next);preview.current?.configureMotions(next);await emit('yuki://motion-settings');setNote(`«${motionLabel(selectedClip)}» назначено: ${ACTIONS.find(a=>a[0]===assignAction)?.[1]}`)})}>Назначить</button></div>
-          <p className="companion-hint">Для действия без назначенного клипа кнопка выключена. Движения проигрываются из файлов; обратного воспроизведения и самодельного танца больше нет. Позы записаны одним кадром, поэтому в автоматическом режиме они удерживаются, а не мелькают.</p>
-          <button className="settings__button" disabled={busy || !status?.open} onClick={()=>void perform('auto')}>Занимайся своими делами</button>
-          <p className="companion-hint">Двойной щелчок по персонажу вызывает улыбку. Наведите курсор, чтобы открыть быстрые действия. Для свободной прогулки выберите панель задач или край окна.</p>
-        </section>
-        <section><h2>Место на экране</h2><div className="companion-buttons"><button className="settings__button" disabled={busy} onClick={() => void run(async () => { await companionAttach(null) })}>На панели задач</button><button className="settings__button" disabled={busy} onClick={() => void run(async () => { await avatarSetAnchor('free') })}>Свободно перемещать</button><button className="settings__button" onClick={() => void listWindows().then(items => setWindows(items.filter(w => !w.isMinimized && w.title && w.appName !== 'yuki-desktop.exe'))).catch(e => setNote(String(e)))}>Выбрать окно</button></div>
-          {!!windows.length && <div className="companion-fields"><select aria-label="Окно для компаньона" className="settings__input" value={selectedWindow} onChange={e => setSelectedWindow(e.target.value)}><option value="">Окно, на которое сесть</option>{windows.map(w => <option key={w.id} value={w.id}>{w.title}</option>)}</select><button className="settings__button" disabled={!selectedWindow || busy} onClick={() => void run(async () => { await companionAttach(Number(selectedWindow)); if (!status?.open) await avatarOpen(); await avatarSetPose('full'); await avatarPlay('builtin:sit') })}>Сесть на окно</button></div>}
-          <p className="companion-hint">Персонаж следует за верхним краем выбранного окна. Оставьте над окном место для фигуры.</p>
-          <label className="companion-hint"><input type="checkbox" checked={status?.clickThrough ?? false} onChange={e => void run(async () => { await avatarSetClickThrough(e.target.checked) })} /> Пропускать клики сквозь персонажа</label>
-        </section>
+          <p className="companion-hint">Профиль хранит облик, имя, характер и голос вместе — переключается одним нажатием на вкладке «Облик».</p>
+        </div>}
+
+        {tab === 'window' && <div className="companion-embed"><Avatar /></div>}
       </div>
     </div>
   </div>
 }
+
+const TABS = [['look', 'Облик'], ['moves', 'Движения'], ['character', 'Характер и голос'], ['window', 'Окно']] as const
+const BEHAVIORS = [['calm', 'Спокойное'], ['playful', 'Живое'], ['quiet', 'Тихое']] as const
 
 function Preview({model, sceneRef}: {model: string; sceneRef: React.MutableRefObject<AvatarScene | null>}) {
   const canvas = useRef<HTMLCanvasElement>(null)
