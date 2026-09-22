@@ -132,13 +132,20 @@ async function runTool(id: string, input: unknown): Promise<boolean> {
   }
 }
 
-/** Записывает быстрый ход в чат и историю: модель должна знать, что уже сделано. */
-function record(said: string, reply: string) {
+/**
+ * Записывает быстрый ход в чат и историю: модель должна знать, что уже сделано.
+ *
+ * В историю идёт свершившийся факт, а не то, что сказано вслух. Раньше туда
+ * попадало «Открываю, секунду» — и на следующую же реплику, даже «привет»,
+ * модель открывала блокнот второй раз: обещание без выполнения она честно
+ * принимала за невыполненную просьбу.
+ */
+function record(said: string, reply: string, done = reply) {
   const chat = useChatStore.getState()
   const history: Message[] = [
     ...chat.history,
     { role: 'user', content: [{ type: 'text', text: said }] },
-    { role: 'assistant', content: [{ type: 'text', text: reply }] },
+    { role: 'assistant', content: [{ type: 'text', text: `${done} (выполнено, повторять не нужно)` }] },
   ]
   chat.startTurn(said)
   chat.finishTurn(reply, history)
@@ -162,7 +169,7 @@ export async function tryQuick(said: string): Promise<string | null> {
       const input = intent.tool === 'open_app' ? { app: intent.target } : { url: intent.target }
       if (!(await runTool(intent.tool, input))) return null
       const reply = pick(OPENING)
-      record(said, reply)
+      record(said, reply, `Открыла ${intent.label}.`)
       return reply
     }
     case 'media':
@@ -171,7 +178,7 @@ export async function tryQuick(said: string): Promise<string | null> {
       } catch {
         return null
       }
-      record(said, pick(OK))
+      record(said, pick(OK), intent.action === 'pause' ? 'Поставила музыку на паузу.' : intent.action === 'play' ? 'Включила музыку.' : 'Переключила трек.')
       // Музыку не перебивают голосом: результат и так слышно.
       return ''
     case 'volume': {

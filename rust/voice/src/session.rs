@@ -415,6 +415,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn follow_up_window_covers_phrases_started_while_open() {
+        let window = ConversationWindow::default();
+        let now = std::time::Instant::now();
+        // Закрыто, пока Yuki ничего не ответила.
+        assert!(!window.covers(now));
+
+        window.open(std::time::Duration::from_secs(7));
+        assert!(window.covers(now));
+        assert!(window.covers(std::time::Instant::now()));
+
+        // «Стоп» или выключенный голос закрывают окно сразу.
+        window.close();
+        assert!(!window.covers(std::time::Instant::now()));
+    }
+
+    #[test]
+    fn follow_up_window_expires() {
+        let window = ConversationWindow::default();
+        window.open(std::time::Duration::from_millis(30));
+        std::thread::sleep(std::time::Duration::from_millis(80));
+        assert!(!window.covers(std::time::Instant::now()));
+    }
+
+    #[test]
     fn wake_prefix_preserves_unicode_and_punctuation() {
         assert_eq!(
             strip_wake_phrase("  Юки! Открой Chrome?  ").as_deref(),
