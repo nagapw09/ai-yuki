@@ -13,7 +13,9 @@ export type OrbState =
 export type ScreenId =
   | 'orbital'
   | 'chat'
+  | 'companion'
   | 'commands'
+  | 'telegram'
   | 'memory'
   /** Заметки. В ТЗ раздела нет — см. docs/GAPS.md §5. */
   | 'notes'

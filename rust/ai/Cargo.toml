@@ -13,6 +13,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
+tokio = { workspace = true }
+tempfile = "3"
+base64 = "0.22"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 # rustls вместо системного TLS: иначе сборка тянет OpenSSL и ломается ровно на той

@@ -29,8 +29,9 @@ export function startAvatarBroadcast(): () => void {
   let lastLevelSentAt = 0
 
   const send = () => {
-    const { orbState, audioLevel } = useUiStore.getState()
-    void avatarBroadcast({ state: orbState, audioLevel }).catch(() => {
+    const { orbState, audioLevel, listenMode } = useUiStore.getState()
+    const passive = orbState === 'listening' && listenMode === 'wake_word'
+    void avatarBroadcast({ state: orbState, audioLevel, passive }).catch(() => {
       // Аватар может быть закрыт — это штатно, а не ошибка.
     })
   }

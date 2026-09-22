@@ -7,9 +7,7 @@
 
 use std::sync::Mutex;
 
-use enigo::{
-    Button, Coordinate, Direction, Enigo, Key, Keyboard as _, Mouse as _, Settings,
-};
+use enigo::{Button, Coordinate, Direction, Enigo, Key, Keyboard as _, Mouse as _, Settings};
 use yuki_system::{
     ClipboardAdapter, InputAdapter, Modifier, MouseButton, SystemError, SystemResult,
 };
@@ -124,7 +122,8 @@ impl InputAdapter for DesktopInputAdapter {
         let target = parse_key(key)?;
         self.with_enigo(|e| {
             for m in modifiers {
-                e.key(modifier_key(*m), Direction::Press).map_err(platform_err)?;
+                e.key(modifier_key(*m), Direction::Press)
+                    .map_err(platform_err)?;
             }
             let result = e.key(target, Direction::Click).map_err(platform_err);
             // Модификаторы отпускаем в любом случае: иначе Ctrl останется зажатым
@@ -150,7 +149,8 @@ impl InputAdapter for DesktopInputAdapter {
     fn mouse_scroll(&self, dx: i32, dy: i32) -> SystemResult<()> {
         self.with_enigo(|e| {
             if dx != 0 {
-                e.scroll(dx, enigo::Axis::Horizontal).map_err(platform_err)?;
+                e.scroll(dx, enigo::Axis::Horizontal)
+                    .map_err(platform_err)?;
             }
             if dy != 0 {
                 e.scroll(dy, enigo::Axis::Vertical).map_err(platform_err)?;

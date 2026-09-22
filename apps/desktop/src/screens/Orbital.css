@@ -1,237 +1,183 @@
-/*
-  Главный экран.
+/* Главный экран: три колонки и нижний угол, всё в один экран без прокрутки.
 
-  Сетка из трёх колонок: сводки слева, центр, сводки справа. Центр остаётся
-  центром при любой ширине окна — по нему человек находит взглядом состояние
-  Yuki, и уезжающий вбок Orb сломал бы это.
-*/
-
-.orbital {
-  display: grid;
-  /* Центральная колонка с явной шириной, а не по содержимому: при auto её
-     задавал самый узкий элемент, и строка ввода схлопывалась до 420 пикселей,
-     подрезая собственную подсказку. */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 600px) minmax(0, 1fr);
-  grid-template-rows: 1fr auto;
-  align-items: start;
-  gap: var(--space-5);
-  height: 100%;
-  padding: var(--space-6) var(--space-6) var(--space-5);
-  overflow: hidden;
+   Раскладка повторяет Astra. Свободное место здесь — не недоделка, а суть
+   композиции: имя стоит в центре пустоты, остальное прижато к краям. */
+.home{
+  position:relative;
+  height:100%;
+  min-height:0;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:minmax(150px,220px) minmax(0,1fr) minmax(150px,220px);
+  grid-template-rows:minmax(0,1fr);
+  align-items:start;
+  padding:26px 30px 22px;
+  gap:24px;
 }
 
-.orbital__side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  min-width: 0;
+/* ── Левая колонка: погода и курс ───────────────────────────────────────────── */
+
+.home__side{display:flex;flex-direction:column;gap:22px;min-width:0}
+.home__block{display:flex;align-items:center;gap:14px;min-width:0}
+.home__icon{color:var(--text-secondary);flex-shrink:0;opacity:.85}
+.home__block-body{min-width:0;display:flex;flex-direction:column}
+.home__temp{
+  font-size:30px;line-height:1.05;letter-spacing:-.045em;font-weight:500;
+  color:var(--text-primary);background:none;border:0;padding:0;text-align:left;cursor:pointer;
+  transition:opacity .18s;
+}
+.home__temp:hover{opacity:.7}
+.home__temp--empty{color:var(--text-muted)}
+.home__block-body>span{font-size:11px;color:var(--text-secondary);margin-top:2px;overflow-wrap:anywhere}
+.home__block-label{font-size:11px;color:var(--text-muted);letter-spacing:.02em}
+.home__rate{font-size:22px;font-weight:500;letter-spacing:-.035em;font-variant-numeric:tabular-nums;margin-top:2px}
+.home__inline{margin-top:8px}
+.home__inline input{
+  width:100%;min-width:0;font-size:11px;padding:6px 8px;border-radius:7px;
+  border:1px solid var(--line-default);background:var(--surface-raised);color:var(--text-primary);
+}
+.home__inline input:focus-visible{border-color:var(--accent-cool)}
+
+/* ── Центр: имя, подзаголовок, кнопки, плеер ────────────────────────────────── */
+
+.home__center{
+  grid-column:2;
+  /* Растягиваем на всю высоту, чтобы имя встало по центру экрана, а не прижалось
+     к верхнему краю: у соседних колонок выравнивание по верху. */
+  align-self:stretch;
+  min-width:0;min-height:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding-bottom:14px;
+}
+.home__mark{
+  margin:0;
+  font-size:clamp(40px,6vw,68px);
+  font-weight:600;
+  letter-spacing:-.05em;
+  line-height:1;
+  /* Мягкий перелив вместо плоской заливки: имя — единственный крупный объект
+     на экране, и плоским оно читается как заголовок документа. */
+  background:linear-gradient(168deg,var(--text-primary) 8%,color-mix(in srgb,var(--text-primary) 42%,transparent) 96%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  text-wrap:balance;text-align:center;overflow-wrap:anywhere;
+}
+.home__mark i{font-style:normal;font-size:.42em;color:var(--accent-cool);vertical-align:super;margin-left:.1em;-webkit-text-fill-color:var(--accent-cool)}
+.home__tagline{margin:14px 0 0;font-size:13px;color:var(--text-secondary);text-align:center;text-wrap:balance}
+.home__tagline[data-live]{color:var(--accent-cool)}
+
+.home__actions{display:flex;gap:12px;margin-top:26px}
+.home__actions button{
+  display:flex;align-items:center;gap:9px;
+  padding:11px 20px;border-radius:11px;
+  border:1px solid var(--line-default);background:var(--surface-raised);
+  font-size:13px;color:var(--text-primary);cursor:pointer;
+  transition:background .18s,border-color .18s,transform .12s;
+}
+.home__actions button:hover{background:var(--glass-bg)}
+.home__actions button:active{transform:translateY(1px)}
+.home__actions button svg{color:var(--text-secondary)}
+.home__actions .home__primary{background:var(--text-primary);color:var(--surface-base);border-color:transparent}
+.home__actions .home__primary svg{color:var(--surface-base)}
+.home__actions .home__primary:hover{opacity:.88;background:var(--text-primary)}
+
+.home__hint{margin-top:22px;font-size:11px;color:var(--text-muted);background:none;border:0;cursor:pointer;transition:color .18s}
+.home__hint:hover{color:var(--text-primary)}
+.home__error{margin-top:14px;font-size:11px;color:var(--accent-error);text-align:center;overflow-wrap:anywhere}
+
+/* ── Плеер ──────────────────────────────────────────────────────────────────── */
+
+.player{
+  width:min(330px,100%);margin-top:30px;
+  padding:14px 16px 12px;border-radius:16px;
+  border:1px solid var(--line-subtle);background:var(--glass-bg);
+  display:flex;flex-direction:column;gap:11px;
+}
+.player__head{display:flex;align-items:center;gap:12px;min-width:0}
+.player__art{
+  width:42px;height:42px;border-radius:11px;flex-shrink:0;
+  display:grid;place-items:center;
+  background:var(--surface-raised);color:var(--text-secondary);
+}
+.player__meta{min-width:0;display:flex;flex-direction:column;gap:2px}
+.player__meta strong{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player__meta span{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player__line{display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums}
+.player__line time{font-size:10px;color:var(--text-muted);flex-shrink:0}
+.player__track{flex:1;height:3px;border-radius:2px;background:var(--line-default);overflow:hidden}
+.player__track i{display:block;height:100%;background:var(--text-secondary);transition:width .45s linear}
+.player__controls{display:flex;align-items:center;justify-content:center;gap:18px}
+.player__controls button{
+  background:none;border:0;padding:6px;border-radius:50%;
+  color:var(--text-secondary);cursor:pointer;display:grid;place-items:center;
+  transition:color .18s,background .18s,transform .12s;
+}
+.player__controls button:hover:not(:disabled){color:var(--text-primary);background:var(--glass-bg)}
+.player__controls button:disabled{opacity:.3;cursor:default}
+.player__controls button:active{transform:scale(.94)}
+.player__note{display:block;text-align:center;color:var(--accent-error);font-size:10px;overflow-wrap:anywhere}
+.player__play{
+  width:38px;height:38px;
+  border:1px solid var(--line-default)!important;background:var(--surface-raised)!important;
+  color:var(--text-primary)!important;
 }
 
-.orbital__side--left {
-  grid-column: 1;
-  align-items: flex-start;
+/* ── Правая колонка: показатели ─────────────────────────────────────────────── */
+
+.home__stats{grid-column:3;display:flex;flex-direction:column;gap:15px;min-width:0}
+.gauge{font-variant-numeric:tabular-nums;min-width:0}
+.gauge__row{display:flex;align-items:baseline;gap:8px;font-size:11px}
+.gauge__row span{color:var(--text-secondary);letter-spacing:.04em}
+.gauge__row em{font-style:normal;color:var(--text-muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gauge__row strong{margin-left:auto;font-weight:500;flex-shrink:0}
+.gauge__track{height:2px;margin-top:6px;border-radius:2px;background:var(--line-default);overflow:hidden}
+.gauge__track i{display:block;height:100%;background:var(--text-secondary);transition:width .25s ease-out}
+
+/* ── Нижний угол: быстрые значки ────────────────────────────────────────────── */
+
+.home__quick{position:absolute;right:30px;bottom:22px;display:flex;align-items:center;gap:6px}
+.home__quick>button{
+  position:relative;width:34px;height:34px;border:0;border-radius:9px;
+  background:none;color:var(--text-muted);cursor:pointer;display:grid;place-items:center;
+  transition:color .18s,background .18s;
 }
-
-.orbital__side--right {
-  grid-column: 3;
-  align-items: flex-end;
+.home__quick>button:hover,.home__quick>button[aria-expanded=true]{color:var(--text-primary);background:var(--glass-bg)}
+.home__quick>button b{
+  position:absolute;top:1px;right:1px;min-width:15px;height:15px;padding:0 4px;
+  border-radius:8px;background:var(--accent-cool);color:var(--surface-base);
+  font-size:9px;font-weight:600;display:grid;place-items:center;
 }
-
-/* Центр занимает вторую колонку и обе строки: строка ввода живёт под ним, а
-   не под сводками. */
-.orbital__stage {
-  grid-column: 2;
-  grid-row: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  min-width: 0;
-  height: 100%;
+.home__popover{
+  position:absolute;right:0;bottom:42px;width:284px;max-height:320px;overflow:auto;
+  padding:12px 14px;border-radius:14px;
+  border:1px solid var(--line-default);background:var(--surface-overlay,var(--surface-raised));
+  box-shadow:0 18px 40px rgb(6 8 14 / 45%);
 }
-
-/* Шар на главной меньше, чем по умолчанию: рядом с ним теперь стоят имя,
-   подпись и две кнопки, и шар в 260 пикселей растаскивал их по краям экрана
-   вместо того, чтобы собирать в один блок. */
-.orbital__stage .orb {
-  --orb-size: 190px;
+.home__popover-empty{margin:2px 0 10px;font-size:11px;color:var(--text-muted);line-height:1.6}
+.home__popover-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;font-size:12px}
+.home__popover-row time{display:block;color:var(--text-muted);font-size:10px;margin-top:3px}
+.home__popover-row button{background:none;border:0;font-size:16px;color:var(--text-muted);padding:2px 5px;border-radius:6px;cursor:pointer;transition:color .18s}
+.home__popover-row button:hover{color:var(--text-primary)}
+.home__popover form{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;border-top:1px solid var(--line-subtle);padding-top:10px}
+.home__popover input{
+  flex:1;min-width:0;font-size:11px;padding:7px 9px;border-radius:7px;
+  border:1px solid var(--line-default);background:var(--surface-raised);color:var(--text-primary);
 }
+.home__popover input:first-of-type{flex-basis:100%}
+.home__popover input:focus-visible{border-color:var(--accent-cool)}
+.home__popover form button{background:none;border:0;font-size:12px;color:var(--accent-cool);cursor:pointer;padding:0 4px}
 
-.orbital__wordmark {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
-  color: var(--text-primary);
+/* ── Узкое и низкое окно ────────────────────────────────────────────────────── */
+
+@media(max-height:660px){
+  .home{padding:18px 24px 18px}
+  .home__mark{font-size:clamp(32px,5vw,46px)}
+  .home__actions{margin-top:18px}
+  .player{margin-top:18px;padding:11px 13px 9px}
+  .player__art{width:36px;height:36px}
 }
-
-.orbital__tagline {
-  margin: 0;
-  max-width: 34ch;
-  text-align: center;
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
-  color: var(--text-secondary);
-  transition: color var(--duration-state) var(--ease-out);
-}
-
-/* Реплика о состоянии — это речь Yuki, а не подпись под именем, и читаться
-   она должна ярче. */
-.orbital__tagline[data-phrase] {
-  color: var(--text-primary);
-}
-
-.orbital__actions {
-  display: flex;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-}
-
-.orbital__action {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-full);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.orbital__action:hover {
-  background: var(--surface-hover);
-  border-color: var(--line-strong);
-}
-
-.orbital__action:active {
-  transform: scale(0.98);
-}
-
-.orbital__action[data-active] {
-  border-color: var(--orb-listening);
-  color: var(--orb-listening);
-  box-shadow: 0 0 24px rgb(127 209 255 / 25%);
-}
-
-.orbital__command {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: stretch;
-}
-
-/*
-  Карточка сводки. Плотная и тихая: она сообщает, а не зовёт нажать, поэтому
-  фон почти не отличается от подложки, а подпись мельче значения.
-*/
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 148px;
-  max-width: 240px;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--line-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  text-align: left;
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
-}
-
-button.card:hover {
-  border-color: var(--line-default);
-  background: var(--surface-hover);
-}
-
-.card__label {
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-medium);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.card__value {
-  font-size: var(--text-sm);
-  line-height: var(--leading-normal);
-  color: var(--text-primary);
-}
-
-.card[data-muted] .card__value {
-  color: var(--text-muted);
-}
-
-.card__big {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
-  color: var(--text-primary);
-}
-
-.card__bar {
-  display: block;
-  height: 3px;
-  margin-top: var(--space-1);
-  border-radius: var(--radius-full);
-  background: var(--line-default);
-  overflow: hidden;
-}
-
-.card__fill {
-  display: block;
-  height: 100%;
-  border-radius: var(--radius-full);
-  background: linear-gradient(90deg, var(--accent-cool), var(--accent-deep));
-  transition: inline-size var(--duration-slow) var(--ease-out);
-}
-
-/*
-  Узкое окно: сводкам не хватает места по бокам, и они уезжают под центр.
-  Прятать их совсем было бы хуже — это единственные живые данные на экране.
-*/
-@media (width < 980px) {
-  .orbital {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr auto;
-    justify-items: center;
-  }
-
-  .orbital__side {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .orbital__side--left {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .orbital__side--right {
-    grid-column: 1;
-    grid-row: 3;
-    align-items: flex-start;
-  }
-
-  .orbital__stage {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .orbital__command {
-    grid-column: 1;
-    grid-row: 4;
-  }
+@media(max-width:900px){
+  .home{grid-template-columns:minmax(0,1fr) minmax(130px,180px);grid-template-rows:auto minmax(0,1fr);gap:16px}
+  .home__side{grid-column:1;grid-row:1;flex-direction:row;gap:26px;align-items:flex-start}
+  .home__stats{grid-column:2;grid-row:1}
+  .home__center{grid-column:1/-1;grid-row:2}
 }

@@ -191,8 +191,14 @@ pub fn persona_set(state: State<'_, AppState>, persona: Persona) -> Result<Strin
 
             stmt.execute(rusqlite::params![KEY_ROLE, persona.role])?;
             stmt.execute(rusqlite::params![KEY_CUSTOM, persona.custom.trim()])?;
-            stmt.execute(rusqlite::params![KEY_FORMALITY, persona.formality.to_string()])?;
-            stmt.execute(rusqlite::params![KEY_VERBOSITY, persona.verbosity.to_string()])?;
+            stmt.execute(rusqlite::params![
+                KEY_FORMALITY,
+                persona.formality.to_string()
+            ])?;
+            stmt.execute(rusqlite::params![
+                KEY_VERBOSITY,
+                persona.verbosity.to_string()
+            ])?;
             stmt.execute(rusqlite::params![KEY_ADDRESS, persona.address.trim()])?;
             stmt.execute(rusqlite::params![KEY_COMPOSED, composed])?;
             Ok(())

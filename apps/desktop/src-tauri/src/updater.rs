@@ -67,12 +67,10 @@ fn channel(app: &AppHandle) -> Result<(), String> {
         .unwrap_or_default();
 
     if pubkey.trim().is_empty() {
-        return Err(
-            "обновления выключены: не задан публичный ключ подписи. \
+        return Err("обновления выключены: не задан публичный ключ подписи. \
              Без него проверить, что пакет пришёл от автора, невозможно — \
              см. docs/RELEASE.md"
-                .into(),
-        );
+            .into());
     }
 
     let has_endpoint = updater
@@ -158,7 +156,10 @@ mod tests {
     #[test]
     fn the_build_configuration_declares_an_update_channel() {
         let config = include_str!("../tauri.conf.json");
-        assert!(config.contains("\"updater\""), "в конфигурации нет секции updater");
+        assert!(
+            config.contains("\"updater\""),
+            "в конфигурации нет секции updater"
+        );
     }
 
     /// Артефакты обновления и ключ подписи включаются вместе.

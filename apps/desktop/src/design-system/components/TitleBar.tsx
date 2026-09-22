@@ -34,14 +34,14 @@ export function TitleBar() {
   }).format(now)
 
   return (
-    <header className="titlebar" data-tauri-drag-region>
-      <span className="titlebar__mark" data-tauri-drag-region>
+    <header className="titlebar" onPointerDown={event=>{if(event.button===0&&!(event.target as HTMLElement).closest('button')&&isTauri())void getCurrentWindow().startDragging().catch(console.warn)}} onDoubleClick={event=>{if(!(event.target as HTMLElement).closest('button')&&isTauri())void getCurrentWindow().toggleMaximize().catch(console.warn)}}>
+      <span className="titlebar__mark">
         {name || t('app.name')}
       </span>
 
-      <span className="titlebar__spacer" data-tauri-drag-region />
+      <span className="titlebar__spacer" />
 
-      <time className="titlebar__clock" data-tauri-drag-region>
+      <time className="titlebar__clock">
         {time}
       </time>
 

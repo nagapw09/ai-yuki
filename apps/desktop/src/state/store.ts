@@ -23,6 +23,17 @@ interface UiState {
   orbState: OrbState
   /** Амплитуда звука 0…1 для LISTENING и SPEAKING. */
   audioLevel: number
+  voiceActive: boolean
+  setVoiceActive: (active: boolean) => void
+  /**
+   * Как именно слушаем.
+   *
+   * `wake_word` — это дежурство: микрофон открыт постоянно, но к Yuki никто не
+   * обращался. Аватар должен отличать его от разговора, иначе при включённом
+   * ожидании имени он навсегда замирает «во внимании».
+   */
+  listenMode: 'push_to_talk' | 'wake_word' | null
+  setListenMode: (mode: 'push_to_talk' | 'wake_word' | null) => void
   /** Реплика под Orb: «Чем займёмся?» в покое, статус задачи в работе. */
   headline: string | null
   tasks: Task[]
@@ -61,6 +72,10 @@ export const useUiStore = create<UiState>((set, get) => ({
   orbState: 'idle',
   assistantName: '',
   audioLevel: 0,
+  voiceActive: false,
+  setVoiceActive: (voiceActive) => set({ voiceActive }),
+  listenMode: null,
+  setListenMode: (listenMode) => set({ listenMode }),
   headline: null,
   tasks: [],
   activity: [],

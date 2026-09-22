@@ -1,0 +1,872 @@
+[
+  {
+    "pack": "Meme_Animation",
+    "source": "Assets/OBORODUKI_KOBO/Meme_Animation/INTERNET YAMERO_up_down.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Meme_Animation/INTERNET YAMERO_up_down.anim",
+    "bytes": 616773
+  },
+  {
+    "pack": "Meme_Animation",
+    "source": "Assets/OBORODUKI_KOBO/Meme_Animation/Unwelcome School_dance.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Meme_Animation/Unwelcome School_dance.anim",
+    "bytes": 213115
+  },
+  {
+    "pack": "Meme_Animation",
+    "source": "Assets/OBORODUKI_KOBO/Meme_Animation/kyofu_allback_step.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Meme_Animation/kyofu_allback_step.anim",
+    "bytes": 358159
+  },
+  {
+    "pack": "chair_sit",
+    "source": "chair_sit.anim",
+    "asset": "tools/motion-converter/Assets/Motions/chair_sit/chair_sit.anim",
+    "bytes": 188114
+  },
+  {
+    "pack": "bn0010_hands_heart",
+    "source": "bn0010_hands_heart.anim",
+    "asset": "tools/motion-converter/Assets/Motions/bn0010_hands_heart/bn0010_hands_heart.anim",
+    "bytes": 46730
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose07.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose07.anim",
+    "bytes": 106478
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose08.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose08.anim",
+    "bytes": 106282
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose10.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose10.anim",
+    "bytes": 106364
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose04.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose04.anim",
+    "bytes": 106256
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose03.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose03.anim",
+    "bytes": 106732
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose02.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose02.anim",
+    "bytes": 106232
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose05.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose05.anim",
+    "bytes": 106364
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose09.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose09.anim",
+    "bytes": 106990
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose01.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose01.anim",
+    "bytes": 106876
+  },
+  {
+    "pack": "NiziPoseSet",
+    "source": "Assets/NiziPoseSet/NZ_Pose06.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet/NZ_Pose06.anim",
+    "bytes": 107898
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose07_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose07_Re.anim",
+    "bytes": 213526
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose06_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose06_Re.anim",
+    "bytes": 212148
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose03_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose03_Re.anim",
+    "bytes": 209308
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose10_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose10_Re.anim",
+    "bytes": 208610
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose01_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose01_Re.anim",
+    "bytes": 215464
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose08_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose08_Re.anim",
+    "bytes": 214568
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose02_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose02_Re.anim",
+    "bytes": 209122
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose09_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose09_Re.anim",
+    "bytes": 211210
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose04_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose04_Re.anim",
+    "bytes": 208074
+  },
+  {
+    "pack": "NiziPoseSet_Re",
+    "source": "Assets/NiziPoseSet_Re/Pose05_Re.anim",
+    "asset": "tools/motion-converter/Assets/Motions/NiziPoseSet_Re/Pose05_Re.anim",
+    "bytes": 209252
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree03.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree03.anim",
+    "bytes": 149272
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree10.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree10.anim",
+    "bytes": 209132
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree01.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree01.anim",
+    "bytes": 149662
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree05.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree05.anim",
+    "bytes": 148510
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree04.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree04.anim",
+    "bytes": 208488
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree09.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree09.anim",
+    "bytes": 208436
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree06.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree06.anim",
+    "bytes": 149054
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree07.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree07.anim",
+    "bytes": 208870
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree08.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree08.anim",
+    "bytes": 209098
+  },
+  {
+    "pack": "TisyeFreePose",
+    "source": "Assets/Tisye Asset/Tisye Free Pose/TisyeFree02.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyeFreePose/TisyeFree02.anim",
+    "bytes": 149004
+  },
+  {
+    "pack": "TisyePosePack2_Free",
+    "source": "Assets/Tisye Asset/Tisye Pose Pack 2/pose09.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyePosePack2_Free/pose09.anim",
+    "bytes": 211643
+  },
+  {
+    "pack": "TisyePosePack2_Free",
+    "source": "Assets/Tisye Asset/Tisye Pose Pack 2/pose22.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyePosePack2_Free/pose22.anim",
+    "bytes": 209877
+  },
+  {
+    "pack": "TisyePosePack2_Free",
+    "source": "Assets/Tisye Asset/Tisye Pose Pack 2/pose07.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyePosePack2_Free/pose07.anim",
+    "bytes": 209637
+  },
+  {
+    "pack": "TisyePosePack2_Free",
+    "source": "Assets/Tisye Asset/Tisye Pose Pack 2/pose19.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyePosePack2_Free/pose19.anim",
+    "bytes": 209153
+  },
+  {
+    "pack": "TisyePosePack2_Free",
+    "source": "Assets/Tisye Asset/Tisye Pose Pack 2/pose11.anim",
+    "asset": "tools/motion-converter/Assets/Motions/TisyePosePack2_Free/pose11.anim",
+    "bytes": 210289
+  },
+  {
+    "pack": "VRSuya_INTERNET_YAMERO_Released_260709",
+    "source": "Assets/VRSuya/INTERNET_YAMERO/Animation/VRSuya_INTERNET_YAMERO.anim",
+    "asset": "tools/motion-converter/Assets/Motions/VRSuya_INTERNET_YAMERO_Released_260709/VRSuya_INTERNET_YAMERO.anim",
+    "bytes": 972672
+  },
+  {
+    "pack": "VRSuya_Loli_Kami_Requiem_Released_260709",
+    "source": "Assets/VRSuya/Loli_Kami_Requiem/Animation/VRSuya_Loli_Kami_Requiem.anim",
+    "asset": "tools/motion-converter/Assets/Motions/VRSuya_Loli_Kami_Requiem_Released_260709/VRSuya_Loli_Kami_Requiem.anim",
+    "bytes": 7534786
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/_FBX/Arisa.fbx",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/Arisa.fbx",
+    "bytes": 1487708
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewFall.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewFall.anim",
+    "bytes": 1585339
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewIdle.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewIdle.anim",
+    "bytes": 8562497
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewIdle02.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewIdle02.anim",
+    "bytes": 2160321
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewJump.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewJump.anim",
+    "bytes": 1282335
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewPose.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewPose.anim",
+    "bytes": 19723208
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewRun.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewRun.anim",
+    "bytes": 475995
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewWalk.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewWalk.anim",
+    "bytes": 413713
+  },
+  {
+    "pack": "Arisa",
+    "source": "Arisa/Animator/NewWalkBack.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Arisa/NewWalkBack.anim",
+    "bytes": 13830762
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/9_sit3.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/9_sit3.anim",
+    "bytes": 113501
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/5_sit1a.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/5_sit1a.anim",
+    "bytes": 113486
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/12_stand1a.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/12_stand1a.anim",
+    "bytes": 113581
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/13_stand1b.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/13_stand1b.anim",
+    "bytes": 113571
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/1_kasa1a.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/1_kasa1a.anim",
+    "bytes": 113483
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/14_stand2a.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/14_stand2a.anim",
+    "bytes": 113505
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/10_sit4.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/10_sit4.anim",
+    "bytes": 113492
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/6_sit1b.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/6_sit1b.anim",
+    "bytes": 113530
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/3_kasa2a.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/3_kasa2a.anim",
+    "bytes": 113547
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/16_stand3a.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/16_stand3a.anim",
+    "bytes": 113513
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/17_stand3b.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/17_stand3b.anim",
+    "bytes": 113531
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/15_stand2b.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/15_stand2b.anim",
+    "bytes": 113553
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/11_sit5.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/11_sit5.anim",
+    "bytes": 113508
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/8_sit2b.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/8_sit2b.anim",
+    "bytes": 113522
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/4_kasa2b.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/4_kasa2b.anim",
+    "bytes": 113545
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/7_sit2a.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/7_sit2a.anim",
+    "bytes": 113528
+  },
+  {
+    "pack": "_02_FREE_POSESET_Vol.1_ver.1.00",
+    "source": "Assets/XBYC/#02_FREE_POSESET_Vol.1/POSE/2_kasa1b.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_02_FREE_POSESET_Vol.1_ver.1.00/2_kasa1b.anim",
+    "bytes": 113553
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_005.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_005.anim",
+    "bytes": 148571
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_007.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_007.anim",
+    "bytes": 148631
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_008.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_008.anim",
+    "bytes": 148605
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_003.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_003.anim",
+    "bytes": 148615
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_002.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_002.anim",
+    "bytes": 148661
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_012.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_012.anim",
+    "bytes": 148557
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_010.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_010.anim",
+    "bytes": 148621
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_001.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_001.anim",
+    "bytes": 148695
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_004.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_004.anim",
+    "bytes": 148577
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_011.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_011.anim",
+    "bytes": 148589
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_009.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_009.anim",
+    "bytes": 148603
+  },
+  {
+    "pack": "Deviate_Pose_+_SceneSet",
+    "source": "Assets/Deviate/Pose + SceneSet/pose/Pose_006.anim",
+    "asset": "tools/motion-converter/Assets/Motions/Deviate_Pose_+_SceneSet/Pose_006.anim",
+    "bytes": 148503
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 1.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 1.anim",
+    "bytes": 289307
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 be.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 be.anim",
+    "bytes": 290399
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod j.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod j.anim",
+    "bytes": 289320
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 ni.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 ni.anim",
+    "bytes": 290393
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 uhe.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 uhe.anim",
+    "bytes": 290406
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 kiss.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 kiss.anim",
+    "bytes": 290401
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 close ni.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 close ni.anim",
+    "bytes": 290399
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 wink.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 wink.anim",
+    "bytes": 290393
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 defo.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 defo.anim",
+    "bytes": 325184
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 wa.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 wa.anim",
+    "bytes": 290397
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 rero.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 rero.anim",
+    "bytes": 290399
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 sorashi.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 sorashi.anim",
+    "bytes": 290404
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 niko.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 niko.anim",
+    "bytes": 290395
+  },
+  {
+    "pack": "shinano_mod_face (1)",
+    "source": "Assets/SHINANO MOD FACE/mod1 sleep.anim",
+    "asset": "tools/motion-converter/Assets/Motions/shinano_mod_face (1)/mod1 sleep.anim",
+    "bytes": 290394
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/ぐるぐる.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/ぐるぐる.anim",
+    "bytes": 10657
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/ぐるぐる白.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/ぐるぐる白.anim",
+    "bytes": 8305
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/しいたけ.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/しいたけ.anim",
+    "bytes": 4760
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/にへら.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/にへら.anim",
+    "bytes": 7124
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/びっくり.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/びっくり.anim",
+    "bytes": 7040
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/へな.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/へな.anim",
+    "bytes": 4738
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/ぺこちゃん.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/ぺこちゃん.anim",
+    "bytes": 5936
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/ほっぺピンク.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/ほっぺピンク.anim",
+    "bytes": 3689
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/ほほ染.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/ほほ染.anim",
+    "bytes": 3635
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/ウィンク.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/ウィンク.anim",
+    "bytes": 9372
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/ハート.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/ハート.anim",
+    "bytes": 4791
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/白目.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/白目.anim",
+    "bytes": 8346
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/青ざめ.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/青ざめ.anim",
+    "bytes": 3633
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/くーる/＞＜.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/＞＜.anim",
+    "bytes": 3571
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/ぐるぐる.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/108_ぐるぐる.anim",
+    "bytes": 10657
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/ぐるぐる白.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/109_ぐるぐる白.anim",
+    "bytes": 8305
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/しいたけ.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/110_しいたけ.anim",
+    "bytes": 4760
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/にへら.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/111_にへら.anim",
+    "bytes": 7124
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/びっくり.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/112_びっくり.anim",
+    "bytes": 7040
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/へな.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/113_へな.anim",
+    "bytes": 4738
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/ぺこちゃん.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/114_ぺこちゃん.anim",
+    "bytes": 5936
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/ほっぺピンク.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/115_ほっぺピンク.anim",
+    "bytes": 3689
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/ほほ染.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/116_ほほ染.anim",
+    "bytes": 3635
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/ウィンク.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/117_ウィンク.anim",
+    "bytes": 9372
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/ハート.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/118_ハート.anim",
+    "bytes": 4791
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/白目.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/119_白目.anim",
+    "bytes": 8346
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/青ざめ.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/120_青ざめ.anim",
+    "bytes": 3633
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/なごみ/＞＜.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/＞＜.anim",
+    "bytes": 3571
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/ぐるぐる.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/122_ぐるぐる.anim",
+    "bytes": 9454
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/ぐるぐる白.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/123_ぐるぐる白.anim",
+    "bytes": 7102
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/しいたけ.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/124_しいたけ.anim",
+    "bytes": 3557
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/にへら.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/125_にへら.anim",
+    "bytes": 5921
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/びっくり.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/126_びっくり.anim",
+    "bytes": 5837
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/へな.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/127_へな.anim",
+    "bytes": 3535
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/ぺこちゃん.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/128_ぺこちゃん.anim",
+    "bytes": 4733
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/ほっぺピンク.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/129_ほっぺピンク.anim",
+    "bytes": 2486
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/ほほ染.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/130_ほほ染.anim",
+    "bytes": 2432
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/ウィンク.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/131_ウィンク.anim",
+    "bytes": 8169
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/ハート.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/132_ハート.anim",
+    "bytes": 3588
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/白目.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/133_白目.anim",
+    "bytes": 7143
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/青ざめ.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/134_青ざめ.anim",
+    "bytes": 2430
+  },
+  {
+    "pack": "リア-アリス用表情_13種",
+    "source": "リア-アリス用表情 13種/通常/＞＜.anim",
+    "asset": "tools/motion-converter/Assets/Motions/リア-アリス用表情_13種/＞＜.anim",
+    "bytes": 3571
+  },
+  {
+    "pack": "_AFK_うまぴょい",
+    "source": "Assets/Project_Levin/うまぴょい.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_AFK_うまぴょい/うまぴょい.anim",
+    "bytes": 5240676
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose4.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose4.anim",
+    "bytes": 93134
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose8.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose8.anim",
+    "bytes": 113617
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose6.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose6.anim",
+    "bytes": 113643
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose2.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose2.anim",
+    "bytes": 93186
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose3.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose3.anim",
+    "bytes": 93160
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose5.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose5.anim",
+    "bytes": 113625
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose1.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose1.anim",
+    "bytes": 113607
+  },
+  {
+    "pack": "_muamm_pose",
+    "source": "Assets/!muamm pose/mpose7.anim",
+    "asset": "tools/motion-converter/Assets/Motions/_muamm_pose/mpose7.anim",
+    "bytes": 113615
+  }
+]

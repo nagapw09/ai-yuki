@@ -3,8 +3,9 @@
 use yuki_system::PlatformAdapters;
 
 use crate::calendar::TokenCache;
-use crate::diagnostics::LogBuffer;
 use crate::capabilities::McpRegistry;
+use crate::diagnostics::LogBuffer;
+use crate::speech_local::SpeechState;
 use crate::storage::Storage;
 use crate::voice::VoiceState;
 
@@ -14,6 +15,8 @@ use crate::voice::VoiceState;
 /// а пересоздание COM-объектов на каждый вызов стоит миллисекунд, которых нет
 /// в бюджете отзывчивости из ТЗ §37.
 pub struct AppState {
+    pub chat_requests:
+        std::sync::Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<()>>>,
     pub adapters: PlatformAdapters,
     pub storage: Storage,
     /// Один HTTP-клиент на всё приложение: он держит пул соединений и
@@ -22,6 +25,8 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Голосовой режим (ТЗ §10). Пустой, пока пользователь его не включил.
     pub voice: VoiceState,
+    /// Локальный движок распознавания: процесс whisper.cpp рядом с Yuki.
+    pub speech: SpeechState,
     /// Подключённые MCP-серверы (ТЗ §19).
     pub mcp: McpRegistry,
     /// Последние строки журнала для отчёта о поломке (docs/GAPS.md §14).
@@ -39,11 +44,13 @@ impl AppState {
         logs: LogBuffer,
     ) -> Self {
         Self {
+            chat_requests: Default::default(),
             adapters,
             storage,
             http,
             logs,
             voice: VoiceState::default(),
+            speech: SpeechState::default(),
             mcp: McpRegistry::default(),
             calendar: TokenCache::default(),
         }

@@ -14,6 +14,13 @@
   margin: 0 auto;
 }
 
+.settings__group { border-top: 1px solid var(--line-subtle); }
+.settings__group > summary { padding: 22px 0; cursor: pointer; }
+.settings__group > summary > span { font-size: var(--text-lg); font-weight: 500; }
+.settings__group > summary > small { display: block; margin: 8px 0 0 18px; color: var(--text-secondary); line-height: 1.6; }
+.settings__group-body { display: grid; gap: 32px; padding: 8px 0 24px; }
+.settings__group > summary:focus-visible { outline: 2px solid var(--accent-cool); outline-offset: 4px; border-radius: 6px; }
+
 .settings__header {
   margin-bottom: var(--space-5);
 }

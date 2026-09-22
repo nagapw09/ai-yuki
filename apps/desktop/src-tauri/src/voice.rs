@@ -10,9 +10,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use yuki_voice::{
     strip_wake_phrase, HttpStt, HttpTts, HttpTtsConfig, ListenMode, SpeechToText, SystemTts,
-    TextToSpeech, VoiceEvent,
-    WakeModel, ENROLL_SAMPLES,
-    VoiceSession,
+    TextToSpeech, VoiceEvent, VoiceSession, WakeModel, ENROLL_SAMPLES,
 };
 
 use crate::state::AppState;
@@ -109,9 +107,7 @@ fn ensure_microphone_allowed(state: &AppState) -> Result<(), String> {
         .map_err(err)?;
 
     if !os_granted {
-        return Err(
-            "нет системного разрешения на микрофон — выдайте его в настройках ОС".into(),
-        );
+        return Err("нет системного разрешения на микрофон — выдайте его в настройках ОС".into());
     }
     if !granted {
         return Err("микрофон выключен в разрешениях Yuki".into());
@@ -125,6 +121,20 @@ fn ensure_microphone_allowed(state: &AppState) -> Result<(), String> {
 /// Anthropic и Gemini сюда не годятся — и об этом надо сказать прямо, а не
 /// падать позже с невнятной ошибкой HTTP.
 fn stt_config(state: &AppState) -> Result<SttConfig, String> {
+    if let Some(url) = setting(state, "voice.stt.url").filter(|u| !u.trim().is_empty()) {
+        validate_stt_url(&url)?;
+        crate::privacy::ensure_allowed(&state.storage, &url, "распознавание речи")?;
+        let api_key = crate::secrets::get(&stt_secret_ref(&url)?).map_err(err)?;
+        if !crate::privacy::is_local_url(&url) && api_key.is_none() {
+            return Err("Добавьте ключ сервиса распознавания речи в настройках голоса.".into());
+        }
+        return Ok(SttConfig {
+            base_url: url,
+            api_key,
+            model: setting(state, "voice.stt.model").unwrap_or_else(|| "whisper-1".into()),
+            language: setting(state, "voice.language").or_else(|| Some("ru".into())),
+        });
+    }
     let provider_id = setting(state, "voice.stt.provider");
 
     let row: Option<(String, String, String, Option<String>)> = state
@@ -138,7 +148,7 @@ fn stt_config(state: &AppState) -> Result<SttConfig, String> {
                 ),
                 None => conn.query_row(
                     "SELECT id, kind, base_url, secret_ref FROM providers
-                     WHERE enabled = 1 AND kind IN ('openai', 'openrouter', 'ollama', 'lmstudio', 'custom')
+                     WHERE enabled = 1 AND kind IN ('openai', 'custom', 'openai_compatible')
                      ORDER BY is_default DESC LIMIT 1",
                     [],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
@@ -152,12 +162,12 @@ fn stt_config(state: &AppState) -> Result<SttConfig, String> {
         .map_err(err)?;
 
     let (_, kind, base_url, secret_ref) = row.ok_or_else(|| {
-        "распознавание речи не настроено: включите провайдера протокола OpenAI \
-         (OpenAI, OpenRouter, локальный Whisper) в настройках"
+        "Распознавание речи не настроено. Откройте настройки голоса и подключите \
+         OpenAI, Groq или локальный сервер распознавания."
             .to_string()
     })?;
 
-    if matches!(kind.as_str(), "anthropic" | "gemini") {
+    if !matches!(kind.as_str(), "openai" | "custom" | "openai_compatible") {
         return Err(format!(
             "у провайдера «{kind}» нет распознавания речи — выберите другой в настройках голоса"
         ));
@@ -167,11 +177,15 @@ fn stt_config(state: &AppState) -> Result<SttConfig, String> {
     // точно такая же утечка, как и отправка реплики в облачную модель.
     crate::privacy::ensure_allowed(&state.storage, &base_url, "распознавание речи")?;
 
+    let api_key = secret_ref
+        .as_deref()
+        .and_then(|r| crate::secrets::get(r).ok().flatten());
+    if yuki_ai::requires_key(&kind) && api_key.is_none() {
+        return Err("Не задан ключ OpenAI для распознавания речи".into());
+    }
     Ok(SttConfig {
         base_url,
-        api_key: secret_ref
-            .as_deref()
-            .and_then(|r| crate::secrets::get(r).ok().flatten()),
+        api_key,
         model: setting(state, "voice.stt.model").unwrap_or_else(|| "whisper-1".into()),
         language: setting(state, "voice.language").or_else(|| Some("ru".into())),
     })
@@ -189,6 +203,12 @@ pub struct VoiceState {
     enrollment: Mutex<Vec<Vec<f32>>>,
     session: Mutex<Option<VoiceSession>>,
     tts: Mutex<Option<TtsEngine>>,
+    /// Занят ли динамик собственной речью Yuki.
+    ///
+    /// Флаг поднимается на всё время озвучивания и опускается с запасом после
+    /// него. Читает его аудиопоток на каждом кадре, поэтому это атомарный
+    /// признак, а не замок: ждать чужую блокировку в захвате звука нельзя.
+    speaking: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Чем говорить.
@@ -215,7 +235,7 @@ impl TtsEngine {
     /// Громкость речи 0…1; у системного синтеза её нет.
     fn level(&self) -> Option<f32> {
         match self {
-            Self::System(_) => None,
+            Self::System(engine) => engine.level(),
             Self::Http(engine) => Some(engine.level()),
         }
     }
@@ -230,6 +250,13 @@ const SETTING_TTS_PROMPT: &str = "voice.tts.prompt";
 const SETTING_TTS_LANG: &str = "voice.tts.lang";
 
 impl VoiceState {
+    pub(crate) fn reset_tts(&self) {
+        if let Ok(mut guard) = self.tts.lock() {
+            if let Some(engine) = guard.take() {
+                let _ = engine.as_speech().stop();
+            }
+        }
+    }
     /// Создаёт синтезатор при первом обращении.
     ///
     /// Лениво, потому что движок ОС инициализируется небыстро, а пользователь
@@ -264,7 +291,12 @@ impl VoiceState {
             *guard = Some(if wanted_http {
                 TtsEngine::Http(HttpTts::new(http_tts_config(state)))
             } else {
-                TtsEngine::System(SystemTts::new().map_err(err)?)
+                let engine = SystemTts::new().map_err(err)?;
+                if let Some(name) = setting(state, "voice.tts.voice") {
+                    // A removed OS voice should fall back to the system default.
+                    let _ = engine.set_voice(&name);
+                }
+                TtsEngine::System(engine)
             });
         } else if wanted_http {
             // Настройки сервиса могли измениться, пока движок уже жил.
@@ -364,44 +396,50 @@ pub fn voice_start(
     let events = app.clone();
     // Образцы обращения читаются при старте сессии: их могли записать только что.
     let wake = wake_model(&state);
-    let fast_wake = wake.is_some();
+    let fast_wake = mode == ListenMode::WakeWord && wake.is_some();
 
-    let mut session = VoiceSession::start(mode, wake, move |event| match event {
-        VoiceEvent::Level(level) => {
-            let _ = events.emit(EVENT_LEVEL, LevelEvent { level });
-        }
-        VoiceEvent::SpeechStarted => {
-            let _ = events.emit(
-                EVENT_STATE,
-                StateEvent {
-                    state: "speech",
-                    message: None,
-                },
-            );
-        }
-        VoiceEvent::SpeechEnded => {
-            let _ = events.emit(
-                EVENT_STATE,
-                StateEvent {
-                    state: "transcribing",
-                    message: None,
-                },
-            );
-        }
-        VoiceEvent::WakeWord => {
-            // В этот момент и укладывается бюджет ТЗ §37: интерфейс отзывается
-            // на своё имя, пока человек ещё говорит фразу.
-            let _ = events.emit(
-                EVENT_STATE,
-                StateEvent {
-                    state: "addressed",
-                    message: None,
-                },
-            );
-        }
-        VoiceEvent::Transcribed { .. } | VoiceEvent::Error(_) => {}
-    })
-    .map_err(err)?;
+    let mut session =
+        VoiceSession::start(
+            mode,
+            wake,
+            state.voice.speaking.clone(),
+            move |event| match event {
+                VoiceEvent::Level(level) => {
+                    let _ = events.emit(EVENT_LEVEL, LevelEvent { level });
+                }
+                VoiceEvent::SpeechStarted => {
+                    let _ = events.emit(
+                        EVENT_STATE,
+                        StateEvent {
+                            state: "speech",
+                            message: None,
+                        },
+                    );
+                }
+                VoiceEvent::SpeechEnded => {
+                    let _ = events.emit(
+                        EVENT_STATE,
+                        StateEvent {
+                            state: "transcribing",
+                            message: None,
+                        },
+                    );
+                }
+                VoiceEvent::WakeWord => {
+                    // В этот момент и укладывается бюджет ТЗ §37: интерфейс отзывается
+                    // на своё имя, пока человек ещё говорит фразу.
+                    let _ = events.emit(
+                        EVENT_STATE,
+                        StateEvent {
+                            state: "addressed",
+                            message: None,
+                        },
+                    );
+                }
+                VoiceEvent::Transcribed { .. } | VoiceEvent::Error(_) => {}
+            },
+        )
+        .map_err(err)?;
 
     let utterances = session
         .take_utterances()
@@ -419,7 +457,18 @@ pub fn voice_start(
             let stt = HttpStt::new(config.base_url, config.api_key, config.model, http);
 
             // Канал закрывается вместе с сессией — это и есть условие выхода.
+            let mut wake_gate = yuki_voice::session::WakeTextGate::default();
             while let Ok(utterance) = utterances.recv() {
+                // Постоянно открытый микрофон слышит и саму Yuki. Её ответ,
+                // распознанный обратно, — это в лучшем случае мусор в истории,
+                // а в худшем команда самой себе.
+                //
+                // Признак ставится при захвате: проверять «говорит ли она
+                // сейчас» здесь бесполезно — пока запись дойдёт до очереди,
+                // синтезатор успевает замолчать, и эхо проходит насквозь.
+                if wake_word && utterance.self_voice {
+                    continue;
+                }
                 // С записанным обращением фраза без обращения не уходит на
                 // распознавание вовсе: это и деньги, и приватность — фон комнаты
                 // незачем отправлять в чужой сервис.
@@ -435,9 +484,8 @@ pub fn voice_start(
                 }
 
                 let language = config.language.as_deref();
-                let result = tauri::async_runtime::block_on(
-                    stt.transcribe(&utterance.samples, language),
-                );
+                let result =
+                    tauri::async_runtime::block_on(stt.transcribe(&utterance.samples, language));
 
                 match result {
                     Ok(text) if text.trim().is_empty() => {
@@ -461,10 +509,7 @@ pub fn voice_start(
                                 true,
                             )
                         } else if wake_word {
-                            match strip_wake_phrase(&text) {
-                                Some(command) => (command, true),
-                                None => (text.clone(), false),
-                            }
+                            wake_gate.route(&text, utterance.started_at, utterance.ended_at)
                         } else {
                             (text.clone(), true)
                         };
@@ -542,22 +587,72 @@ pub fn voice_finish_utterance(state: State<'_, AppState>) -> Result<(), String> 
     Ok(())
 }
 
+/// Сколько микрофон остаётся заглушённым после того, как Yuki договорила.
+///
+/// Звук ещё живёт в комнате и в буфере устройства; без запаса последний слог
+/// возвращается в распознавание и Yuki отвечает сама себе.
+const ECHO_TAIL: std::time::Duration = std::time::Duration::from_millis(700);
+
 #[tauri::command]
-pub fn voice_speak(state: State<'_, AppState>, text: String) -> Result<(), String> {
-    state.voice.with_tts(&state, |tts| tts.as_speech().speak(&text).map_err(err))
+pub async fn voice_speak(app: AppHandle, text: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let speaking = state.voice.speaking.clone();
+        speaking.store(true, std::sync::atomic::Ordering::Relaxed);
+
+        let result = state
+            .voice
+            .with_tts(&state, |tts| tts.as_speech().speak(&text).map_err(err));
+
+        // Синтез возвращается сразу, а звук ещё идёт: ждём тишины, потом ещё
+        // немного. Потолок нужен, чтобы зависший движок не оставил микрофон
+        // выключенным навсегда.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        while std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            let talking = state
+                .voice
+                .tts
+                .try_lock()
+                .ok()
+                .and_then(|guard| guard.as_ref().map(|e| e.as_speech().is_speaking()))
+                .unwrap_or(false);
+            if !talking {
+                break;
+            }
+        }
+        std::thread::sleep(ECHO_TAIL);
+        speaking.store(false, std::sync::atomic::Ordering::Relaxed);
+        result
+    })
+    .await
+    .map_err(err)?
+}
+
+#[tauri::command]
+pub fn voice_playback(state: State<'_, AppState>) -> serde_json::Value {
+    let guard = state.voice.tts.try_lock().ok();
+    let engine = guard.as_deref().and_then(|v| v.as_ref());
+    serde_json::json!({"speaking": engine.is_some_and(|v| v.as_speech().is_speaking()), "level": engine.and_then(|v| v.level())})
 }
 
 /// Замолчать немедленно — перебивание из ТЗ §10.
 #[tauri::command]
 pub fn voice_stop_speaking(state: State<'_, AppState>) -> Result<(), String> {
-    state.voice.with_tts(&state, |tts| tts.as_speech().stop().map_err(err))
+    state
+        .voice
+        .with_tts(&state, |tts| tts.as_speech().stop().map_err(err))
 }
 
 #[tauri::command]
 pub fn voice_set_voice(state: State<'_, AppState>, name: String) -> Result<(), String> {
-    state
-        .voice
-        .with_tts(&state, |tts| tts.as_speech().set_voice(&name).map_err(err))?;
+    if name.is_empty() {
+        state.voice.reset_tts();
+    } else {
+        state
+            .voice
+            .with_tts(&state, |tts| tts.as_speech().set_voice(&name).map_err(err))?;
+    }
     state
         .storage
         .with_conn(|conn| {
@@ -577,6 +672,31 @@ pub struct SttSettings {
     pub provider_id: Option<String>,
     pub model: Option<String>,
     pub language: Option<String>,
+    pub base_url: Option<String>,
+    pub api_key: Option<String>,
+}
+
+fn validate_stt_url(value: &str) -> Result<(), String> {
+    let url = reqwest::Url::parse(value).map_err(|_| "Некорректный адрес распознавания речи")?;
+    if url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !(url.scheme() == "https"
+            || (url.scheme() == "http" && crate::privacy::is_local_url(value)))
+    {
+        return Err(
+            "Используйте HTTPS или HTTP на localhost. Ключ вводится в отдельное поле.".into(),
+        );
+    }
+    Ok(())
+}
+
+fn stt_secret_ref(url: &str) -> Result<String, String> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| "Некорректный адрес распознавания")?;
+    Ok(format!(
+        "voice:stt:{}",
+        parsed.origin().ascii_serialization()
+    ))
 }
 
 #[tauri::command]
@@ -584,18 +704,38 @@ pub fn voice_configure_stt(
     state: State<'_, AppState>,
     settings: SttSettings,
 ) -> Result<(), String> {
+    if let Some(url) = &settings.base_url {
+        if !url.trim().is_empty() {
+            validate_stt_url(url.trim())?;
+        }
+    }
+    if let Some(key) = settings.api_key {
+        let url = settings
+            .base_url
+            .clone()
+            .or_else(|| setting(&state, "voice.stt.url"))
+            .ok_or("Сначала укажите адрес распознавания")?;
+        let secret_ref = stt_secret_ref(&url)?;
+        if key.is_empty() {
+            crate::secrets::delete(&secret_ref).map_err(err)?;
+        } else {
+            crate::secrets::set(&secret_ref, key.trim()).map_err(err)?;
+        }
+    }
     let pairs = [
         ("voice.stt.provider", settings.provider_id),
         ("voice.stt.model", settings.model),
         ("voice.language", settings.language),
+        ("voice.stt.url", settings.base_url),
     ];
 
     state
         .storage
         .with_conn(|conn| {
             for (key, value) in pairs {
+                let Some(value) = value else { continue; };
                 // Пустое значение означает «вернуть умолчание», а не «записать пустоту».
-                match value.filter(|v| !v.trim().is_empty()) {
+                match Some(value).filter(|v| !v.trim().is_empty()) {
                     Some(value) => conn.execute(
                         "INSERT INTO settings (key, value) VALUES (?1, ?2)
                          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()",
@@ -644,6 +784,12 @@ pub struct WakeStatus {
     pub recorded: usize,
     /// Порог узнавания; `null`, если модели нет.
     pub threshold: Option<f32>,
+    /// Слово записано прежней версией и работает старым детектором.
+    ///
+    /// Перезаписывать никто не обязан — оно и так работает. Но молчать об этом
+    /// нельзя: человек останется на старом пути, не узнав, что новый ошибается
+    /// реже, и решит, что обновление ничего не изменило.
+    pub legacy: bool,
 }
 
 /// Читает сохранённую модель.
@@ -669,6 +815,9 @@ pub fn wake_status(state: State<'_, AppState>) -> WakeStatus {
             .lock()
             .map(|samples| samples.len())
             .unwrap_or(0),
+        legacy: model
+            .as_ref()
+            .is_some_and(|model| model.reference.is_none()),
         threshold: model.map(|model| model.threshold),
     }
 }
@@ -678,16 +827,53 @@ pub fn wake_status(state: State<'_, AppState>) -> WakeStatus {
 /// Пишет ровно две секунды и возвращает состояние: человек говорит «Юки» и
 /// видит, что образец принят. Молчаливая запись не даёт понять, услышал ли
 /// микрофон вообще что-нибудь.
+///
+/// Голосовой режим на это время выключается и включается обратно. Раньше здесь
+/// был отказ «сначала выключите голосовой режим» — а режим включается сам при
+/// запуске, и человек упирался в этот отказ ровно в тот момент, когда делал
+/// то, о чём его просили. Микрофон один, и разобраться с этим должна программа,
+/// а не пользователь.
 #[tauri::command]
-pub fn wake_enroll_record(state: State<'_, AppState>) -> Result<WakeStatus, String> {
+pub fn wake_enroll_record(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WakeStatus, String> {
     ensure_microphone_allowed(&state)?;
 
-    if state.voice.session.lock().map(|s| s.is_some()).unwrap_or(false) {
-        // Один микрофон нельзя слушать дважды: пока идёт голосовой режим,
-        // запись образца получила бы пустой поток.
-        return Err("сначала выключите голосовой режим".into());
+    // Микрофон один: пока идёт голосовой режим, запись образца получила бы
+    // пустой поток.
+    let resume = {
+        let mut guard = state
+            .voice
+            .session
+            .lock()
+            .map_err(|_| "состояние голоса повреждено".to_string())?;
+        match guard.take() {
+            Some(session) => {
+                let mode = session.mode();
+                session.stop().map_err(err)?;
+                Some(mode)
+            }
+            None => None,
+        }
+    };
+
+    let recorded = record_wake_sample(&state);
+
+    // Режим возвращается при любом исходе: иначе тихий образец молча отнимал бы
+    // голосовой режим до перезапуска.
+    if let Some(mode) = resume {
+        if let Err(error) = voice_start(app, state.clone(), mode) {
+            tracing::warn!(%error, "голосовой режим не вернулся после записи образца");
+        }
     }
 
+    recorded?;
+    Ok(wake_status(state))
+}
+
+/// Пишет две секунды с микрофона и кладёт их в набор образцов.
+fn record_wake_sample(state: &AppState) -> Result<(), String> {
     let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::<f32>::new()));
     let sink = std::sync::Arc::clone(&buffer);
 
@@ -720,12 +906,20 @@ pub fn wake_enroll_record(state: State<'_, AppState>) -> Result<WakeStatus, Stri
         .map_err(|_| "состояние записи занято".to_string())?
         .push(audio);
 
-    Ok(wake_status(state))
+    Ok(())
 }
 
 /// Собирает модель из записанных образцов и сохраняет её.
+///
+/// Голосовой режим после этого перезапускается: образцы читаются один раз, при
+/// старте сессии. Без перезапуска человек записал бы обращение и не увидел
+/// никакой разницы до перезапуска приложения — и решил бы, что запись не
+/// работает.
 #[tauri::command]
-pub fn wake_enroll_finish(state: State<'_, AppState>) -> Result<WakeStatus, String> {
+pub fn wake_enroll_finish(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WakeStatus, String> {
     let samples = {
         let mut enrollment = state
             .voice
@@ -747,13 +941,43 @@ pub fn wake_enroll_finish(state: State<'_, AppState>) -> Result<WakeStatus, Stri
 
     let json = serde_json::to_string(&model).map_err(err)?;
     set_setting(&state, SETTING_WAKE, &json)?;
+    restart_listening(&app, &state);
 
     Ok(wake_status(state))
 }
 
+/// Перезапускает голосовой режим, если он идёт: чтобы сессия перечитала слово.
+///
+/// Молча ничего не делает, когда режим выключен, — включать его за человека
+/// незачем.
+fn restart_listening(app: &AppHandle, state: &State<'_, AppState>) {
+    let resume = {
+        let Ok(mut guard) = state.voice.session.lock() else {
+            return;
+        };
+        match guard.take() {
+            Some(session) => {
+                let mode = session.mode();
+                let _ = session.stop();
+                Some(mode)
+            }
+            None => None,
+        }
+    };
+
+    if let Some(mode) = resume {
+        if let Err(error) = voice_start(app.clone(), state.clone(), mode) {
+            tracing::warn!(%error, "голосовой режим не вернулся после записи обращения");
+        }
+    }
+}
+
 /// Забывает записанное обращение.
+///
+/// Режим тоже перезапускается: иначе сессия продолжила бы слушать по уже
+/// забытому слову.
 #[tauri::command]
-pub fn wake_forget(state: State<'_, AppState>) -> Result<WakeStatus, String> {
+pub fn wake_forget(app: AppHandle, state: State<'_, AppState>) -> Result<WakeStatus, String> {
     if let Ok(mut enrollment) = state.voice.enrollment.lock() {
         enrollment.clear();
     }
@@ -762,6 +986,7 @@ pub fn wake_forget(state: State<'_, AppState>) -> Result<WakeStatus, String> {
         .storage
         .with_conn(|conn| conn.execute("DELETE FROM settings WHERE key = ?1", [SETTING_WAKE]))
         .map_err(err)?;
+    restart_listening(&app, &state);
 
     Ok(wake_status(state))
 }

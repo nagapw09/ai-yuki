@@ -44,8 +44,7 @@ pub const INTEGRATIONS: &[Integration] = &[
     Integration {
         id: "filesystem",
         label: "Файловая система",
-        description:
-            "Чтение и запись файлов в разрешённых каталогах. Полезно, когда нужен \
+        description: "Чтение и запись файлов в разрешённых каталогах. Полезно, когда нужен \
              доступ к папке за пределами того, что умеют встроенные инструменты.",
         transport: "stdio",
         command: "npx",
@@ -87,8 +86,7 @@ pub const INTEGRATIONS: &[Integration] = &[
     Integration {
         id: "memory",
         label: "Граф знаний",
-        description:
-            "Долговременная память в виде графа сущностей и связей. Дополняет \
+        description: "Долговременная память в виде графа сущностей и связей. Дополняет \
              собственную память Yuki там, где важны связи между фактами.",
         transport: "stdio",
         command: "npx",
@@ -167,8 +165,7 @@ pub const INTEGRATIONS: &[Integration] = &[
     Integration {
         id: "spotify",
         label: "Spotify",
-        description:
-            "Управление воспроизведением, поиск треков и плейлисты. \
+        description: "Управление воспроизведением, поиск треков и плейлисты. \
              Сервер поддерживается сообществом — при установке Yuki проверит, \
              что он действительно поднимается.",
         transport: "stdio",

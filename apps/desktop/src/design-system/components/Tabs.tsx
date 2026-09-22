@@ -25,7 +25,9 @@ interface Entry {
 const ENTRIES: Entry[] = [
   { id: 'orbital', labelKey: 'rail.home', icon: <HomeIcon /> },
   { id: 'chat', labelKey: 'rail.chat', icon: <ChatIcon /> },
+  { id: 'companion', labelKey: 'rail.companion', icon: <HomeIcon /> },
   { id: 'commands', labelKey: 'rail.commands', icon: <CommandsIcon /> },
+  { id: 'telegram', labelKey: 'Telegram', icon: <ChatIcon /> },
   { id: 'memory', labelKey: 'rail.memory', icon: <MemoryIcon /> },
   // Заметок в составе навигации из ТЗ §13 нет: это осознанное дополнение
   // из docs/GAPS.md §5 — без своего места заметки были бы доступны только
@@ -50,6 +52,8 @@ export function Tabs({ current, onNavigate }: TabsProps) {
           key={entry.id}
           type="button"
           className="tabs__item"
+          title={t(entry.labelKey)}
+          aria-label={t(entry.labelKey)}
           aria-current={current === entry.id ? 'page' : undefined}
           onClick={() => onNavigate(entry.id)}
         >

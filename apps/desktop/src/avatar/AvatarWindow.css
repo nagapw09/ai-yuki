@@ -18,6 +18,11 @@
   overflow: hidden;
 }
 
+.avatar__controls { position: absolute; inset: 6px 8px auto; display: flex; justify-content: center; gap: 3px; opacity: 0; transition: opacity .2s; }
+.avatar:hover .avatar__controls, .avatar:focus-within .avatar__controls { opacity: 1; }
+.avatar__controls button { background: #15161bd9; color: #f2f5f8; border: 1px solid #ffffff25; border-radius: 8px; width: 32px; height: 30px; cursor: pointer; }
+.avatar__controls button:hover { background: #57447f; }
+
 .avatar__canvas {
   display: block;
   width: 100%;

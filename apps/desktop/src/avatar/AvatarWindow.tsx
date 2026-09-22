@@ -1,202 +1,259 @@
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useEffect, useRef, useState } from 'react'
-
-import {
-  avatarAnimationBytes,
-  avatarAnimations,
-  avatarModelBytes,
-  avatarRememberPlacement,
-  avatarStatus,
-  AVATAR_EVENT,
-  AVATAR_PLAY_EVENT,
-  AVATAR_POSE_EVENT,
-  type AvatarPose,
-  type AvatarSignal,
-} from '../bridge'
+﻿import { getCurrentWindow } from '@tauri-apps/api/window'
 import { listen } from '@tauri-apps/api/event'
-
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  avatarAnimations, avatarRememberPlacement,
+  avatarStatus, avatarClose, avatarPlay, avatarSetAnchor, settingGet, companionMotionTick, companionContext, companionPointer, voicePlayback, settingSet,
+  AVATAR_EVENT, AVATAR_PLAY_EVENT, AVATAR_POSE_EVENT, type AvatarSignal, type AvatarPose,
+} from '../bridge'
 import type { AvatarScene } from './scene'
+import { CompanionBehavior, type BehaviorMode, type CompanionContext } from './behavior'
+import { assignedMotion, parseMotionMap, type Action, type MotionMap } from './motions'
+import { parseVitals } from './character'
 import './AvatarWindow.css'
 
 /**
- * Окно аватара (ТЗ §12).
+ * Сколько пикселей нажатие может «плыть», оставаясь касанием.
  *
- * Оно ничего не решает: состояние приходит событием из главного окна, модель —
- * командой из Rust. Всё, что здесь есть, — рисование и перетаскивание.
- *
- * Без выбранной модели окно не остаётся пустым: показывается тот же автомат
- * состояний в виде свечения. Пустое прозрачное окно поверх всех выглядело бы
- * как сбой, а не как «модель не выбрана».
+ * Мышь дрожит под пальцем всегда, а на ноутбучном тачпаде — заметно. Ноль
+ * означал бы, что персонажа нельзя потрогать, не сдвинув окно.
  */
+const DRAG_SLOP = 5
+
 export function AvatarWindow() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<AvatarScene | null>(null)
-  const [state, setState] = useState<AvatarSignal['state']>('idle')
+  const latest = useRef<AvatarSignal>({ state: 'idle', audioLevel: 0 })
+  const motion = useRef('stand')
+  const target = useRef<number | null>(null)
+  const brain = useRef(new CompanionBehavior())
+  const context = useRef<CompanionContext>({musicPlaying:false,idleSeconds:0,mediaAvailable:false})
+  const mode = useRef<BehaviorMode>('calm')
+  const musicEnabled = useRef(true)
+  const free = useRef(false)
+  const speaking = useRef(false)
+  const [revision, setRevision] = useState(0)
   const [problem, setProblem] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [clips, setClips] = useState<string[]>([])
+  const [mapping, setMapping] = useState<MotionMap>({})
+  const availableActions = useRef<string[]>(['builtin:stand'])
+  availableActions.current = (['stand','fidget','wave','sit','walk','dance','stretch','lie','sleep'] as Action[]).filter(action=>action==='stand'||!!assignedMotion(action,clips,mapping)).map(action=>`builtin:${action}`)
+  const dragging=useRef(false)
+  /** Курсор в долях окна: нужен и взгляду, и выбору занятия. */
+  const cursor=useRef<{x:number;y:number}|undefined>(undefined)
+  /** Когда последний раз откликались на касание: без паузы выходит дёрганье. */
+  const touchedAt=useRef(0)
+  /** Где нажали, пока не решено — перетаскивание это или касание. */
+  const press=useRef<{x:number;y:number}|null>(null)
+  /** Величины прочитаны из настроек, и когда их последний раз сохраняли. */
+  const restored=useRef(false)
+  const savedAt=useRef(0)
+  const available=(action:Action)=>action==='stand'||!!assignedMotion(action,clips,mapping)
 
-  // Состояние и громкость приходят из главного окна одним событием.
   useEffect(() => {
-    const pending = listen<AvatarSignal>(AVATAR_EVENT, (event) => {
-      setState(event.payload.state)
-      sceneRef.current?.setState(event.payload.state)
-      sceneRef.current?.setAudioLevel(event.payload.audioLevel)
-    })
-    return () => {
-      void pending.then((unlisten) => unlisten())
-    }
+    const events = [
+      listen<AvatarSignal>(AVATAR_EVENT, e => { latest.current = e.payload; sceneRef.current?.setState(e.payload.state) }),
+      listen<string>(AVATAR_PLAY_EVENT, e => {
+        if (e.payload === 'auto') {brain.current.resume(performance.now()/1000);return}
+        brain.current.manual(e.payload, performance.now()/1000)
+        if (!e.payload.startsWith('emotion:')) motion.current = motionFor(e.payload)
+        sceneRef.current?.play(e.payload)
+      }),
+      listen<AvatarPose>(AVATAR_POSE_EVENT, e => sceneRef.current?.setPose(e.payload)),
+      listen('yuki://avatar-reload', () => setRevision(v => v + 1)),
+      listen('yuki://motion-settings',()=>{void settingGet('avatar.motionmap').then(value=>{const map=parseMotionMap(value);setMapping(map);sceneRef.current?.configureMotions(map)})}),
+      listen('yuki://companion-placement', () => { void settingGet('avatar.window').then(v => { target.current = v ? Number(v) : null }) }),
+    ]
+    return () => { for (const p of events) void p.then(off => off()) }
   }, [])
 
-  // Просьба потанцевать приходит событием — из настроек или от самой модели,
-  // которой доступен инструмент `avatar_play`.
-  useEffect(() => {
-    const pending = listen<string>(AVATAR_PLAY_EVENT, (event) => {
-      sceneRef.current?.play(event.payload)
-    })
-    return () => {
-      void pending.then((unlisten) => unlisten())
-    }
-  }, [])
-
-  // Кадр меняется из настроек в главном окне и приходит событием.
-  useEffect(() => {
-    const pending = listen<AvatarPose>(AVATAR_POSE_EVENT, (event) => {
-      sceneRef.current?.setPose(event.payload)
-    })
-    return () => {
-      void pending.then((unlisten) => unlisten())
-    }
-  }, [])
-
-  // Модель грузится один раз при открытии окна.
   useEffect(() => {
     let disposed = false
-
+    setLoading(true); setProblem(null)
+    sceneRef.current?.dispose(); sceneRef.current = null
     void (async () => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-
       try {
-        const bytes = await avatarModelBytes()
-        if (disposed) return
-
-        // Кадр спрашиваем до создания сцены: поставить камеру сразу дешевле,
-        // чем показать портрет и через кадр переставить на полный рост.
-        const pose = await avatarStatus()
-          .then((status) => status.pose)
-          .catch(() => 'portrait' as AvatarPose)
-        if (disposed) return
-
-        // three.js весит больше всего остального интерфейса вместе взятого.
-        // Главному окну он не нужен, а бюджет запуска из ТЗ §37 общий —
-        // поэтому сцена грузится отдельным куском и только здесь.
+        const [status, clips, windowId] = await Promise.all([avatarStatus(), avatarAnimations(), settingGet('avatar.window')])
+        target.current = windowId ? Number(windowId) : null
+        free.current = status.anchor === 'free'
+        if (disposed || !canvasRef.current) return
         const { createScene } = await import('./scene')
         if (disposed) return
-
-        // Анимации читаются все сразу: их единицы, каждая — десятки
-        // килобайт, а догружать танец в момент, когда о нём попросили,
-        // означало бы паузу вместо движения.
-        const clips = await loadClips()
-        if (disposed) return
-
-        const scene = await createScene(canvas, bytes, pose, clips)
-        if (disposed) {
-          scene.dispose()
-          return
-        }
-
+        const scene = await createScene(canvasRef.current, status.model, status.pose, clips.map(c=>c.name))
+        if (disposed) { scene.dispose(); return }
         sceneRef.current = scene
-        scene.resize(canvas.clientWidth, canvas.clientHeight)
-        setProblem(null)
-      } catch (error) {
-        // Причину показываем прямо в окне: аватар — не то место, куда
-        // пользователь пойдёт искать консоль.
-        setProblem(describe(error))
-      }
+        const map=parseMotionMap(await settingGet('avatar.motionmap'))
+        if(disposed)return
+        setMapping(map);setClips(clips.map(c=>c.name));scene.configureMotions(map)
+        scene.resize(canvasRef.current.clientWidth, canvasRef.current.clientHeight)
+        scene.setState(latest.current.state)
+        const savedAction = await settingGet('avatar.action')
+        if (disposed) return
+        const action = savedAction && savedAction !== 'auto' ? savedAction : 'builtin:wave'
+        motion.current = motionFor(action)
+        brain.current.manual(action, performance.now()/1000 - (savedAction ? 0 : 60))
+        if (!savedAction || savedAction === 'auto' || savedAction === 'builtin:stand') brain.current.resume(performance.now()/1000 + 12)
+        scene.play(action)
+        setLoading(false)
+      } catch (e) { if (!disposed) { setProblem(String(e)); setLoading(false) } }
     })()
+    return () => { disposed = true; sceneRef.current?.dispose(); sceneRef.current = null }
+  }, [revision])
 
-    return () => {
-      disposed = true
-      sceneRef.current?.dispose()
-      sceneRef.current = null
+  useEffect(() => {
+    let disposed = false, busy = false
+    const refresh = async () => {
+      if (busy) return
+      busy = true
+      try {
+        const [ctx,behavior,music,anchor] = await Promise.all([companionContext(),settingGet('avatar.behavior'),settingGet('avatar.music'),settingGet('avatar.anchor')])
+        if (disposed) return
+        context.current=ctx; mode.current=(behavior || 'calm') as BehaviorMode;musicEnabled.current=music!=='off';free.current=anchor==='free'
+
+        // Внутренние величины переживают перезапуск: иначе персонаж каждое утро
+        // просыпается одинаковым, и накопленная привязанность ничего не значит.
+        if (!restored.current) {
+          restored.current = true
+          brain.current.restore(parseVitals(await settingGet('avatar.vitals')))
+        } else if (performance.now() - savedAt.current > 120000) {
+          savedAt.current = performance.now()
+          void settingSet('avatar.vitals', JSON.stringify(brain.current.vitals)).catch(() => undefined)
+        }
+      } catch { /* Behavior still works when media sessions are unavailable. */ }
+      finally {busy=false}
     }
+    void refresh()
+    const poll = setInterval(()=>void refresh(),3000)
+    const tick = setInterval(() => {
+      if (!sceneRef.current) return
+      const input = {...context.current,mode:mode.current,musicEnabled:musicEnabled.current,canWalk:!free.current,availableActions:availableActions.current,state:speaking.current?'speaking':latest.current.state,passive:latest.current.passive,cursor:cursor.current}
+      const action = brain.current.tick(performance.now()/1000, input)
+      // Наружу для диагностики: почему компаньон выбрал именно это занятие,
+      // по состоянию сцены не видно, а гадать об этом дорого.
+      ;(window as unknown as {yukiBrain?:()=>unknown}).yukiBrain = () => ({
+        action: brain.current.action, vitals: brain.current.vitals, decided: action,
+        state: input.state, passive: input.passive, cursor: input.cursor,
+        available: input.availableActions, mode: input.mode, canWalk: input.canWalk,
+        idleSeconds: input.idleSeconds,
+      })
+      if (action) {sceneRef.current.play(action);motion.current=motionFor(sceneRef.current.activity())}
+    }, 1000)
+    return () => {disposed=true;clearInterval(poll);clearInterval(tick)}
   }, [])
 
-  // Размер окна меняет пользователь, и рендер обязан за ним успевать.
+  useEffect(() => {
+    let disposed = false, busy = false, interactive = true
+    const poll = setInterval(() => {
+      if (busy || !sceneRef.current || dragging.current || document.hidden) return
+      busy = true
+      void Promise.all([
+        voicePlayback().then(p => { if (!disposed) {speaking.current=p.speaking;sceneRef.current?.setSpeech(p.speaking, p.level)} }),
+        companionMotionTick(sceneRef.current.contact(), sceneRef.current.activity() === 'builtin:walk', target.current).then(d => { if (!disposed) sceneRef.current?.setDirection(d) }),
+        companionPointer(interactive).then(p => {if (!disposed && sceneRef.current) {interactive=sceneRef.current.hitTest(p.x,p.y);cursor.current=p;sceneRef.current.setPointer(p.x*2-1,1-p.y*2)}}).catch(()=>undefined),
+      ]).catch(() => undefined).finally(() => { busy = false })
+    }, 120)
+    return () => { disposed = true; clearInterval(poll) }
+  }, [])
+
+  /**
+   * Отклик на касание.
+   *
+   * Одно прикосновение поднимает сразу несколько каналов: выражение лица,
+   * жест, взгляд и внутреннее состояние. Именно согласованность каналов
+   * читается как характер; одна только анимация выглядит как нажатие кнопки.
+   *
+   * По голове и по телу отклик разный, и оба мягче, если гладить подряд:
+   * повторять «ура» на каждый клик — это не радость, а тик.
+   */
+  const touch = useCallback((zone: 'head' | 'body') => {
+    const scene = sceneRef.current
+    if (!scene) return
+    const now = performance.now() / 1000
+    const fresh = now - touchedAt.current > 1.2
+    touchedAt.current = now
+
+    brain.current.touched(zone === 'head' ? 0.06 : 0.03)
+    // Выражение подбирается под модель: «удивления» у многих авторов нет,
+    // и просьба показать его молча не делает ничего.
+    const wanted = zone === 'head' ? ['happy', 'relaxed'] : ['surprised', 'happy', 'relaxed']
+    const face = wanted.find(name => scene.hasExpression(name))
+    if (face) scene.play(`emotion:${face}`)
+    if (!fresh) return
+
+    // Жест только на нечастые касания и только если клип для него есть.
+    const gesture = zone === 'head' ? 'builtin:wave' : 'builtin:fidget'
+    if (available(gesture.slice(8) as Action)) {
+      brain.current.manual(gesture, now)
+      scene.play(gesture)
+    }
+  }, [clips, mapping])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-
-    const observer = new ResizeObserver(() => {
-      sceneRef.current?.resize(canvas.clientWidth, canvas.clientHeight)
-    })
+    const observer = new ResizeObserver(() => sceneRef.current?.resize(canvas.clientWidth, canvas.clientHeight))
     observer.observe(canvas)
     return () => observer.disconnect()
   }, [])
 
-  // Положение и размер запоминаются: аватар должен возвращаться туда, где его
-  // оставили, а не в середину экрана при каждом запуске.
   useEffect(() => {
-    const window = getCurrentWindow()
-    const remember = () => void avatarRememberPlacement().catch(() => {})
-
-    const moved = window.onMoved(remember)
-    const resized = window.onResized(remember)
-
-    return () => {
-      void moved.then((unlisten) => unlisten())
-      void resized.then((unlisten) => unlisten())
-    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const remember = () => { clearTimeout(timer); timer = setTimeout(() => void avatarRememberPlacement().catch(() => undefined), 700) }
+    const win = getCurrentWindow()
+    const events = [win.onMoved(remember), win.onResized(remember)]
+    return () => { clearTimeout(timer); for (const p of events) void p.then(off => off()) }
   }, [])
 
-  return (
-    <div className="avatar" data-state={state}>
-      {/*
-        Перетаскивание за саму фигуру, а не за узкую полосу сверху.
+  return <div className="avatar">
+    {/*
+      Нажатие — это либо перетаскивание, либо касание, и различаются они
+      движением, а не отдельными кнопками.
 
-        Рамки у окна нет, и полоса в двадцать восемь пикселей была
-        единственным, за что можно было взяться: её надо было сначала найти.
-        Теперь окно тянется за любое место — это ровно то, чего ждёшь от
-        существа, стоящего на рабочем столе.
-
-        Клики при этом ничего не теряют: своих кнопок у окна нет. А если
-        включён сквозной режим, окно не получает ни кликов, ни перетаскивания —
-        так и задумано, и об этом сказано в настройках.
-      */}
-      <canvas ref={canvasRef} className="avatar__canvas" data-tauri-drag-region />
-
-      {problem && (
-        <div className="avatar__fallback">
-          <div className="avatar__orb" />
-          <p className="avatar__note">{problem}</p>
-        </div>
-      )}
+      Раньше перетаскивание начиналось прямо в `pointerdown`: система забирала
+      мышь себе, события `click` не возникало вовсе, и потрогать персонажа было
+      физически нельзя. Теперь окно едет за мышью только после того, как мышь
+      действительно поехала, а нажатие без движения достаётся персонажу.
+    */}
+    <canvas ref={canvasRef} className="avatar__canvas"
+      onPointerDown={e=>{if(e.button!==0)return;press.current={x:e.clientX,y:e.clientY}}}
+      onPointerMove={e=>{
+        const start=press.current
+        if(!start||dragging.current)return
+        if(Math.hypot(e.clientX-start.x,e.clientY-start.y)<DRAG_SLOP)return
+        press.current=null
+        dragging.current=true
+        free.current=true
+        // Персонаж встаёт: ехать в окне сидя или танцуя он не должен.
+        brain.current.manual('builtin:stand',performance.now()/1000)
+        sceneRef.current?.play('builtin:stand')
+        void avatarSetAnchor('free').then(()=>getCurrentWindow().startDragging()).catch(err=>setProblem(String(err))).finally(()=>{dragging.current=false})
+      }}
+      onPointerUp={e=>{
+        const start=press.current
+        press.current=null
+        if(!start||dragging.current||!canvasRef.current)return
+        const box=canvasRef.current.getBoundingClientRect()
+        const zone=sceneRef.current?.touchZone((e.clientX-box.left)/box.width,(e.clientY-box.top)/box.height)
+        if(zone)touch(zone)
+      }}
+      onPointerCancel={()=>{press.current=null}}
+    />
+    <div className="avatar__controls">
+      <button title="Помахать" disabled={!available('wave')} onClick={() => void avatarPlay('builtin:wave')}>✋</button>
+      <button title="Сесть" disabled={!available('sit')} onClick={() => void avatarPlay('builtin:sit')}>↓</button>
+      <button title="Встать" onClick={() => void avatarPlay('builtin:stand')}>↑</button>
+      <button title="Прогуляться" disabled={!available('walk')} onClick={() => void avatarPlay('builtin:walk')}>↔</button>
+      <button title="Танцевать" disabled={!available('dance')} onClick={() => void avatarPlay('builtin:dance')}>♫</button>
+      <button title="Лечь" disabled={!available('lie')} onClick={() => void avatarPlay('builtin:lie')}>☾</button>
+      <button title="Заниматься своими делами" onClick={() => void avatarPlay('auto')}>✦</button>
+      <button title="Скрыть компаньона" onClick={() => void avatarClose()}>×</button>
     </div>
-  )
+    {(problem || loading) && <div className="avatar__fallback"><div className="avatar__orb" /><p className="avatar__note">{problem || 'Знакомлюсь с персонажем…'}</p></div>}
+  </div>
 }
 
-function describe(error: unknown): string {
-  if (typeof error === 'string') return error
-  if (error instanceof Error) return error.message
-  return 'не удалось показать аватар'
-}
-
-/**
- * Читает все анимации из выбранной папки.
- *
- * Сбой одного файла не должен лишать аватар остальных: каждый читается
- * отдельно, и неудачный просто не попадает в список.
- */
-async function loadClips(): Promise<{ name: string; bytes: ArrayBuffer }[]> {
-  const found = await avatarAnimations().catch(() => [])
-  const clips: { name: string; bytes: ArrayBuffer }[] = []
-
-  for (const clip of found) {
-    try {
-      clips.push({ name: clip.name, bytes: await avatarAnimationBytes(clip.name) })
-    } catch (error) {
-      console.warn(`анимация «${clip.name}» не прочиталась`, error)
-    }
-  }
-
-  return clips
+function motionFor(action: string) {
+  if (!action || action === 'builtin:stand' || action === 'builtin:wave' || action.startsWith('emotion:')) return 'stand'
+  return action.replace('builtin:', '')
 }

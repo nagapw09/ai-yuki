@@ -1,10 +1,8 @@
 //! Напоминания и уведомления (ТЗ §25).
 //!
 //! Напоминание — единственная часть Yuki, которая срабатывает без пользователя,
-//! поэтому здесь важнее обычного не соврать: сработавшее напоминание помечается
-//! выполненным **после** показа уведомления, а не до, и повторяющееся сдвигается
-//! на следующий срок в той же транзакции. Иначе перезапуск приложения либо
-//! потеряет напоминание, либо покажет его дважды.
+//! Срок и запись в постоянном центре уведомлений фиксируются одной транзакцией.
+//! Системный toast — дополнительный канал, его успех не доказывает показ Windows.
 
 use std::time::Duration;
 
@@ -19,7 +17,7 @@ use crate::storage::{Storage, StorageResult};
 ///
 /// Двадцать секунд — компромисс: напоминание «в 10:00» не должно приходить в
 /// 10:01, но и будить процесс каждую секунду ради этого незачем (ТЗ §37).
-const TICK: Duration = Duration::from_secs(20);
+const TICK: Duration = Duration::from_secs(5);
 
 /// Событие о сработавшем напоминании — по нему UI показывает его в интерфейсе.
 const EVENT_FIRED: &str = "yuki://reminder-fired";
@@ -87,8 +85,9 @@ fn take_due(storage: &Storage) -> StorageResult<Vec<Reminder>> {
     let moment = now();
 
     storage.with_conn(|conn| {
+        let tx = conn.unchecked_transaction()?;
         let due: Vec<Reminder> = {
-            let mut stmt = conn.prepare(
+            let mut stmt = tx.prepare(
                 "SELECT id, text, due_at, recurrence, completed_at, created_at
                  FROM reminders
                  WHERE completed_at IS NULL AND due_at <= ?1
@@ -108,19 +107,23 @@ fn take_due(storage: &Storage) -> StorageResult<Vec<Reminder>> {
         };
 
         for reminder in &due {
+            tx.execute(
+                "INSERT OR IGNORE INTO notifications (id,title,body,channel) VALUES (?1,'Напоминание',?2,'reminder')",
+                rusqlite::params![format!("{}:{}", reminder.id, reminder.due_at), reminder.text],
+            )?;
             match reminder
                 .recurrence
                 .as_deref()
                 .and_then(|r| next_occurrence(reminder.due_at, r, moment))
             {
                 Some(next) => {
-                    conn.execute(
+                    tx.execute(
                         "UPDATE reminders SET due_at = ?2 WHERE id = ?1",
                         rusqlite::params![reminder.id, next],
                     )?;
                 }
                 None => {
-                    conn.execute(
+                    tx.execute(
                         "UPDATE reminders SET completed_at = ?2 WHERE id = ?1",
                         rusqlite::params![reminder.id, moment],
                     )?;
@@ -128,6 +131,7 @@ fn take_due(storage: &Storage) -> StorageResult<Vec<Reminder>> {
             }
         }
 
+        tx.commit()?;
         Ok(due)
     })
 }
@@ -165,6 +169,16 @@ pub fn spawn_scheduler(app: AppHandle) {
                             tracing::warn!(%error, id = %reminder.id, "уведомление не показано");
                         }
                         let _ = app.emit(EVENT_FIRED, reminder);
+                        // Portable/debug Windows builds may silently drop OS toasts.
+                        // Show the persistent in-app reminder without stealing focus.
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.emit(crate::window::EVENT_VISIBLE, true);
+                            let _ = window.request_user_attention(Some(
+                                tauri::UserAttentionType::Informational,
+                            ));
+                        }
                     }
                 }
                 // Сбой чтения не должен убивать планировщик: следующий такт
@@ -196,6 +210,9 @@ pub fn reminder_create(
     }
     if due_at <= now() {
         return Err("время напоминания уже прошло".into());
+    }
+    if due_at > 4_102_444_800 {
+        return Err("Ожидается Unix-время в секундах, не миллисекундах; срок до 2100 года".into());
     }
 
     let id = new_id();
@@ -272,6 +289,38 @@ pub fn reminder_delete(state: State<'_, AppState>, id: String) -> Result<(), Str
         .map_err(err)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderNotice {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub created_at: i64,
+}
+
+#[tauri::command]
+pub fn reminder_notices(state: State<'_, AppState>) -> Result<Vec<ReminderNotice>, String> {
+    state.storage.with_conn(|c| {
+        let mut s = c.prepare("SELECT id,title,body,created_at FROM notifications WHERE channel='reminder' AND read_at IS NULL ORDER BY created_at DESC LIMIT 100")?;
+        let rows = s.query_map([], |r| Ok(ReminderNotice { id:r.get(0)?,title:r.get(1)?,body:r.get(2)?,created_at:r.get(3)? }))?;
+        rows.collect()
+    }).map_err(err)
+}
+
+#[tauri::command]
+pub fn reminder_notice_read(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state
+        .storage
+        .with_conn(|c| {
+            c.execute(
+                "UPDATE notifications SET read_at=unixepoch() WHERE id=?1 AND channel='reminder'",
+                [id],
+            )
+        })
+        .map(|_| ())
+        .map_err(err)
+}
+
 /// Показывает системное уведомление (ТЗ §25).
 ///
 /// # Оговорка про Windows
@@ -305,7 +354,7 @@ mod tests {
     fn daily_reminder_keeps_its_time_of_day_after_downtime() {
         let day = 24 * 60 * 60;
         let due = 10 * 3600; // 10:00 первого дня
-        // Приложение было выключено трое суток.
+                             // Приложение было выключено трое суток.
         let next = next_occurrence(due, "daily", due + 3 * day + 60).expect("должен быть срок");
 
         assert!(next > due + 3 * day);
@@ -343,6 +392,19 @@ mod tests {
         // ежедневное сдвинуто в будущее.
         let second = take_due(&storage).expect("выборка должна пройти");
         assert!(second.is_empty(), "напоминание сработало дважды");
+        let notices: i64 = storage
+            .with_conn(|c| {
+                c.query_row(
+                    "SELECT count(*) FROM notifications WHERE read_at IS NULL",
+                    [],
+                    |r| r.get(0),
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            notices, 2,
+            "Both due reminders must survive a lost toast/event"
+        );
 
         let completed: i64 = storage
             .with_conn(|c| {

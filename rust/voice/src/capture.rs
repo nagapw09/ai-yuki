@@ -67,6 +67,20 @@ pub fn input_devices() -> Vec<String> {
 ///
 /// Колбэк выполняется в аудиопотоке: он должен быть быстрым и не блокировать.
 /// Тяжёлую работу — распознавание, сеть — выносить в другой поток.
+/// Частота, число каналов и формат микрофона по умолчанию.
+///
+/// Нужна диагностике: подавление шума работает только на сорока восьми
+/// килогерцах, и без этой строки непонятно, включилось оно или нет.
+pub fn input_format() -> Option<(u32, u16, String)> {
+    let device = cpal::default_host().default_input_device()?;
+    let config = device.default_input_config().ok()?;
+    Some((
+        config.sample_rate().0,
+        config.channels(),
+        format!("{:?}", config.sample_format()),
+    ))
+}
+
 pub fn start<F>(mut on_frame: F) -> VoiceResult<CaptureHandle>
 where
     F: FnMut(&[f32]) + Send + 'static,
@@ -127,9 +141,11 @@ where
                         error_handler,
                         None,
                     ),
-                    other => return Err(VoiceError::Device(format!(
-                        "неподдерживаемый формат сэмплов: {other:?}"
-                    ))),
+                    other => {
+                        return Err(VoiceError::Device(format!(
+                            "неподдерживаемый формат сэмплов: {other:?}"
+                        )))
+                    }
                 }
                 .map_err(|e| VoiceError::Device(e.to_string()))?;
 
@@ -166,7 +182,9 @@ where
         }
         Err(_) => {
             stop.store(true, Ordering::Relaxed);
-            Err(VoiceError::Device("устройство не ответило за 5 секунд".into()))
+            Err(VoiceError::Device(
+                "устройство не ответило за 5 секунд".into(),
+            ))
         }
     }
 }
@@ -186,6 +204,72 @@ struct Resampler {
     pending: Vec<f32>,
     /// Готовые выходные отсчёты, ещё не собранные в кадр.
     out: Vec<f32>,
+    /// Подавление шума; `None` — микрофон не на 48 кГц.
+    denoiser: Option<Denoiser>,
+    /// Промежуточный моно-буфер до подавления шума.
+    mono: Vec<f32>,
+}
+
+/// Подавление шума перед всем остальным.
+///
+/// # Зачем
+///
+/// Детектор речи отличает голос от фона по громкости, и на микрофоне с сильным
+/// усилением это не работает: измеренный фон 0,042…0,076 при пиках до 0,27
+/// перекрывается с тихой речью. Никакой подбор порогов их не разделит —
+/// разделять надо сам сигнал.
+///
+/// RNNoise убирает стационарный и нестационарный шум в речевом диапазоне,
+/// оставляя голос. Это обычная математика: ни моделей на диске, ни сети.
+///
+/// # Почему только 48 кГц
+///
+/// Сеть обучена на кадрах в 480 отсчётов при сорока восьми килогерцах, и на
+/// другой частоте её выход бессмыслен. Почти все микрофоны Windows отдают
+/// именно 48 кГц; на остальных подавление просто не включается, и конвейер
+/// работает как раньше.
+struct Denoiser {
+    state: Box<nnnoiseless::DenoiseState<'static>>,
+    /// Моно-отсчёты, ещё не уложившиеся в целый кадр сети.
+    pending: Vec<f32>,
+    /// Очищенные отсчёты, готовые к пересчёту частоты.
+    clean: Vec<f32>,
+}
+
+impl Denoiser {
+    /// Кадр сети: 480 отсчётов, то есть 10 мс при 48 кГц.
+    const FRAME: usize = nnnoiseless::DenoiseState::FRAME_SIZE;
+
+    fn new(source_rate: u32) -> Option<Self> {
+        (source_rate == 48_000).then(|| Self {
+            state: nnnoiseless::DenoiseState::new(),
+            pending: Vec::with_capacity(Self::FRAME * 2),
+            clean: Vec::with_capacity(Self::FRAME * 2),
+        })
+    }
+
+    /// Пропускает моно-сигнал через сеть и возвращает очищенный.
+    ///
+    /// Остаток, не уложившийся в кадр, придерживается до следующего вызова:
+    /// это добавляет к задержке не больше десяти миллисекунд.
+    fn process(&mut self, input: &[f32]) -> &[f32] {
+        self.pending.extend_from_slice(input);
+        self.clean.clear();
+
+        // Сеть ждёт шкалу i16, а не −1…1: без масштабирования она видит почти
+        // тишину и не подавляет ничего.
+        const SCALE: f32 = 32_768.0;
+        let mut out = [0.0_f32; Self::FRAME];
+        while self.pending.len() >= Self::FRAME {
+            let mut frame = [0.0_f32; Self::FRAME];
+            for (slot, value) in frame.iter_mut().zip(self.pending.drain(..Self::FRAME)) {
+                *slot = value * SCALE;
+            }
+            self.state.process_frame(&mut out, &frame);
+            self.clean.extend(out.iter().map(|v| v / SCALE));
+        }
+        &self.clean
+    }
 }
 
 impl Resampler {
@@ -197,16 +281,28 @@ impl Resampler {
             position: 0.0,
             pending: Vec::new(),
             out: Vec::with_capacity(FRAME_SAMPLES * 2),
+            denoiser: Denoiser::new(source_rate),
+            mono: Vec::new(),
         }
     }
 
     fn push<F: FnMut(&[f32])>(&mut self, input: &[f32], on_frame: &mut F) {
         // Сводим в моно: перед распознаванием стерео не даёт ничего, кроме
         // удвоенного объёма.
-        self.pending.reserve(input.len() / self.channels + 1);
+        self.mono.clear();
+        self.mono.reserve(input.len() / self.channels + 1);
         for chunk in input.chunks(self.channels) {
             let sum: f32 = chunk.iter().sum();
-            self.pending.push(sum / chunk.len() as f32);
+            self.mono.push(sum / chunk.len() as f32);
+        }
+
+        // Шум убирается до пересчёта частоты: сеть обучена на исходных 48 кГц.
+        match self.denoiser.as_mut() {
+            Some(denoiser) => {
+                let clean = denoiser.process(&self.mono);
+                self.pending.extend_from_slice(clean);
+            }
+            None => self.pending.extend_from_slice(&self.mono),
         }
 
         let step = self.source_rate as f64 / self.target_rate as f64;
@@ -288,9 +384,10 @@ mod tests {
         let mut sizes: Vec<usize> = Vec::new();
 
         // Вход не кратен размеру кадра — кадры всё равно обязаны быть ровными.
-        resampler.push(&vec![0.05_f32; FRAME_SAMPLES * 3 + 17], &mut |f: &[f32]| {
-            sizes.push(f.len())
-        });
+        resampler.push(
+            &vec![0.05_f32; FRAME_SAMPLES * 3 + 17],
+            &mut |f: &[f32]| sizes.push(f.len()),
+        );
 
         assert_eq!(sizes, vec![FRAME_SAMPLES; 3]);
     }

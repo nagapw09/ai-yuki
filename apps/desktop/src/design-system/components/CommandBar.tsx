@@ -64,7 +64,7 @@ export function CommandBar({
         className="command-bar__button command-bar__button--mic"
         data-active={listening}
         onClick={onToggleVoice}
-        disabled={disabled}
+        disabled={disabled && !listening}
         aria-pressed={listening}
         aria-label={listening ? t('commandBar.stopVoice') : t('commandBar.startVoice')}
       >

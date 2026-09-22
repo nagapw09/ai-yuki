@@ -6,7 +6,7 @@
 //! успех здесь — это всегда полезные данные от ОС, а не факт отсутствия исключения.
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, State};
 use yuki_system::{
     AccessibilityNode, AppInfo, FileEntry, FileQuery, Modifier, MouseButton, ScreenCapture,
     SystemInfo, WindowInfo,
@@ -166,7 +166,11 @@ pub fn press_key(
     key: String,
     modifiers: Vec<Modifier>,
 ) -> Result<(), String> {
-    state.adapters.input.press_key(&key, &modifiers).map_err(err)
+    state
+        .adapters
+        .input
+        .press_key(&key, &modifiers)
+        .map_err(err)
 }
 
 #[tauri::command]
@@ -261,15 +265,19 @@ pub fn screen_capture_window(
 }
 
 #[tauri::command]
-pub fn accessibility_tree(
-    state: State<'_, AppState>,
+pub async fn accessibility_tree(
+    app: tauri::AppHandle,
     window_id: Option<u64>,
 ) -> Result<AccessibilityNode, String> {
-    state
-        .adapters
-        .screen
-        .accessibility_tree(window_id)
-        .map_err(err)
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AppState>()
+            .adapters
+            .screen
+            .accessibility_tree(window_id)
+            .map_err(err)
+    })
+    .await
+    .map_err(err)?
 }
 
 /// Дерево интерфейса в компактном текстовом виде (ТЗ §6).
@@ -278,15 +286,11 @@ pub fn accessibility_tree(
 /// текст, и собирать его лучше здесь, чем гонять через мост дерево объектов,
 /// чтобы тут же склеить его в строку.
 #[tauri::command]
-pub fn accessibility_text(
-    state: State<'_, AppState>,
+pub async fn accessibility_text(
+    app: tauri::AppHandle,
     window_id: Option<u64>,
 ) -> Result<String, String> {
-    let tree = state
-        .adapters
-        .screen
-        .accessibility_tree(window_id)
-        .map_err(err)?;
+    let tree = accessibility_tree(app, window_id).await?;
     Ok(yuki_accessibility::render(&tree))
 }
 
@@ -336,8 +340,9 @@ pub fn permissions_list(state: State<'_, AppState>) -> Result<Vec<PermissionStat
     state
         .storage
         .with_conn(|conn| {
-            let mut stmt =
-                conn.prepare("SELECT category, granted, os_granted FROM permissions ORDER BY category")?;
+            let mut stmt = conn.prepare(
+                "SELECT category, granted, os_granted FROM permissions ORDER BY category",
+            )?;
             let rows = stmt.query_map([], |row| {
                 Ok(PermissionStatus {
                     category: row.get(0)?,
@@ -469,14 +474,7 @@ pub fn activity_record(
             conn.execute(
                 "INSERT INTO activity_logs (id, tool, target, status, result, duration_ms)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                rusqlite::params![
-                    uuid_v4(),
-                    tool,
-                    target,
-                    status,
-                    result,
-                    duration_ms
-                ],
+                rusqlite::params![uuid_v4(), tool, target, status, result, duration_ms],
             )
         })
         .map(|_| ())

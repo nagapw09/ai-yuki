@@ -66,7 +66,10 @@ fn microsoft_event(item: &Value) -> CalendarResult<CalendarEvent> {
 
     Ok(CalendarEvent {
         id,
-        title: item["subject"].as_str().unwrap_or("(без названия)").to_string(),
+        title: item["subject"]
+            .as_str()
+            .unwrap_or("(без названия)")
+            .to_string(),
         start: microsoft_moment(&item["start"]),
         end: microsoft_moment(&item["end"]),
         all_day,
@@ -211,7 +214,10 @@ mod tests {
         });
 
         let parsed = events(CalendarProvider::Google, &body).expect("должен разобраться");
-        assert!(parsed[0].all_day, "событие на весь день не должно стать полуночью");
+        assert!(
+            parsed[0].all_day,
+            "событие на весь день не должно стать полуночью"
+        );
         assert_eq!(parsed[0].start, "2026-09-10");
     }
 

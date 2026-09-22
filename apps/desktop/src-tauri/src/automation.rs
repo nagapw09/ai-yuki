@@ -38,7 +38,15 @@ pub fn command_list(state: State<'_, AppState>) -> Result<Vec<CommandRecord>, St
 
 /// Отдельная функция: её зовёт и команда, и регистрация хоткеев при старте.
 pub fn list(state: &AppState) -> Result<Vec<CommandRecord>, String> {
-    let rows: Vec<(String, String, String, String, Option<String>, Option<String>, bool)> = state
+    let rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        bool,
+    )> = state
         .storage
         .with_conn(|conn| {
             let mut stmt = conn.prepare(
@@ -106,13 +114,11 @@ pub fn command_save(
     if command.name.trim().is_empty() {
         return Err("у команды должно быть имя".into());
     }
-    if command.trigger_kind == "phrase"
-        && command.phrase.as_deref().unwrap_or("").trim().is_empty()
+    if command.trigger_kind == "phrase" && command.phrase.as_deref().unwrap_or("").trim().is_empty()
     {
         return Err("для запуска по фразе нужна сама фраза".into());
     }
-    if command.trigger_kind == "hotkey"
-        && command.hotkey.as_deref().unwrap_or("").trim().is_empty()
+    if command.trigger_kind == "hotkey" && command.hotkey.as_deref().unwrap_or("").trim().is_empty()
     {
         return Err("для запуска по сочетанию нужно само сочетание".into());
     }
@@ -140,7 +146,10 @@ pub fn command_save(
 
             // Шаги переписываются целиком: сверять их поэлементно значит
             // оставлять расхождения при каждой пропущенной ветке.
-            conn.execute("DELETE FROM command_nodes WHERE command_id = ?1", [&command.id])?;
+            conn.execute(
+                "DELETE FROM command_nodes WHERE command_id = ?1",
+                [&command.id],
+            )?;
             for (position, step) in command.steps.iter().enumerate() {
                 conn.execute(
                     "INSERT INTO command_nodes (id, command_id, kind, config, position)
@@ -189,10 +198,6 @@ pub fn hotkeys(state: &AppState) -> Vec<(String, String)> {
         .unwrap_or_default()
         .into_iter()
         .filter(|c| c.enabled && c.trigger_kind == "hotkey")
-        .filter_map(|c| {
-            c.hotkey
-                .filter(|h| !h.trim().is_empty())
-                .map(|h| (c.id, h))
-        })
+        .filter_map(|c| c.hotkey.filter(|h| !h.trim().is_empty()).map(|h| (c.id, h)))
         .collect()
 }

@@ -33,7 +33,10 @@ fn main() {
         match record(SAMPLE_SECONDS) {
             Ok(audio) => {
                 let loudness = rms(&audio);
-                println!("  записано {:.1} с, громкость {loudness:.4}", SAMPLE_SECONDS);
+                println!(
+                    "  записано {:.1} с, громкость {loudness:.4}",
+                    SAMPLE_SECONDS
+                );
                 if loudness < 0.005 {
                     eprintln!("  тихо — похоже, микрофон ничего не услышал");
                 }
@@ -52,13 +55,21 @@ fn main() {
     };
 
     println!(
-        "\nмодель готова: образцов {}, порог {:.3}",
-        model.templates.len(),
+        "\nмодель готова: {}, порог {:.3}",
+        if model.reference.is_some() {
+            "эталон rustpotter"
+        } else {
+            "сравнение с образцами"
+        },
         model.threshold
     );
     println!("слушаю {LISTEN_SECONDS} секунд — говорите «Юки» и что-нибудь ещё\n");
 
-    let detector = Arc::new(Mutex::new(WakeDetector::new(model)));
+    let Some(detector) = WakeDetector::new(model) else {
+        eprintln!("детектор не собрался");
+        std::process::exit(1);
+    };
+    let detector = Arc::new(Mutex::new(detector));
     // Момент, когда в потоке впервые появилась речь после тишины: от него и
     // считается задержка отзыва.
     let speech_started = Arc::new(Mutex::new(None::<Instant>));
@@ -80,12 +91,20 @@ fn main() {
             }
         }
 
-        let heard = detector_in_stream
+        let (heard, score) = detector_in_stream
             .lock()
-            .map(|mut detector| detector.push(frame))
-            .unwrap_or(false);
+            .map(|mut detector| {
+                let heard = detector.push(frame);
+                (heard, detector.score())
+            })
+            .unwrap_or((false, None));
 
         if heard {
+            // Совпадение говорит, насколько близко было к порогу: по нему
+            // видно, стоит ли перезаписывать образцы.
+            if let Some(score) = score {
+                println!("  совпадение {score:.3}");
+            }
             let since = started_in_stream
                 .lock()
                 .ok()
@@ -132,7 +151,10 @@ fn record(seconds: u64) -> yuki_voice::VoiceResult<Vec<f32>> {
     std::thread::sleep(Duration::from_secs(seconds));
     handle.stop();
 
-    let audio = buffer.lock().map(|buffer| buffer.clone()).unwrap_or_default();
+    let audio = buffer
+        .lock()
+        .map(|buffer| buffer.clone())
+        .unwrap_or_default();
     Ok(audio)
 }
 

@@ -83,7 +83,10 @@ fn new_id() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    format!("mem-{nanos:x}-{:x}", COUNTER.fetch_add(1, Ordering::Relaxed))
+    format!(
+        "mem-{nanos:x}-{:x}",
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    )
 }
 
 // ── Команды (ТЗ §9) ─────────────────────────────────────────────────────────────
@@ -443,9 +446,10 @@ async fn index_missing(
         });
     }
 
-    let vectors = yuki_ai::embeddings::embed(&state.http, &base_url, api_key.as_deref(), &model, &texts)
-        .await
-        .ok()?;
+    let vectors =
+        yuki_ai::embeddings::embed(&state.http, &base_url, api_key.as_deref(), &model, &texts)
+            .await
+            .ok()?;
 
     for (record, vector) in pending.iter().zip(vectors.iter().skip(1)) {
         let bytes = yuki_ai::embeddings::to_bytes(vector);
@@ -540,7 +544,13 @@ fn now() -> i64 {
 mod tests {
     use super::*;
 
-    fn insert(storage: &Storage, kind: &str, key: Option<&str>, content: &str, expires: Option<i64>) {
+    fn insert(
+        storage: &Storage,
+        kind: &str,
+        key: Option<&str>,
+        content: &str,
+        expires: Option<i64>,
+    ) {
         storage
             .with_conn(|conn| {
                 conn.execute(

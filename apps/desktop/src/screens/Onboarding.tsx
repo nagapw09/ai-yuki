@@ -12,6 +12,7 @@ import {
   providerSetDefault,
   providerSetKey,
   providerTest,
+  voiceStatus,
   type OnboardingStatus,
   type PermissionStep,
   type ProviderRecord,
@@ -19,6 +20,8 @@ import {
 } from '../bridge'
 import { useI18n, type Locale } from '../i18n'
 import './Onboarding.css'
+import { VoiceSetup } from './VoiceSetup'
+import { CliHelp, isCli } from './CliHelp'
 
 /**
  * Мастер первого запуска (`docs/GAPS.md` §1).
@@ -68,6 +71,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const steps = [
     { title: 'Язык', node: <LanguageStep /> },
     { title: 'Модель', node: <ProviderStep onChanged={reload} /> },
+    { title: 'Голос', node: <VoiceSetup /> },
     {
       title: 'Разрешения',
       node: <PermissionsStep permissions={status.permissions} onChanged={reload} />,
@@ -189,6 +193,7 @@ function ProviderStep({ onChanged }: { onChanged: () => Promise<void> }) {
   const [key, setKey] = useState('')
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [model, setModel] = useState('')
 
   const load = useCallback(async () => {
     const list = await providerList().catch(() => [])
@@ -201,6 +206,7 @@ function ProviderStep({ onChanged }: { onChanged: () => Promise<void> }) {
   }, [load])
 
   const provider = providers.find((p) => p.id === chosen)
+  useEffect(() => { setModel(provider?.defaultModel ?? '') }, [chosen, provider?.defaultModel])
 
   const connect = () => {
     if (!provider) return
@@ -216,10 +222,13 @@ function ProviderStep({ onChanged }: { onChanged: () => Promise<void> }) {
         }
 
         const models = await providerTest(provider.id)
+        const selectedModel = model.trim() || models[0] || (isCli(provider.kind) ? 'default' : '')
+        if (!selectedModel) throw new Error('Укажите ID модели, которую нужно использовать.')
+        await providerSave(provider.id, { defaultModel: selectedModel })
         await providerSetDefault(provider.id)
         setKey('')
         setNote(
-          models.length > 0
+          isCli(provider.kind) ? 'Вход подтверждён. Yuki будет использовать вашу подписку.' : models.length > 0
             ? `готово · доступно моделей: ${models.length}`
             : 'подключение работает, но список моделей пуст',
         )
@@ -252,12 +261,14 @@ function ProviderStep({ onChanged }: { onChanged: () => Promise<void> }) {
             onClick={() => setChosen(item.id)}
           >
             {item.label}
-            {!item.requiresKey && <span className="onboarding__badge">локально</span>}
+            {!item.requiresKey && !isCli(item.kind) && <span className="onboarding__badge">без ключа</span>}
             {item.hasKey && <span className="onboarding__badge">ключ задан</span>}
           </button>
         ))}
       </div>
 
+      {provider && <CliHelp kind={provider.kind} />}
+      <label className="setup-field">Модель<input className="onboarding__input" value={model} onChange={e => setModel(e.target.value)} placeholder="ID модели; для CLI — default" spellCheck={false} /></label>
       {provider?.requiresKey && (
         <input
           className="onboarding__input"
@@ -277,7 +288,7 @@ function ProviderStep({ onChanged }: { onChanged: () => Promise<void> }) {
           disabled={busy || !provider}
           onClick={connect}
         >
-          {busy ? 'Проверяю…' : 'Проверить подключение'}
+          {busy ? 'Проверяю…' : provider && isCli(provider.kind) ? 'Проверить вход' : 'Проверить подключение'}
         </button>
         {note && <span className="onboarding__note">{note}</span>}
       </div>
@@ -422,6 +433,8 @@ function PermissionRow({
 
 function ReadyStep({ status }: { status: OnboardingStatus }) {
   const missing = status.permissions.filter((p) => p.required && !(p.userGranted && p.osGranted))
+  const [sttReady, setSttReady] = useState(false)
+  useEffect(() => { void voiceStatus().then(state => setSttReady(state.sttReady)).catch(() => undefined) }, [])
 
   // Сочетание спрашивается, а не вписывается в текст: оно разное на Windows
   // и macOS и его могли поменять. Написанное наизусть сочетание — это
@@ -436,7 +449,7 @@ function ReadyStep({ status }: { status: OnboardingStatus }) {
 
   return (
     <div className="onboarding__section">
-      <h2 className="onboarding__title">Всё готово</h2>
+      <h2 className="onboarding__title">Можно начинать</h2>
 
       <ul className="onboarding__summary">
         <li data-ok={status.providerReady}>
@@ -451,12 +464,13 @@ function ReadyStep({ status }: { status: OnboardingStatus }) {
                 .map((p) => PERMISSION_LABEL[p.category] ?? p.category)
                 .join(', ')}. Эти функции будут честно отказывать, пока разрешение не появится`}
         </li>
+        <li data-ok={sttReady}>{sttReady ? 'Распознавание настроено — проверьте его короткой фразой' : 'Для голосового ввода подключите распознавание в настройках. Текстовый чат доступен отдельно.'}</li>
       </ul>
 
       <Requirements report={status.requirements} />
 
       <p className="onboarding__hint">
-        Скажите «Юки, открой браузер» или напишите то же самое в строке внизу.
+        Напишите в строке внизу, с чем помочь. После настройки голоса можно нажать микрофон и говорить.
         {hotkey ? ` Вызов из любого места — ${hotkey}.` : ''}
       </p>
     </div>

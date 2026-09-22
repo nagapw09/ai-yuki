@@ -21,6 +21,26 @@ cpal = "0.15"
 tts = "0.26"
 # WAV нужен, чтобы отдать сегмент речи в STT-эндпоинт.
 hound = "3.5"
+# Подавление шума (порт RNNoise). Микрофон ноутбука с сильным усилением даёт
+# фон, в который упирается детектор речи: измеренный уровень 0,042…0,076 при
+# пиках до 0,27. Чистая математика без моделей и без сети.
+nnnoiseless = { version = "0.5", default-features = false }
+# Детектор слова пробуждения. Свой (`wake.rs`) сравнивает MFCC с образцами
+# напрямую; rustpotter делает то же самое, но с выравниванием по времени (DTW),
+# нормализацией усиления и отсечкой по усреднённому образцу — то есть терпимее к
+# темпу речи и к громкости, чем наша реализация. Работает целиком локально:
+# ни сети, ни ключей, ни моделей в дистрибутиве — эталон строится из трёх
+# записей самого пользователя (ТЗ §29).
+rustpotter = { version = "3.0.2", default-features = false }
+# Зависимость не используется в коде напрямую — она здесь ради версии.
+# rustpotter тянет candle 0.2.2, а тот ждёт от `half` реализации распределений
+# из rand_distr 0.4. Начиная с half 2.5 они переехали на rand_distr 0.5, и
+# candle перестаёт собираться (`SampleUniform is not implemented for f16`).
+# Точная версия 2.4.1 — последняя с нужным поколением, и она устраивает всех
+# остальных потребителей `half` в дереве.
+half = { version = "=2.4.1", features = ["rand_distr"] }
+# Эталон слова пробуждения хранится в настройках строкой, а не массивом чисел.
+base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "multipart",
@@ -30,3 +50,6 @@ reqwest = { version = "0.12", default-features = false, features = [
   "blocking",
 ] }
 serde_json = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Foundation", "Foundation_Collections", "Media_SpeechSynthesis", "Storage_Streams"] }

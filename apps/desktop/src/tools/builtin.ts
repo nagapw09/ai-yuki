@@ -139,11 +139,12 @@ const avatarAnimate: Tool = {
   id: 'avatar_animate',
   name: 'Анимация аватара',
   description:
-    'Проигрывает анимацию аватара по имени — например «потанцуй». Пустое имя ' +
-    'возвращает аватар в покой. В ответе приходит список доступных анимаций: ' +
-    'если имя не подошло, выбрать из этого списка и позвать снова. Клип ' +
-    'повторяется, пока его не остановят. Работает только когда окно аватара ' +
-    'открыто и в настройках выбрана папка с файлами .vrma.',
+    'Показывает компаньона и выполняет движение: builtin:sit — сесть, builtin:stand — встать, ' +
+    'builtin:walk — гулять, builtin:wave — помахать, builtin:dance — танцевать, ' +
+    'builtin:lie — лечь, builtin:sleep — спать, builtin:stretch — потянуться, auto — заниматься своими делами. ' +
+    'Выражения лица: emotion:happy, emotion:sad, emotion:relaxed, emotion:surprised. ' +
+    'Также принимает имя импортированного VRMA-клипа. Пустое имя останавливает движение. ' +
+    'Ответ содержит доступные анимации. Для встроенных движений отдельные файлы не нужны.',
   permissions: [],
   risk: 'low',
   idempotent: true,
@@ -160,16 +161,18 @@ const avatarAnimate: Tool = {
   },
   execute: async (input) => {
     const name = (input as { name: string }).name.trim()
-    const available = (await bridge.avatarAnimations().catch(() => [])).map((clip) => clip.name)
+    const available = [
+      'builtin:stand', 'builtin:sit', 'builtin:walk', 'builtin:wave', 'builtin:dance', 'builtin:lie', 'builtin:sleep', 'builtin:stretch', 'auto',
+      'emotion:happy', 'emotion:sad', 'emotion:relaxed', 'emotion:surprised',
+      ...(await bridge.avatarAnimations().catch(() => [])).map((clip) => clip.name),
+    ]
 
     if (name !== '' && !available.includes(name)) {
-      throw new Error(
-        available.length === 0
-          ? 'анимаций нет: в настройках не выбрана папка с файлами .vrma'
-          : `анимации «${name}» нет; есть: ${available.join(', ')}`,
-      )
+      throw new Error(`анимации «${name}» нет; есть: ${available.join(', ')}`)
     }
 
+    await bridge.avatarOpen()
+    // The persisted action also reaches a WebView that is still loading its model.
     await bridge.avatarPlay(name)
     return { playing: name === '' ? null : name, available }
   },

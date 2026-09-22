@@ -1,5 +1,6 @@
 import type { Message } from '@yuki/core'
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 /** Состояние вызова инструмента в ленте чата (ТЗ §15). */
 export interface ToolStatus {
@@ -17,6 +18,7 @@ export interface ChatEntry {
   readonly id: string
   readonly role: 'user' | 'assistant'
   readonly text: string
+  readonly error?: string
   readonly tools: readonly ToolStatus[]
 }
 
@@ -62,7 +64,7 @@ interface ChatState {
 let counter = 0
 const nextId = () => `${Date.now().toString(36)}-${(counter += 1).toString(36)}`
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(persist((set, get) => ({
   entries: [],
   history: [],
   streaming: '',
@@ -96,7 +98,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }),
 
-  failTurn: (message) => set({ running: false, streaming: '', error: message }),
+  failTurn: (message) => set(s => {
+    const last = s.entries.at(-1)
+    // Errors belong to their turn and survive the next request and restart.
+    if (!s.running && last?.error === message) return {}
+    const draft = last?.role === 'assistant' ? last : { id: nextId(), role: 'assistant' as const, text: '', tools: [] }
+    const rest = last?.role === 'assistant' ? s.entries.slice(0, -1) : s.entries
+    return { entries: [...rest, { ...draft, text: s.streaming || draft.text, error: message,
+      tools: draft.tools.map(t => t.state === 'running' ? { ...t, state: 'error' as const, detail: 'Запрос прерван' } : t) }],
+      running: false, streaming: '', error: message }
+  }),
 
   upsertTool: (status) =>
     set((s) => {
@@ -130,4 +141,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clear: () => set({ entries: [], history: [], streaming: '', error: null }),
+}), {
+  name: 'yuki-astra-conversation',
+  partialize: (state) => {
+    const recent = state.history.slice(-80)
+    const start = recent.findIndex(message => message.role === 'user' && message.content.some(block => block.type === 'text'))
+    return { entries: state.entries.slice(-160), history: (start < 0 ? [] : recent.slice(start)).map(message => ({ ...message,
+      content: message.content.map(block => block.type === 'image' ? { type: 'text' as const, text: '[Изображение из предыдущего сеанса не сохранено.]' } : block),
+    })) }
+  },
 }))

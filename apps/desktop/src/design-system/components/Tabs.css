@@ -1,63 +1,40 @@
-/* Горизонтальная навигация под строкой заголовка. */
+/* Горизонтальная навигация вместо боковой рейки.
 
+   Боковая занимала 190 px ширины на всех экранах ради девяти строк, которые
+   читают один раз. Наверху те же девять пунктов стоят 44 px высоты, и экрану
+   остаётся вся ширина окна. */
 .tabs {
-  display: flex;
-  justify-content: center;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-4) 0;
-  z-index: var(--z-rail);
-}
-
-.tabs__item {
-  position: relative;
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 20px 0;
+  position: relative;
+  z-index: 1;
+}
+.tabs__item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px 11px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 12px;
   color: var(--text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
   white-space: nowrap;
-  transition:
-    color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
+  transition: color 180ms, border-color 180ms;
 }
+.tabs__item svg { flex-shrink: 0; width: 15px; height: 15px; }
+.tabs__item:hover { color: var(--text-secondary); }
+.tabs__item[aria-current] { color: var(--text-primary); border-bottom-color: var(--text-primary); }
+.tabs__item[aria-current] svg { color: var(--accent-cool); }
 
-.tabs__item:hover {
-  color: var(--text-secondary);
-  background: var(--glass-bg);
-}
-
-.tabs__item[aria-current='page'] {
-  color: var(--text-primary);
-}
-
-/* Подчёркивание активного раздела: полоса шириной с подпись, а не заливка
-   всей кнопки — так активный раздел виден, но кнопки не спорят друг с другом. */
-.tabs__item[aria-current='page']::after {
-  content: '';
-  position: absolute;
-  inset-inline: var(--space-4);
-  bottom: 0;
-  height: 2px;
-  border-radius: var(--radius-full);
-  background: var(--accent-cool);
-  box-shadow: 0 0 12px var(--accent-cool);
-}
-
-/* Узкое окно: подписи уходят, остаются иконки — но по клику, а не по
-   наведению, поведение не меняется. */
-@media (width < 820px) {
-  .tabs__item span {
-    display: none;
-  }
-
-  .tabs__item {
-    padding-inline: var(--space-3);
-  }
-
-  .tabs__item[aria-current='page']::after {
-    inset-inline: var(--space-3);
-  }
+/* Узкое окно: подписи уходят у всего, кроме текущего раздела — иначе строка
+   переносится и съедает высоту, ради которой её и подняли наверх. */
+@media(max-width: 1080px) {
+  .tabs__item span { display: none; }
+  .tabs__item[aria-current] span { display: inline; }
+  .tabs__item { padding: 9px 10px 11px; }
 }

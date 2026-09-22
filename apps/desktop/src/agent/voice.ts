@@ -155,6 +155,8 @@ export async function startVoice(mode: ListenMode): Promise<void> {
 
   try {
     await voiceStart(mode)
+    ui.setListenMode(mode)
+    ui.setVoiceActive(true)
     ui.setOrbState('listening')
   } catch (error) {
     // Не удалось открыть микрофон — снимаем подписки, чтобы состояние не
@@ -171,6 +173,8 @@ export async function stopVoice(): Promise<void> {
   for (const off of unlisteners) off()
   unlisteners = []
   speakReplies = false
+  useUiStore.getState().setListenMode(null)
+  useUiStore.getState().setVoiceActive(false)
 
   await voiceStopSpeaking().catch(() => undefined)
   await voiceStop().catch(() => undefined)

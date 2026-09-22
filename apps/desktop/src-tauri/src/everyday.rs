@@ -28,6 +28,276 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+fn system_location() -> Option<(f64, f64, String)> {
+    #[cfg(windows)]
+    {
+        let p = windows::Devices::Geolocation::Geolocator::DefaultGeoposition()
+            .ok()?
+            .Value()
+            .ok()?;
+        Some((p.Latitude, p.Longitude, "Местоположение Windows".into()))
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// Страна из настроек системы — «Регион» в параметрах Windows.
+///
+/// Это не служба геолокации: её выключают или просто не настраивают, а страну
+/// в параметрах задаёт при установке каждый. Двухбуквенный код ISO 3166-1.
+fn home_country() -> Option<String> {
+    #[cfg(windows)]
+    {
+        let region = windows::System::UserProfile::GlobalizationPreferences::HomeGeographicRegion()
+            .ok()?
+            .to_string();
+        let region = region.trim().to_ascii_uppercase();
+        (region.len() == 2).then_some(region)
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// Город из названия часового пояса IANA.
+///
+/// `Europe/Moscow` → `Moscow`, `America/Argentina/Buenos_Aires` → `Buenos Aires`.
+/// Часовой пояс точнее страны: в России их одиннадцать, и Владивосток от
+/// Москвы отличается погодой сильнее, чем иные страны между собой.
+///
+/// Служебные имена (`UTC`, `Etc/GMT+3`, `Local`) города не содержат — для них
+/// возвращается `None`, и остаётся запасной путь по стране.
+pub fn city_from_timezone(zone: &str) -> Option<String> {
+    let zone = zone.trim();
+    if zone.is_empty() || zone.starts_with("Etc/") || !zone.contains('/') {
+        return None;
+    }
+    let last = zone.rsplit('/').next()?;
+    // `GMT+3` и подобные — не города.
+    if last.is_empty()
+        || last
+            .chars()
+            .any(|c| c.is_ascii_digit() || c == '+' || c == '-')
+    {
+        return None;
+    }
+    let city = last.replace('_', " ");
+    city.chars().any(|c| c.is_alphabetic()).then_some(city)
+}
+
+/// Столица страны по коду ISO 3166-1 alpha-2.
+///
+/// Страна сама по себе — не место с погодой: у России центр приходится на
+/// тайгу, где никто не живёт. Столица — понятное приближение по умолчанию, и
+/// человек видит её название в карточке, так что подмены не происходит.
+///
+/// Названия латиницей: геокодер сам отдаёт их на языке интерфейса, поэтому
+/// «Moscow» в запросе превращается в «Москва, Россия» в карточке.
+pub fn capital_of(country: &str) -> Option<&'static str> {
+    let capital = match country.to_ascii_uppercase().as_str() {
+        "AD" => "Andorra la Vella",
+        "AE" => "Abu Dhabi",
+        "AF" => "Kabul",
+        "AG" => "Saint John's",
+        "AL" => "Tirana",
+        "AM" => "Yerevan",
+        "AO" => "Luanda",
+        "AR" => "Buenos Aires",
+        "AT" => "Vienna",
+        "AU" => "Canberra",
+        "AZ" => "Baku",
+        "BA" => "Sarajevo",
+        "BB" => "Bridgetown",
+        "BD" => "Dhaka",
+        "BE" => "Brussels",
+        "BF" => "Ouagadougou",
+        "BG" => "Sofia",
+        "BH" => "Manama",
+        "BI" => "Gitega",
+        "BJ" => "Porto-Novo",
+        "BN" => "Bandar Seri Begawan",
+        "BO" => "La Paz",
+        "BR" => "Brasilia",
+        "BS" => "Nassau",
+        "BT" => "Thimphu",
+        "BW" => "Gaborone",
+        "BY" => "Minsk",
+        "BZ" => "Belmopan",
+        "CA" => "Ottawa",
+        "CD" => "Kinshasa",
+        "CF" => "Bangui",
+        "CG" => "Brazzaville",
+        "CH" => "Bern",
+        "CI" => "Yamoussoukro",
+        "CL" => "Santiago",
+        "CM" => "Yaounde",
+        "CN" => "Beijing",
+        "CO" => "Bogota",
+        "CR" => "San Jose",
+        "CU" => "Havana",
+        "CV" => "Praia",
+        "CY" => "Nicosia",
+        "CZ" => "Prague",
+        "DE" => "Berlin",
+        "DJ" => "Djibouti",
+        "DK" => "Copenhagen",
+        "DM" => "Roseau",
+        "DO" => "Santo Domingo",
+        "DZ" => "Algiers",
+        "EC" => "Quito",
+        "EE" => "Tallinn",
+        "EG" => "Cairo",
+        "ER" => "Asmara",
+        "ES" => "Madrid",
+        "ET" => "Addis Ababa",
+        "FI" => "Helsinki",
+        "FJ" => "Suva",
+        "FM" => "Palikir",
+        "FR" => "Paris",
+        "GA" => "Libreville",
+        "GB" => "London",
+        "GD" => "Saint George's",
+        "GE" => "Tbilisi",
+        "GH" => "Accra",
+        "GM" => "Banjul",
+        "GN" => "Conakry",
+        "GQ" => "Malabo",
+        "GR" => "Athens",
+        "GT" => "Guatemala City",
+        "GW" => "Bissau",
+        "GY" => "Georgetown",
+        "HN" => "Tegucigalpa",
+        "HR" => "Zagreb",
+        "HT" => "Port-au-Prince",
+        "HU" => "Budapest",
+        "ID" => "Jakarta",
+        "IE" => "Dublin",
+        "IL" => "Jerusalem",
+        "IN" => "New Delhi",
+        "IQ" => "Baghdad",
+        "IR" => "Tehran",
+        "IS" => "Reykjavik",
+        "IT" => "Rome",
+        "JM" => "Kingston",
+        "JO" => "Amman",
+        "JP" => "Tokyo",
+        "KE" => "Nairobi",
+        "KG" => "Bishkek",
+        "KH" => "Phnom Penh",
+        "KI" => "Tarawa",
+        "KM" => "Moroni",
+        "KN" => "Basseterre",
+        "KP" => "Pyongyang",
+        "KR" => "Seoul",
+        "KW" => "Kuwait City",
+        "KZ" => "Astana",
+        "LA" => "Vientiane",
+        "LB" => "Beirut",
+        "LC" => "Castries",
+        "LI" => "Vaduz",
+        "LK" => "Colombo",
+        "LR" => "Monrovia",
+        "LS" => "Maseru",
+        "LT" => "Vilnius",
+        "LU" => "Luxembourg",
+        "LV" => "Riga",
+        "LY" => "Tripoli",
+        "MA" => "Rabat",
+        "MC" => "Monaco",
+        "MD" => "Chisinau",
+        "ME" => "Podgorica",
+        "MG" => "Antananarivo",
+        "MH" => "Majuro",
+        "MK" => "Skopje",
+        "ML" => "Bamako",
+        "MM" => "Naypyidaw",
+        "MN" => "Ulaanbaatar",
+        "MR" => "Nouakchott",
+        "MT" => "Valletta",
+        "MU" => "Port Louis",
+        "MV" => "Male",
+        "MW" => "Lilongwe",
+        "MX" => "Mexico City",
+        "MY" => "Kuala Lumpur",
+        "MZ" => "Maputo",
+        "NA" => "Windhoek",
+        "NE" => "Niamey",
+        "NG" => "Abuja",
+        "NI" => "Managua",
+        "NL" => "Amsterdam",
+        "NO" => "Oslo",
+        "NP" => "Kathmandu",
+        "NR" => "Yaren",
+        "NZ" => "Wellington",
+        "OM" => "Muscat",
+        "PA" => "Panama City",
+        "PE" => "Lima",
+        "PG" => "Port Moresby",
+        "PH" => "Manila",
+        "PK" => "Islamabad",
+        "PL" => "Warsaw",
+        "PT" => "Lisbon",
+        "PW" => "Ngerulmud",
+        "PY" => "Asuncion",
+        "QA" => "Doha",
+        "RO" => "Bucharest",
+        "RS" => "Belgrade",
+        "RU" => "Moscow",
+        "RW" => "Kigali",
+        "SA" => "Riyadh",
+        "SB" => "Honiara",
+        "SC" => "Victoria",
+        "SD" => "Khartoum",
+        "SE" => "Stockholm",
+        "SG" => "Singapore",
+        "SI" => "Ljubljana",
+        "SK" => "Bratislava",
+        "SL" => "Freetown",
+        "SM" => "San Marino",
+        "SN" => "Dakar",
+        "SO" => "Mogadishu",
+        "SR" => "Paramaribo",
+        "SS" => "Juba",
+        "ST" => "Sao Tome",
+        "SV" => "San Salvador",
+        "SY" => "Damascus",
+        "SZ" => "Mbabane",
+        "TD" => "N'Djamena",
+        "TG" => "Lome",
+        "TH" => "Bangkok",
+        "TJ" => "Dushanbe",
+        "TL" => "Dili",
+        "TM" => "Ashgabat",
+        "TN" => "Tunis",
+        "TO" => "Nuku'alofa",
+        "TR" => "Ankara",
+        "TT" => "Port of Spain",
+        "TV" => "Funafuti",
+        "TW" => "Taipei",
+        "TZ" => "Dodoma",
+        "UA" => "Kyiv",
+        "UG" => "Kampala",
+        "US" => "Washington",
+        "UY" => "Montevideo",
+        "UZ" => "Tashkent",
+        "VA" => "Vatican City",
+        "VC" => "Kingstown",
+        "VE" => "Caracas",
+        "VN" => "Hanoi",
+        "VU" => "Port Vila",
+        "WS" => "Apia",
+        "YE" => "Sanaa",
+        "ZA" => "Pretoria",
+        "ZM" => "Lusaka",
+        "ZW" => "Harare",
+        _ => return None,
+    };
+    Some(capital)
+}
+
 /// Погода сейчас и на ближайшие дни.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -135,13 +405,31 @@ async fn geocode(http: &reqwest::Client, city: &str) -> Result<(f64, f64, String
 }
 
 #[tauri::command]
-pub async fn weather_get(state: State<'_, AppState>, city: String) -> Result<Weather, String> {
+pub async fn weather_get(
+    state: State<'_, AppState>,
+    city: String,
+    timezone: Option<String>,
+) -> Result<Weather, String> {
     let city = city.trim();
-    if city.is_empty() {
-        return Err("не указан город".into());
-    }
+    // Порядок: заданный город → точная точка Windows → часовой пояс → страна.
+    let by_timezone = timezone.as_deref().and_then(city_from_timezone);
 
-    let (latitude, longitude, place) = geocode(&state.http, city).await?;
+    let (latitude, longitude, place) = if !city.is_empty() {
+        geocode(&state.http, city).await?
+    } else if let Some(found) = system_location() {
+        found
+    } else if let Some(zone_city) = by_timezone {
+        geocode(&state.http, &zone_city).await?
+    } else {
+        // Часовой пояс может оказаться служебным (`UTC`), а страна в параметрах
+        // Windows задана всегда. Это грубее, но честнее прочерка.
+        let country = home_country()
+            .ok_or("Не удалось определить местоположение. Укажите город для погоды.")?;
+        let capital = capital_of(&country).ok_or_else(|| {
+            format!("Для страны «{country}» нет города по умолчанию. Укажите город для погоды.")
+        })?;
+        geocode(&state.http, capital).await?
+    };
 
     let response = state
         .http
@@ -222,7 +510,12 @@ pub async fn rates_get(
 
     let symbols = symbols
         .filter(|list| !list.is_empty())
-        .unwrap_or_else(|| ["RUB", "EUR", "USD"].iter().map(|s| s.to_string()).collect())
+        .unwrap_or_else(|| {
+            ["RUB", "EUR", "USD"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        })
         .into_iter()
         .map(|s| s.trim().to_uppercase())
         // Базовая валюта в списке даёт бессмысленную строку «1 USD = 1 USD».
@@ -247,9 +540,7 @@ pub async fn rates_get(
 
 /// Разбор ответа Frankfurter.
 pub fn parse_rates(body: &serde_json::Value, base: String) -> Result<Rates, String> {
-    let table = body["rates"]
-        .as_object()
-        .ok_or("в ответе нет курсов")?;
+    let table = body["rates"].as_object().ok_or("в ответе нет курсов")?;
 
     let mut rates: Vec<Rate> = table
         .iter()
@@ -278,11 +569,58 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn the_time_zone_names_the_city() {
+        assert_eq!(
+            city_from_timezone("Europe/Moscow").as_deref(),
+            Some("Moscow")
+        );
+        assert_eq!(city_from_timezone("Europe/Kyiv").as_deref(), Some("Kyiv"));
+        assert_eq!(
+            city_from_timezone("Asia/Vladivostok").as_deref(),
+            Some("Vladivostok")
+        );
+        // Подчёркивания в именах IANA — это пробелы.
+        assert_eq!(
+            city_from_timezone("America/New_York").as_deref(),
+            Some("New York")
+        );
+        assert_eq!(
+            city_from_timezone("America/Argentina/Buenos_Aires").as_deref(),
+            Some("Buenos Aires")
+        );
+    }
+
+    #[test]
+    fn service_time_zones_have_no_city() {
+        // Такие названия города не содержат: пусть отработает запасной путь.
+        assert_eq!(city_from_timezone("UTC"), None);
+        assert_eq!(city_from_timezone("Etc/GMT+3"), None);
+        assert_eq!(city_from_timezone("GMT"), None);
+        assert_eq!(city_from_timezone(""), None);
+        assert_eq!(city_from_timezone("   "), None);
+    }
+
+    #[test]
+    fn the_windows_region_resolves_to_a_city_weather_exists_for() {
+        assert_eq!(capital_of("RU"), Some("Moscow"));
+        // Регистр из реестра Windows приходит как угодно.
+        assert_eq!(capital_of("ru"), Some("Moscow"));
+        assert_eq!(capital_of("UA"), Some("Kyiv"));
+        assert_eq!(capital_of("US"), Some("Washington"));
+        // Несуществующий код не должен молча превратиться в чужой город.
+        assert_eq!(capital_of("XX"), None);
+        assert_eq!(capital_of(""), None);
+    }
+
+    #[test]
     fn every_documented_weather_code_has_words() {
         // Коды из WMO 4677, которые реально отдаёт Open-Meteo.
         for code in [0, 1, 2, 3, 45, 48, 51, 55, 61, 65, 71, 75, 80, 82, 95, 96] {
             let text = describe_weather(code);
-            assert_ne!(text, "погода неопределённая", "код {code} остался без текста");
+            assert_ne!(
+                text, "погода неопределённая",
+                "код {code} остался без текста"
+            );
         }
     }
 

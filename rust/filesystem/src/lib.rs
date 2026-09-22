@@ -39,9 +39,7 @@ fn entry_from_path(path: &Path) -> SystemResult<FileEntry> {
             .ok()
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64),
-        extension: path
-            .extension()
-            .map(|e| e.to_string_lossy().to_lowercase()),
+        extension: path.extension().map(|e| e.to_string_lossy().to_lowercase()),
     })
 }
 
@@ -104,7 +102,9 @@ impl FileAdapter for CrossPlatformFileAdapter {
         }
 
         match query.sort {
-            FileSort::NameAsc => found.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+            FileSort::NameAsc => {
+                found.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            }
             FileSort::ModifiedDesc => found.sort_by(|a, b| b.modified_at.cmp(&a.modified_at)),
             FileSort::SizeDesc => found.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes)),
         }

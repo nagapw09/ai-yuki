@@ -49,7 +49,10 @@ pub struct Note {
 pub fn derive_title(body: &str) -> String {
     const LIMIT: usize = 60;
 
-    let first = body.lines().find(|line| !line.trim().is_empty()).unwrap_or("");
+    let first = body
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("");
     let trimmed = first.trim();
 
     if trimmed.chars().count() <= LIMIT {

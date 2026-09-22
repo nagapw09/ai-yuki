@@ -20,6 +20,18 @@ use crate::vad::{rms, EnergyVad, SpeechDetector, VadConfig, VadEvent};
 const MAX_UTTERANCE_SECONDS: usize = 30;
 const MAX_SAMPLES: usize = TARGET_RATE as usize * MAX_UTTERANCE_SECONDS;
 
+/// Сколько звука перед началом речи попадает в запись.
+///
+/// Детектор объявляет речь на первом кадре, который уже громче порога, а порог
+/// вчетверо выше фона комнаты. Начало слова нарастает тише порога, и без
+/// упреждающего буфера оно просто не попадает в запись: распознавание получает
+/// фразу без первого звука и выдаёт похожую бессмыслицу вместо команды.
+///
+/// Триста миллисекунд с запасом покрывают нарастание любого слога и стоят
+/// десять килобайт памяти.
+const PREROLL_MS: usize = 300;
+const PREROLL_FRAMES: usize = PREROLL_MS / FRAME_MS as usize;
+
 /// Как слушать (ТЗ §10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,24 +58,43 @@ pub enum VoiceEvent {
     /// `addressed` показывает, обращались ли к Yuki: в режиме слова пробуждения
     /// фразы без обращения приходят сюда же, но с `false`. Решение, что с ними
     /// делать, принимает приложение, а не конвейер.
-    Transcribed { text: String, addressed: bool },
+    Transcribed {
+        text: String,
+        addressed: bool,
+    },
     Error(String),
 }
 
 /// Сегмент речи, ушедший на распознавание.
 pub struct Utterance {
     pub samples: Vec<f32>,
+    pub started_at: std::time::Instant,
+    pub ended_at: std::time::Instant,
     /// Обращались ли к Yuki.
     ///
     /// В режиме слова пробуждения с записанными образцами фраза без обращения
     /// не уходит на распознавание вовсе: это и деньги, и приватность — фон
     /// комнаты незачем отправлять в чужой сервис.
     pub addressed: bool,
+    /// Записано, пока говорила сама Yuki.
+    ///
+    /// Отмечается в момент захвата, а не при распознавании: к моменту, когда до
+    /// записи дойдёт очередь, синтезатор уже замолчит, и проверка «говорит ли
+    /// он сейчас» ничего не поймает. Именно так Yuki слышала собственный ответ
+    /// и отвечала сама себе.
+    pub self_voice: bool,
 }
 
 /// Варианты обращения к Yuki (ТЗ §10).
 const WAKE_PHRASES: &[&str] = &[
-    "hey yuki", "hey youki", "эй юки", "хей юки", "yuki", "юки", "юкки", "юке",
+    "hey yuki",
+    "hey youki",
+    "эй юки",
+    "хей юки",
+    "yuki",
+    "юки",
+    "юкки",
+    "юке",
 ];
 
 /// Убирает слово пробуждения и возвращает саму команду.
@@ -72,34 +103,58 @@ const WAKE_PHRASES: &[&str] = &[
 /// после обращения ничего нет: «Юки» — это обращение, на которое нужно отозваться,
 /// а не пустая команда, поэтому возвращается пустая строка, а не `None`.
 pub fn strip_wake_phrase(text: &str) -> Option<String> {
-    let normalized = text
-        .trim()
-        .trim_start_matches(['«', '"', '\''])
-        .to_lowercase()
-        // Запятая после обращения — самый частый разделитель, и без её
-        // отсечения команда начиналась бы со знака препинания.
-        .replace(['!', '?'], "");
-
+    let text = text.trim().trim_start_matches(['«', '"', '\'']);
     for phrase in WAKE_PHRASES {
-        if let Some(rest) = normalized.strip_prefix(phrase) {
-            // Следом должна идти граница слова, иначе «юкитерий» сойдёт за обращение.
-            let next = rest.chars().next();
-            if next.is_some_and(|c| c.is_alphanumeric()) {
-                continue;
-            }
-
-            let command = rest
-                .trim_start_matches([',', '.', ':', ' ', '—', '-'])
-                .trim();
-
-            // Возвращаем кусок исходного текста, а не приведённый к нижнему
-            // регистру: команда пойдёт модели, и регистр в ней осмыслен.
-            let offset = text.len() - command.len();
-            return Some(text[offset.min(text.len())..].trim().to_string());
+        let Some(prefix) = text.get(..phrase.len()) else {
+            continue;
+        };
+        if prefix.to_lowercase() != *phrase {
+            continue;
         }
+        let rest = &text[phrase.len()..];
+        if rest
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+        {
+            continue;
+        }
+        return Some(
+            rest.trim_start_matches(|c: char| {
+                c.is_whitespace()
+                    || [',', '.', ':', '!', '?', '—', '-', '»', '"', '\''].contains(&c)
+            })
+            .trim()
+            .to_owned(),
+        );
     }
-
     None
+}
+
+/// Allows exactly one follow-up after a standalone wake word. Uses capture time,
+/// so slow transcription cannot expire a command that was spoken in time.
+#[derive(Default)]
+pub struct WakeTextGate {
+    until: Option<std::time::Instant>,
+}
+
+impl WakeTextGate {
+    pub fn route(
+        &mut self,
+        text: &str,
+        start: std::time::Instant,
+        end: std::time::Instant,
+    ) -> (String, bool) {
+        if let Some(command) = strip_wake_phrase(text) {
+            self.until = command.is_empty().then_some(end + ADDRESS_WINDOW);
+            return (command, true);
+        }
+        if text.trim().is_empty() {
+            return (String::new(), false);
+        }
+        let addressed = self.until.take().is_some_and(|until| start <= until);
+        (text.to_owned(), addressed)
+    }
 }
 
 /// Работающая голосовая сессия.
@@ -127,9 +182,12 @@ impl VoiceSession {
     /// `wake` — образцы слова пробуждения. Без них режим слова пробуждения
     /// работает по прежнему пути: фраза распознаётся целиком, и обращение
     /// ищется в тексте. Это медленнее бюджета ТЗ §37, но не требует настройки.
+    /// `speaking` — общий признак «динамик занят собственной речью». Читается
+    /// из аудиопотока на каждом кадре, поэтому это атомарный флаг, а не замок.
     pub fn start<F>(
         mode: ListenMode,
         wake: Option<crate::wake::WakeModel>,
+        speaking: Arc<AtomicBool>,
         mut on_event: F,
     ) -> VoiceResult<Self>
     where
@@ -144,22 +202,35 @@ impl VoiceSession {
             ..VadConfig::default()
         });
         let mut buffer: Vec<f32> = Vec::with_capacity(TARGET_RATE as usize * 3);
+        // Кольцо последних кадров: что бы ни случилось дальше, начало фразы уже
+        // сохранено.
+        let mut preroll: std::collections::VecDeque<Vec<f32>> =
+            std::collections::VecDeque::with_capacity(PREROLL_FRAMES + 1);
 
         // Детектор работает только в режиме слова пробуждения: в push-to-talk
         // обращение и есть нажатая кнопка.
         let mut detector = match (mode, wake) {
-            (ListenMode::WakeWord, Some(model)) => Some(crate::wake::WakeDetector::new(model)),
+            // `None` здесь — это «слово записано, но детектор из него не
+            // собрался»: тогда режим работает прежним путём, по тексту.
+            (ListenMode::WakeWord, Some(model)) => crate::wake::WakeDetector::new(model),
             _ => None,
         };
         let mut addressed_until: Option<std::time::Instant> = None;
 
+        let mut started_at = std::time::Instant::now();
+        let mut utterance_addressed = false;
+        // Любой кадр фразы, пришедшийся на собственную речь, помечает её целиком.
+        let mut heard_self = false;
+
         let capture = capture::start(move |frame| {
             on_event(VoiceEvent::Level(level_of(frame)));
+            let talking = speaking.load(Ordering::Relaxed);
 
             if let Some(detector) = detector.as_mut() {
                 if detector.push(frame) {
                     // Отзыв в момент произнесения, до конца фразы.
                     addressed_until = Some(std::time::Instant::now() + ADDRESS_WINDOW);
+                    utterance_addressed = true;
                     on_event(VoiceEvent::WakeWord);
                 }
             }
@@ -167,13 +238,33 @@ impl VoiceSession {
             let forced = finish_in_stream.swap(false, Ordering::Relaxed);
             let event = vad.push_frame(frame);
 
+            // Кольцо пополняется всегда: к моменту, когда детектор объявит
+            // речь, начало слова уже должно быть в нём.
+            if preroll.len() == PREROLL_FRAMES {
+                preroll.pop_front();
+            }
+            preroll.push_back(frame.to_vec());
+
             match event {
                 VadEvent::SpeechStart => {
+                    // Фраза началась раньше, чем детектор это понял: отсчёт
+                    // ведём от первого кадра упреждающего буфера.
+                    started_at = std::time::Instant::now()
+                        - std::time::Duration::from_millis(
+                            (preroll.len() * FRAME_MS as usize) as u64,
+                        );
+                    utterance_addressed = detector.is_none()
+                        || addressed_until.is_some_and(|until| started_at <= until);
                     buffer.clear();
+                    for earlier in &preroll {
+                        buffer.extend_from_slice(earlier);
+                    }
                     buffer.extend_from_slice(frame);
+                    heard_self = talking;
                     on_event(VoiceEvent::SpeechStarted);
                 }
                 VadEvent::Speech => {
+                    heard_self |= talking;
                     if buffer.len() < MAX_SAMPLES {
                         buffer.extend_from_slice(frame);
                     }
@@ -183,15 +274,15 @@ impl VoiceSession {
 
                     // Без детектора адресованность решается позже, по тексту;
                     // с детектором — здесь, и неадресованное дальше не идёт.
-                    let addressed = match addressed_until {
-                        None => detector.is_none(),
-                        Some(until) => std::time::Instant::now() < until,
-                    };
+                    let addressed = utterance_addressed;
 
                     if tx
                         .send(Utterance {
                             samples: std::mem::take(&mut buffer),
                             addressed,
+                            self_voice: std::mem::take(&mut heard_self),
+                            started_at,
+                            ended_at: std::time::Instant::now(),
                         })
                         .is_err()
                     {
@@ -211,6 +302,9 @@ impl VoiceSession {
                     samples: std::mem::take(&mut buffer),
                     // Кнопку нажал человек — это и есть обращение.
                     addressed: true,
+                    self_voice: std::mem::take(&mut heard_self),
+                    started_at,
+                    ended_at: std::time::Instant::now(),
                 });
             }
         })?;
@@ -266,6 +360,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn wake_prefix_preserves_unicode_and_punctuation() {
+        assert_eq!(
+            strip_wake_phrase("  Юки! Открой Chrome?  ").as_deref(),
+            Some("Открой Chrome?")
+        );
+        assert_eq!(strip_wake_phrase("Юки, İ ❤️?").as_deref(), Some("İ ❤️?"));
+        assert_eq!(strip_wake_phrase("🌸🌸🌸"), None);
+        assert_eq!(strip_wake_phrase("«Юки?»").as_deref(), Some(""));
+    }
+
+    #[test]
+    fn standalone_wake_accepts_one_followup_using_capture_time() {
+        let mut gate = WakeTextGate::default();
+        let now = std::time::Instant::now();
+        let seconds = std::time::Duration::from_secs;
+        assert_eq!(gate.route("Юки", now, now), (String::new(), true));
+        // Starts inside the window, ends much later; STT latency is irrelevant.
+        assert!(
+            gate.route("Напомни мне завтра", now + seconds(4), now + seconds(25))
+                .1
+        );
+        assert!(
+            !gate
+                .route("Фоновый разговор", now + seconds(5), now + seconds(26))
+                .1
+        );
+    }
+
+    #[test]
+    fn expired_wake_and_completed_command_do_not_accept_background_speech() {
+        let mut gate = WakeTextGate::default();
+        let now = std::time::Instant::now();
+        gate.route("Юки", now, now);
+        assert!(
+            !gate
+                .route("Фон", now + std::time::Duration::from_secs(9), now)
+                .1
+        );
+        assert_eq!(
+            gate.route("Юки, открой Chrome", now, now),
+            ("открой Chrome".into(), true)
+        );
+        assert!(!gate.route("Фон", now, now).1);
+    }
+
+    #[test]
     fn recognises_the_wake_phrase_and_returns_the_command() {
         assert_eq!(
             strip_wake_phrase("Юки, открой браузер").as_deref(),
@@ -308,6 +448,18 @@ mod tests {
         assert_eq!(level_of(&[1.0; 320]), 1.0);
         assert_eq!(level_of(&[0.0; 320]), 0.0);
         assert!((level_of(&[0.1; 320]) - 0.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn the_preroll_covers_the_attack_of_a_word() {
+        // Детектор объявляет речь на кадре, который уже громче порога, а порог
+        // вчетверо выше фона. Без запаса перед этим кадром распознавание
+        // получает фразу без первого звука.
+        assert_eq!(PREROLL_FRAMES, 15);
+        assert_eq!(PREROLL_FRAMES * FRAME_MS as usize, PREROLL_MS);
+        // Запас должен покрывать нарастание слога, но не тянуть в запись
+        // полсекунды фона до неё.
+        assert!((200..=400).contains(&PREROLL_MS));
     }
 
     #[test]

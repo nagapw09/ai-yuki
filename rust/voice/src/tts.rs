@@ -12,6 +12,10 @@ use crate::error::{VoiceError, VoiceResult};
 
 /// Синтезатор речи.
 pub trait TextToSpeech: Send + Sync {
+    /// Actual output amplitude, when the backend owns the playback buffer.
+    fn level(&self) -> Option<f32> {
+        None
+    }
     /// Произносит текст. Возврат не ждёт окончания речи.
     fn speak(&self, text: &str) -> VoiceResult<()>;
 
@@ -99,7 +103,9 @@ impl TextToSpeech for SystemTts {
 
     fn set_voice(&self, name: &str) -> VoiceResult<()> {
         self.with(|engine| {
-            let voices = engine.voices().map_err(|e| VoiceError::Tts(e.to_string()))?;
+            let voices = engine
+                .voices()
+                .map_err(|e| VoiceError::Tts(e.to_string()))?;
             let voice = voices
                 .into_iter()
                 .find(|v| v.name() == name)
@@ -142,7 +148,8 @@ mod tests {
                 if text.trim().is_empty() {
                     return Ok(());
                 }
-                self.calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.calls
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 Ok(())
             }
             fn stop(&self) -> VoiceResult<()> {

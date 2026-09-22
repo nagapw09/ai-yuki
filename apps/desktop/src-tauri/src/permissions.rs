@@ -134,9 +134,7 @@ pub fn settings_url(category: &str) -> Option<&'static str> {
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
             }
             "camera" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
-            "files" => {
-                "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-            }
+            "files" => "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
             _ => return None,
         }),
         Platform::Windows => Some(match category {

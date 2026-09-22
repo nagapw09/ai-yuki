@@ -63,11 +63,7 @@ pub struct Tokens {
 }
 
 /// Собирает адрес страницы согласия.
-pub fn authorize(
-    provider: CalendarProvider,
-    client_id: &str,
-    redirect_uri: &str,
-) -> AuthRequest {
+pub fn authorize(provider: CalendarProvider, client_id: &str, redirect_uri: &str) -> AuthRequest {
     let pkce = Pkce::generate();
     let state = random_token(24);
 
@@ -195,10 +191,11 @@ async fn post_tokens(
 
 /// Разбирает ответ сервера токенов.
 pub fn parse_tokens(body: &str, now: i64) -> CalendarResult<Tokens> {
-    let value: serde_json::Value = serde_json::from_str(body).map_err(|e| CalendarError::Shape {
-        provider: "сервер токенов",
-        reason: e.to_string(),
-    })?;
+    let value: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| CalendarError::Shape {
+            provider: "сервер токенов",
+            reason: e.to_string(),
+        })?;
 
     let access_token = value["access_token"]
         .as_str()
@@ -252,7 +249,10 @@ mod tests {
     fn generated_verifiers_differ_and_fit_the_allowed_length() {
         let first = Pkce::generate();
         let second = Pkce::generate();
-        assert_ne!(first.verifier, second.verifier, "verifier обязан быть случайным");
+        assert_ne!(
+            first.verifier, second.verifier,
+            "verifier обязан быть случайным"
+        );
         assert!((43..=128).contains(&first.verifier.len()));
     }
 
@@ -263,7 +263,9 @@ mod tests {
             "client-123",
             "http://127.0.0.1:7788/callback",
         );
-        assert!(request.url.starts_with("https://accounts.google.com/o/oauth2/v2/auth?"));
+        assert!(request
+            .url
+            .starts_with("https://accounts.google.com/o/oauth2/v2/auth?"));
         // Без этих двух параметров Google не отдаст refresh-токен, и подключение
         // умрёт через час — молча.
         assert!(request.url.contains("access_type=offline"));

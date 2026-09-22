@@ -15,7 +15,10 @@ const DELAY: Duration = Duration::from_secs(3);
 fn main() {
     let provider = yuki_accessibility::provider();
 
-    println!("разрешение на чтение интерфейса: {}", provider.is_permitted());
+    println!(
+        "разрешение на чтение интерфейса: {}",
+        provider.is_permitted()
+    );
     println!("через {} с читаю активное окно…", DELAY.as_secs());
     std::thread::sleep(DELAY);
 

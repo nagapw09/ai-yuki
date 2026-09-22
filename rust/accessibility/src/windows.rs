@@ -180,38 +180,46 @@ fn build(
 
 impl AccessibilityProvider for WindowsAccessibility {
     fn tree(&self, window_id: Option<u64>) -> SystemResult<AccessibilityNode> {
-        let automation = UIAutomation::new().map_err(platform_err)?;
-
-        let root = match window_id {
-            Some(id) => {
-                // Handle принимает сырой isize — это и есть HWND, каким его
-                // отдаёт системный слой. Тянуть сюда крейт `windows` только ради
-                // конструктора значит привязаться к его версии в двух местах.
-                let handle = Handle::from(id as isize);
-                automation
-                    .element_from_handle(handle)
-                    .map_err(|e| SystemError::NotFound(format!("окно #{id}: {e}")))?
-            }
-            None => automation.get_focused_element().map_err(platform_err)?,
-        };
-
-        let walker = automation.get_control_view_walker().map_err(platform_err)?;
-        let mut budget = Budget::new();
-
-        let tree = build(&walker, &root, 0, &mut budget).ok_or_else(|| {
-            SystemError::NotFound("окно не отдало ни одного значимого элемента".into())
-        })?;
-
-        tracing::debug!(nodes = budget.spent(), "прочитано дерево интерфейса");
-        Ok(tree)
+        // Tauri's UI thread is STA. UIAutomation initializes MTA, which fails
+        // with RPC_E_CHANGED_MODE there. Keep all COM objects on a fresh worker.
+        std::thread::Builder::new()
+            .name("yuki-uia".into())
+            .spawn(move || read_tree(window_id))
+            .map_err(platform_err)?
+            .join()
+            .map_err(|_| platform_err("Поток чтения интерфейса завершился с ошибкой"))?
     }
 
     fn is_permitted(&self) -> bool {
-        // Windows не требует отдельного разрешения на чтение чужого интерфейса:
-        // UIA доступен любому процессу пользователя. Согласие пользователя
-        // проверяется уровнем выше, политикой разрешений Yuki (ТЗ §21).
         true
     }
+}
+
+fn read_tree(window_id: Option<u64>) -> SystemResult<AccessibilityNode> {
+    let automation = UIAutomation::new().map_err(platform_err)?;
+
+    let root = match window_id {
+        Some(id) => {
+            // Handle принимает сырой isize — это и есть HWND, каким его
+            // отдаёт системный слой. Тянуть сюда крейт `windows` только ради
+            // конструктора значит привязаться к его версии в двух местах.
+            let handle = Handle::from(id as isize);
+            automation
+                .element_from_handle(handle)
+                .map_err(|e| SystemError::NotFound(format!("окно #{id}: {e}")))?
+        }
+        None => automation.get_focused_element().map_err(platform_err)?,
+    };
+
+    let walker = automation.get_control_view_walker().map_err(platform_err)?;
+    let mut budget = Budget::new();
+
+    let tree = build(&walker, &root, 0, &mut budget).ok_or_else(|| {
+        SystemError::NotFound("окно не отдало ни одного значимого элемента".into())
+    })?;
+
+    tracing::debug!(nodes = budget.spent(), "прочитано дерево интерфейса");
+    Ok(tree)
 }
 
 #[cfg(test)]

@@ -521,7 +521,42 @@ export interface Rates {
   rates: Rate[]
 }
 
-export const weatherGet = (city: string) => invoke<Weather>('weather_get', { city })
+/**
+ * Погода.
+ *
+ * Пустой город означает «определи сам». Часовой пояс отдаём отсюда: браузерный
+ * `Intl` знает имя IANA вида `Europe/Moscow`, из которого сразу виден город, а
+ * Windows хранит собственные названия вроде `Russian Standard Time`, которые
+ * пришлось бы отдельно сопоставлять.
+ */
+export const weatherGet = (city: string) =>
+  invoke<Weather>('weather_get', {
+    city,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? null,
+  })
+
+/** Что играет прямо сейчас — по медиасессиям Windows (ТЗ §35). */
+export interface NowPlaying {
+  /** Есть ли медиасессия: без неё карточку показывать нечего. */
+  available: boolean
+  playing: boolean
+  title: string
+  artist: string
+  /** Кто играет: `chrome.exe`, `Spotify.exe`. Подпись, когда названия нет. */
+  source: string
+  /** Секунды с начала дорожки. */
+  position: number
+  /** Длительность в секундах; 0 — плеер её не сообщил. */
+  duration: number
+  /** Какие кнопки плеер объявляет рабочими. */
+  canPause: boolean
+  canNext: boolean
+  canPrevious: boolean
+}
+
+export const mediaNowPlaying = () => invoke<NowPlaying>('media_now_playing')
+export const mediaControl = (action: 'pause' | 'play' | 'play_pause' | 'next' | 'previous') =>
+  invoke<void>('media_control', { action })
 
 export const ratesGet = (base?: string, symbols?: string[]) =>
   invoke<Rates>('rates_get', { base: base ?? null, symbols: symbols ?? null })
@@ -586,6 +621,8 @@ export interface WakeStatus {
   /** Сколько уже записано в текущем заходе. */
   recorded: number
   threshold: number | null
+  /** Слово записано прежней версией: детектор работает старым способом. */
+  legacy: boolean
 }
 
 export const wakeStatus = () => invoke<WakeStatus>('wake_status')
@@ -639,7 +676,7 @@ export interface AnimationClip {
 }
 
 export type AvatarPose = 'portrait' | 'full'
-export type AvatarAnchor = 'free' | 'taskbar'
+export type AvatarAnchor = 'free' | 'taskbar' | 'window'
 
 /** Событие смены кадра: окно аватара пересчитывает по нему камеру. */
 export const AVATAR_POSE_EVENT = 'yuki://avatar-pose'
@@ -652,6 +689,13 @@ export interface AvatarSignal {
   state: OrbState
   /** Громкость 0…1, когда она известна. */
   audioLevel: number
+  /**
+   * Состояние `listening` — всего лишь дежурство по слову пробуждения.
+   *
+   * Без этого признака аватар принимает постоянно открытый микрофон за
+   * разговор и перестаёт заниматься своими делами вовсе.
+   */
+  passive?: boolean
 }
 
 /** Имя события состояния аватара. */
@@ -678,6 +722,7 @@ export interface RemoteDevice {
 
 /** Состояние канала Telegram. */
 export interface TelegramStatus {
+  lastError: string | null
   enabled: boolean
   hasToken: boolean
   running: boolean
@@ -717,6 +762,11 @@ export const profileApply = (id: string) => invoke<Profile[]>('profile_apply', {
 export const profileDelete = (id: string) => invoke<Profile[]>('profile_delete', { id })
 
 export const avatarStatus = () => invoke<AvatarStatus>('avatar_status')
+export const companionImport = (paths: string[]) => invoke<{models: number; animations: number; unsupported: string[]}>('companion_import', { paths })
+export const companionAttach = (target: number | null) => invoke<void>('companion_attach', { target })
+export const companionContext = () => invoke<import('../avatar/behavior').CompanionContext>('companion_context')
+export const companionMotionTick = (contact: number, walking: boolean, target: number | null) => invoke<number>('companion_motion_tick', { contact, walking, target })
+export const voicePlayback = () => invoke<{speaking: boolean; level: number | null}>('voice_playback')
 export const avatarOpen = () => invoke<AvatarStatus>('avatar_open')
 export const avatarClose = () => invoke<void>('avatar_close')
 export const avatarSetModel = (path: string) =>
@@ -726,6 +776,7 @@ export const avatarSetPose = (pose: AvatarPose) =>
 export const avatarSetAnimations = (path: string) =>
   invoke<AvatarStatus>('avatar_set_animations', { path })
 export const avatarAnimations = () => invoke<AnimationClip[]>('avatar_animations')
+export const avatarExpressionNames = () => invoke<string[]>('avatar_expression_names')
 export const avatarAnimationBytes = (name: string) =>
   invoke<ArrayBuffer>('avatar_animation_bytes', { name })
 export const avatarPlay = (name: string) => invoke<void>('avatar_play', { name })
@@ -739,7 +790,8 @@ export const avatarSetAlwaysOnTop = (enabled: boolean) =>
 export const avatarRememberPlacement = () => invoke<void>('avatar_remember_placement')
 
 /** Файл модели байтами: его читает Rust, а не WebView. */
-export const avatarModelBytes = () => invoke<ArrayBuffer>('avatar_model_bytes')
+export const avatarModelBytes = (expectedPath?: string) => invoke<ArrayBuffer>('avatar_model_bytes', {expectedPath})
+export const companionPointer = (interactive: boolean) => invoke<{x:number;y:number}>('companion_pointer',{interactive})
 
 /** Трансляция состояния во все окна (ТЗ §12). */
 export const avatarBroadcast = (signal: AvatarSignal) => emit(AVATAR_EVENT, signal)
@@ -912,6 +964,25 @@ export interface VoiceStatus {
   sttReady: boolean
 }
 
+/** Локальное распознавание: whisper.cpp рядом с Yuki, без ключей и без облака. */
+export interface LocalSpeechStatus {
+  /** Есть ли официальная сборка движка для этой системы. */
+  supported: boolean
+  runtimeReady: boolean
+  models: { id: string; bytes: number; downloaded: boolean }[]
+  model: string
+  enabled: boolean
+  running: boolean
+  port: number
+  busy: boolean
+}
+
+export const localSpeechStatus = () => invoke<LocalSpeechStatus>('local_speech_status')
+export const localSpeechInstall = (model?: string) =>
+  invoke<void>('local_speech_install', { model: model ?? null })
+export const localSpeechStart = () => invoke<void>('local_speech_start')
+export const localSpeechStop = () => invoke<void>('local_speech_stop')
+
 export const voiceStatus = () => invoke<VoiceStatus>('voice_status')
 /** Громкость речи 0…1; `null` — движок звука не отдаёт. */
 export const voiceSpeakingLevel = () => invoke<number | null>('voice_speaking_level')
@@ -927,12 +998,16 @@ export const voiceConfigureStt = (settings: {
   providerId?: string
   model?: string
   language?: string
+  baseUrl?: string
+  apiKey?: string
 }) =>
   invoke<void>('voice_configure_stt', {
     settings: {
       providerId: settings.providerId ?? null,
       model: settings.model ?? null,
       language: settings.language ?? null,
+      baseUrl: settings.baseUrl ?? null,
+      apiKey: settings.apiKey ?? null,
     },
   })
 

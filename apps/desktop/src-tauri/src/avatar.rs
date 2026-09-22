@@ -66,7 +66,7 @@ const SIZE_PORTRAIT: (u32, u32) = (320, 480);
 /// влезает только целиком уменьшившись — фигура становится вдвое мельче окна и
 /// половину времени висит в пустоте. При отношении сторон около двух третей
 /// запас по ширине и по высоте выходит одинаковым, и фигура заполняет кадр.
-const SIZE_FULL: (u32, u32) = (280, 440);
+const SIZE_FULL: (u32, u32) = (520, 440);
 
 /// Расширение единственного поддерживаемого формата модели.
 const MODEL_EXTENSION: &str = "vrm";
@@ -123,7 +123,7 @@ pub struct AnimationClip {
     pub name: String,
 }
 
-fn setting(state: &AppState, key: &str) -> Option<String> {
+pub(crate) fn setting(state: &AppState, key: &str) -> Option<String> {
     state
         .storage
         .with_conn(|conn| {
@@ -140,7 +140,7 @@ fn setting(state: &AppState, key: &str) -> Option<String> {
         .flatten()
 }
 
-fn set_setting(state: &AppState, key: &str, value: &str) -> Result<(), String> {
+pub(crate) fn set_setting(state: &AppState, key: &str, value: &str) -> Result<(), String> {
     state
         .storage
         .with_conn(|conn| {
@@ -202,6 +202,7 @@ pub fn avatar_set_animations(
     }
 
     set_setting(&state, KEY_ANIMATIONS, trimmed)?;
+    let _ = app.emit("yuki://avatar-reload", ());
     Ok(avatar_status(app, state))
 }
 
@@ -229,7 +230,9 @@ pub fn avatar_animations(state: State<'_, AppState>) -> Result<Vec<AnimationClip
         .filter_map(|path| {
             path.file_stem()
                 .and_then(|name| name.to_str())
-                .map(|name| AnimationClip { name: name.to_string() })
+                .map(|name| AnimationClip {
+                    name: name.to_string(),
+                })
         })
         .collect();
 
@@ -381,7 +384,12 @@ pub fn avatar_move(
 /// и отдельная команда «останови» заставляла бы вызывающего помнить, что
 /// играло.
 #[tauri::command]
-pub fn avatar_play(app: tauri::AppHandle, name: String) -> Result<(), String> {
+pub fn avatar_play(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<(), String> {
+    set_setting(&state, "avatar.action", &name)?;
     let window = app
         .get_webview_window(WINDOW_LABEL)
         .ok_or("окно аватара закрыто")?;
@@ -401,6 +409,9 @@ fn pose(state: &AppState) -> String {
 }
 
 fn anchor(state: &AppState) -> String {
+    if setting(state, KEY_ANCHOR).as_deref() == Some("window") {
+        return "window".into();
+    }
     match setting(state, KEY_ANCHOR).as_deref() {
         Some(ANCHOR_TASKBAR) => ANCHOR_TASKBAR.into(),
         _ => ANCHOR_FREE.into(),
@@ -456,10 +467,7 @@ fn anchored_position(
     let free_x = (clamp(area_size.0) - clamp(window_size.0)).max(0);
     let free_y = (clamp(area_size.1) - clamp(window_size.1)).max(0);
 
-    (
-        x.clamp(origin_x, origin_x + free_x),
-        origin_y + free_y,
-    )
+    (x.clamp(origin_x, origin_x + free_x), origin_y + free_y)
 }
 
 /// Открывает окно аватара, восстанавливая прежние размер и место.
@@ -480,7 +488,7 @@ pub async fn avatar_open(
         SIZE_PORTRAIT
     };
 
-    let placement: Placement = setting(&state, KEY_PLACEMENT)
+    let mut placement: Placement = setting(&state, KEY_PLACEMENT)
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or(Placement {
             x: 80,
@@ -488,22 +496,22 @@ pub async fn avatar_open(
             width: default_width,
             height: default_height,
         });
+    if pose(&state) == POSE_FULL {
+        placement.width = placement.width.max(SIZE_FULL.0);
+    }
 
-    let mut builder = WebviewWindowBuilder::new(
-        &app,
-        WINDOW_LABEL,
-        WebviewUrl::App("index.html".into()),
-    )
-    .title("Yuki")
-    .inner_size(placement.width as f64, placement.height as f64)
-    .position(placement.x as f64, placement.y as f64)
-    .decorations(false)
-    .transparent(true)
-    .shadow(false)
-    .resizable(true)
-    // В панели задач ему делать нечего: это компаньон на экране, а не второе
-    // приложение.
-    .skip_taskbar(true);
+    let mut builder =
+        WebviewWindowBuilder::new(&app, WINDOW_LABEL, WebviewUrl::App("index.html".into()))
+            .title("Yuki")
+            .inner_size(placement.width as f64, placement.height as f64)
+            .position(placement.x as f64, placement.y as f64)
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .resizable(true)
+            // В панели задач ему делать нечего: это компаньон на экране, а не второе
+            // приложение.
+            .skip_taskbar(true);
 
     if flag(&state, KEY_ON_TOP, true) {
         builder = builder.always_on_top(true);
@@ -547,7 +555,11 @@ pub fn avatar_set_click_through(
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
         window.set_ignore_cursor_events(enabled).map_err(err)?;
     }
-    set_setting(&state, KEY_CLICK_THROUGH, if enabled { "on" } else { "off" })
+    set_setting(
+        &state,
+        KEY_CLICK_THROUGH,
+        if enabled { "on" } else { "off" },
+    )
 }
 
 /// Меняет кадр: по пояс или во весь рост.
@@ -561,10 +573,18 @@ pub fn avatar_set_pose(
     state: State<'_, AppState>,
     pose: String,
 ) -> Result<AvatarStatus, String> {
-    let pose = if pose == POSE_FULL { POSE_FULL } else { POSE_PORTRAIT };
+    let pose = if pose == POSE_FULL {
+        POSE_FULL
+    } else {
+        POSE_PORTRAIT
+    };
     set_setting(&state, KEY_POSE, pose)?;
 
-    let (width, height) = if pose == POSE_FULL { SIZE_FULL } else { SIZE_PORTRAIT };
+    let (width, height) = if pose == POSE_FULL {
+        SIZE_FULL
+    } else {
+        SIZE_PORTRAIT
+    };
 
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
         window
@@ -594,7 +614,11 @@ pub fn avatar_set_anchor(
     state: State<'_, AppState>,
     anchor: String,
 ) -> Result<AvatarStatus, String> {
-    let value = if anchor == ANCHOR_TASKBAR { ANCHOR_TASKBAR } else { ANCHOR_FREE };
+    let value = if anchor == ANCHOR_TASKBAR {
+        ANCHOR_TASKBAR
+    } else {
+        ANCHOR_FREE
+    };
     set_setting(&state, KEY_ANCHOR, value)?;
 
     if value == ANCHOR_TASKBAR {
@@ -646,6 +670,7 @@ pub fn avatar_set_model(
     }
 
     set_setting(&state, KEY_MODEL, trimmed)?;
+    let _ = app.emit("yuki://avatar-reload", ());
     Ok(avatar_status(app, state))
 }
 
@@ -655,17 +680,106 @@ pub fn avatar_set_model(
 /// WebView и не нужно ослаблять CSP ради одной картинки. Модель читается один
 /// раз при открытии окна.
 #[tauri::command]
-pub fn avatar_model_bytes(state: State<'_, AppState>) -> Result<tauri::ipc::Response, String> {
+pub async fn avatar_model_bytes(
+    state: State<'_, AppState>,
+    expected_path: Option<String>,
+) -> Result<tauri::ipc::Response, String> {
     let path = setting(&state, KEY_MODEL).unwrap_or_default();
+    if expected_path.is_some_and(|expected| expected != path) {
+        return Err("Выбран другой персонаж".into());
+    }
     if path.trim().is_empty() {
         return Err("модель не выбрана".into());
     }
 
-    let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+    let cache = state
+        .storage
+        .path()
+        .parent()
+        .ok_or("Каталог данных недоступен")?
+        .join("avatar-cache");
+    let economy = setting(&state, "avatar.quality").as_deref() == Some("economy");
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        if economy {
+            crate::avatar_assets::model_bytes(std::path::Path::new(&path), &cache)
+        } else {
+            std::fs::read(&path).map_err(|error| error.to_string())
+        }
+    })
+    .await
+    .map_err(err)??;
     Ok(tauri::ipc::Response::new(bytes))
 }
 
 /// Сохраняет текущее положение окна.
+#[tauri::command]
+pub async fn avatar_expression_names(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let path = setting(&state, KEY_MODEL).unwrap_or_default();
+    if path.is_empty() {
+        return Ok(vec![]);
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::io::Read;
+        let mut file = std::fs::File::open(path).map_err(err)?;
+        let mut header = [0u8; 20];
+        file.read_exact(&mut header).map_err(err)?;
+        if &header[..4] != b"glTF" || &header[16..20] != b"JSON" {
+            return Err("Некорректный VRM".into());
+        }
+        let length = u32::from_le_bytes(header[12..16].try_into().unwrap()) as usize;
+        if length > 32 * 1024 * 1024 {
+            return Err("Слишком большой заголовок VRM".into());
+        }
+        let mut bytes = vec![0; length];
+        file.read_exact(&mut bytes).map_err(err)?;
+        let json: serde_json::Value = serde_json::from_slice(&bytes).map_err(err)?;
+        let mut names = Vec::new();
+        if let Some(groups) = json
+            .pointer("/extensions/VRM/blendShapeMaster/blendShapeGroups")
+            .and_then(|v| v.as_array())
+        {
+            for group in groups {
+                let preset = group["presetName"].as_str().unwrap_or("");
+                let name = match preset {
+                    "joy" => "happy",
+                    "sorrow" => "sad",
+                    "fun" => "relaxed",
+                    "a" => "aa",
+                    "i" => "ih",
+                    "u" => "ou",
+                    "e" => "ee",
+                    "o" => "oh",
+                    "blink_l" => "blinkLeft",
+                    "blink_r" => "blinkRight",
+                    "lookup" => "lookUp",
+                    "lookdown" => "lookDown",
+                    "lookleft" => "lookLeft",
+                    "lookright" => "lookRight",
+                    "lookUp" | "lookDown" | "lookLeft" | "lookRight" | "blink" | "neutral"
+                    | "angry" => preset,
+                    _ => group["name"].as_str().unwrap_or(""),
+                };
+                if !name.is_empty() {
+                    names.push(name.to_string());
+                }
+            }
+        }
+        for kind in ["preset", "custom"] {
+            if let Some(expressions) = json
+                .pointer(&format!("/extensions/VRMC_vrm/expressions/{kind}"))
+                .and_then(|v| v.as_object())
+            {
+                names.extend(expressions.keys().cloned());
+            }
+        }
+        names.sort();
+        names.dedup();
+        Ok(names)
+    })
+    .await
+    .map_err(err)?
+}
+
 #[tauri::command]
 pub fn avatar_remember_placement(
     app: tauri::AppHandle,
@@ -727,10 +841,22 @@ mod tests {
             Some((0, 612)),
             "слева и на панели задач"
         );
-        assert_eq!(spot_position(area.0, area.1, window, "right"), Some((1720, 612)));
-        assert_eq!(spot_position(area.0, area.1, window, "center"), Some((860, 612)));
-        assert_eq!(spot_position(area.0, area.1, window, "top-left"), Some((0, 0)));
-        assert_eq!(spot_position(area.0, area.1, window, "top-right"), Some((1720, 0)));
+        assert_eq!(
+            spot_position(area.0, area.1, window, "right"),
+            Some((1720, 612))
+        );
+        assert_eq!(
+            spot_position(area.0, area.1, window, "center"),
+            Some((860, 612))
+        );
+        assert_eq!(
+            spot_position(area.0, area.1, window, "top-left"),
+            Some((0, 0))
+        );
+        assert_eq!(
+            spot_position(area.0, area.1, window, "top-right"),
+            Some((1720, 0))
+        );
     }
 
     /// «Слева» без уточнения — это низ, а не середина.
@@ -852,7 +978,10 @@ mod tests {
     #[test]
     fn the_anchored_window_stays_on_screen() {
         let (right, _) = anchored_position((0, 0), (1920, 1032), (200, 420), 5000);
-        assert_eq!(right, 1720, "правый край окна упирается в правый край экрана");
+        assert_eq!(
+            right, 1720,
+            "правый край окна упирается в правый край экрана"
+        );
 
         let (left, _) = anchored_position((0, 0), (1920, 1032), (200, 420), -300);
         assert_eq!(left, 0, "левый край окна упирается в левый край экрана");
@@ -916,7 +1045,10 @@ mod tests {
             .and_then(|rest| rest.split(';').next())
             .expect("в политике нет connect-src");
 
-        assert!(!connect.contains("https:"), "странице открыли сеть: {connect}");
+        assert!(
+            !connect.contains("https:"),
+            "странице открыли сеть: {connect}"
+        );
         assert!(!connect.contains('*'), "странице открыли сеть: {connect}");
     }
 

@@ -218,7 +218,11 @@ mod tests {
     fn windows_older_than_ten_fails_on_the_operating_system_line() {
         let report = report(&info("windows", "8.1", 8, 16.0));
         assert!(!report.ok);
-        let os = report.items.iter().find(|i| i.key == "os").expect("строка ОС");
+        let os = report
+            .items
+            .iter()
+            .find(|i| i.key == "os")
+            .expect("строка ОС");
         assert!(!os.ok);
     }
 

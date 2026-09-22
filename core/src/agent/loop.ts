@@ -73,6 +73,7 @@ export interface AgentOutcome {
   /** Финальный текст для пользователя. */
   readonly reply: string
   readonly steps: number
+  readonly completed: boolean
 }
 
 /**
@@ -103,6 +104,12 @@ function summarise(value: unknown): string {
   return json.length > 400 ? `${json.slice(0, 400)}…` : json
 }
 
+/** Model input must contain the result, not the short activity-log preview. */
+function modelResult(value: unknown): string {
+  const text = value == null ? 'готово' : typeof value === 'string' ? value : JSON.stringify(value)
+  return text.length <= 64_000 ? text : `${text.slice(0, 64_000)}\n[Результат сокращён до 64 000 символов. Не считай его полным; запроси нужный фрагмент отдельно.]`
+}
+
 function toolResultBlock(id: string, content: string, isError: boolean): ContentBlock {
   return { type: 'tool_result', toolUseId: id, content, isError }
 }
@@ -127,7 +134,7 @@ export async function runAgent(
   while (steps < maxSteps) {
     if (deps.signal?.aborted) {
       deps.onEvent({ kind: 'error', message: 'Задача отменена' })
-      return { messages, reply, steps }
+      throw new Error('Задача отменена')
     }
 
     steps += 1
@@ -140,6 +147,7 @@ export async function runAgent(
       ...(deps.systemExtra ? { systemExtra: deps.systemExtra } : {}),
     })
 
+    if (deps.signal?.aborted) throw new Error('Задача отменена')
     messages.push({ role: 'assistant', content: response.content })
 
     const text = responseText(response)
@@ -151,7 +159,7 @@ export async function runAgent(
     const calls = toolUses(response)
     if (response.stopReason !== 'tool_use' || calls.length === 0) {
       deps.onEvent({ kind: 'done', steps })
-      return { messages, reply, steps }
+      return { messages, reply, steps, completed: true }
     }
 
     // OBSERVE: результаты всех вызовов одного хода возвращаются одним сообщением.
@@ -163,6 +171,7 @@ export async function runAgent(
     const attachments: ContentBlock[] = []
 
     for (const call of calls) {
+      if (deps.signal?.aborted) throw new Error('Задача отменена')
       const tool = deps.registry.get(call.name)
 
       if (!tool) {
@@ -213,6 +222,7 @@ export async function runAgent(
         }
       }
 
+      if (deps.signal?.aborted) throw new Error('Задача отменена')
       deps.onEvent({ kind: 'tool_started', toolId: tool.id, summary: tool.name })
 
       const started = performance.now()
@@ -233,7 +243,7 @@ export async function runAgent(
 
         deps.onEvent({ kind: 'tool_finished', toolId: tool.id, ok: true, detail, durationMs })
         deps.log?.({ tool: tool.id, status: 'ok', result: detail, durationMs })
-        results.push(toolResultBlock(call.id, detail, false))
+        results.push(toolResultBlock(call.id, modelResult(value), false))
       } catch (error) {
         const durationMs = Math.round(performance.now() - started)
         const message = describeError(error)
@@ -258,7 +268,7 @@ export async function runAgent(
   const message =
     'Задача оказалась длиннее, чем допускает один запрос. Скажи, продолжать ли.'
   deps.onEvent({ kind: 'error', message })
-  return { messages, reply: reply || message, steps }
+  return { messages, reply: message, steps, completed: false }
 }
 
 /** Ошибка инструмента в формате ядра — для реализаций, которым нужен явный тип. */

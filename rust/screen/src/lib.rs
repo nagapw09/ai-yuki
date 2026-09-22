@@ -37,7 +37,12 @@ fn encode(image: xcap::image::RgbaImage, display_index: usize) -> SystemResult<S
     let (width, height) = (image.width(), image.height());
     let mut png = Vec::new();
     image::codecs::png::PngEncoder::new(&mut png)
-        .write_image(image.as_raw(), width, height, image::ExtendedColorType::Rgba8)
+        .write_image(
+            image.as_raw(),
+            width,
+            height,
+            image::ExtendedColorType::Rgba8,
+        )
         .map_err(platform_err)?;
 
     Ok(ScreenCapture {
@@ -111,7 +116,8 @@ fn prepare(
     if let Some((width, height)) = target_size(image.width(), image.height(), options.max_width) {
         // Треугольный фильтр: Lanczos на снимке экрана даёт звон на тексте,
         // а ближайший сосед — рвань. Для чтения интерфейса это заметно.
-        image = image::imageops::resize(&image, width, height, image::imageops::FilterType::Triangle);
+        image =
+            image::imageops::resize(&image, width, height, image::imageops::FilterType::Triangle);
     }
 
     Ok(image)

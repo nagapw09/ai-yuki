@@ -27,17 +27,27 @@ pub mod capture;
 pub mod error;
 pub mod mfcc;
 pub mod session;
+pub mod spotter;
 pub mod stt;
 pub mod tts;
 pub mod tts_http;
+#[cfg(windows)]
+mod tts_windows;
 pub mod vad;
 pub mod wake;
 
-pub use capture::{default_input_name, input_devices, CaptureHandle, FRAME_MS, TARGET_RATE};
+pub use capture::{
+    default_input_name, input_devices, input_format, CaptureHandle, FRAME_MS, TARGET_RATE,
+};
 pub use error::{VoiceError, VoiceResult};
 pub use session::{strip_wake_phrase, ListenMode, Utterance, VoiceEvent, VoiceSession};
+pub use spotter::Spotter;
 pub use stt::{encode_wav, HttpStt, SpeechToText};
-pub use tts::{SystemTts, TextToSpeech};
+#[cfg(not(windows))]
+pub use tts::SystemTts;
+pub use tts::TextToSpeech;
 pub use tts_http::{HttpTts, HttpTtsConfig};
+#[cfg(windows)]
+pub use tts_windows::SystemTts;
 pub use vad::{EnergyVad, SpeechDetector, VadConfig, VadEvent};
 pub use wake::{WakeDetector, WakeModel, ENROLL_SAMPLES};

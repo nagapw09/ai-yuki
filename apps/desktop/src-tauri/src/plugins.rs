@@ -126,7 +126,10 @@ pub fn validate(manifest: &PluginManifest) -> Vec<String> {
     }
 
     let parts: Vec<&str> = manifest.version.split('.').collect();
-    if parts.len() != 3 || !parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+    if parts.len() != 3
+        || !parts
+            .iter()
+            .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
     {
         problems.push(format!(
             "version: ожидается вид 1.0.0, получено «{}»",
@@ -166,17 +169,14 @@ pub fn validate(manifest: &PluginManifest) -> Vec<String> {
 /// Сравниваются именно сегменты, а не подстроки: имя файла `..hidden` законно,
 /// а `../secrets` — нет.
 fn has_parent_segment(value: &str) -> bool {
-    value
-        .split(['/', '\\'])
-        .any(|segment| segment == "..")
+    value.split(['/', '\\']).any(|segment| segment == "..")
 }
 
 /// Читает и разбирает манифест из папки.
 pub fn read_manifest(directory: &Path) -> Result<PluginManifest, String> {
     let path = directory.join(MANIFEST_FILE);
-    let text = std::fs::read_to_string(&path).map_err(|e| {
-        format!("не удалось прочитать {}: {e}", path.display())
-    })?;
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("не удалось прочитать {}: {e}", path.display()))?;
     serde_json::from_str(&text).map_err(|e| format!("{MANIFEST_FILE}: {e}"))
 }
 
@@ -287,7 +287,10 @@ pub fn plugin_list(state: State<'_, AppState>) -> Result<Vec<PluginRecord>, Stri
                 .as_ref()
                 .map(|m| m.permissions.clone())
                 .unwrap_or_default(),
-            tools: manifest.as_ref().map(|m| m.tools.clone()).unwrap_or_default(),
+            tools: manifest
+                .as_ref()
+                .map(|m| m.tools.clone())
+                .unwrap_or_default(),
             id,
             name,
             version,
@@ -489,16 +492,10 @@ fn verify_declared_tools(state: &AppState, manifest: &PluginManifest) -> Result<
 
     let mut note = String::from("манифест разошёлся с сервером плагина:");
     if !missing.is_empty() {
-        note.push_str(&format!(
-            " обещаны, но отсутствуют — {};",
-            join(&missing)
-        ));
+        note.push_str(&format!(" обещаны, но отсутствуют — {};", join(&missing)));
     }
     if !extra.is_empty() {
-        note.push_str(&format!(
-            " не заявлены в манифесте — {};",
-            join(&extra)
-        ));
+        note.push_str(&format!(" не заявлены в манифесте — {};", join(&extra)));
     }
 
     state

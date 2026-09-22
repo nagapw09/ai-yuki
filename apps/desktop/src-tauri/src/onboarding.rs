@@ -92,8 +92,7 @@ pub fn onboarding_status(state: State<'_, AppState>) -> Result<OnboardingStatus,
     let rows: Vec<(String, bool, bool)> = state
         .storage
         .with_conn(|conn| {
-            let mut stmt =
-                conn.prepare("SELECT category, granted, os_granted FROM permissions")?;
+            let mut stmt = conn.prepare("SELECT category, granted, os_granted FROM permissions")?;
             let rows = stmt.query_map([], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
@@ -202,9 +201,8 @@ pub fn onboarding_reset(state: State<'_, AppState>) -> Result<(), String> {
 /// произвольную строку значило бы открыть дыру ради удобства.
 #[tauri::command]
 pub fn permission_open_settings(category: String) -> Result<(), String> {
-    let url = crate::permissions::settings_url(&category).ok_or_else(|| {
-        format!("для «{category}» на этой системе нет отдельной панели настроек")
-    })?;
+    let url = crate::permissions::settings_url(&category)
+        .ok_or_else(|| format!("для «{category}» на этой системе нет отдельной панели настроек"))?;
 
     opener::open(url).map_err(err)
 }
@@ -215,10 +213,7 @@ pub fn permission_open_settings(category: String) -> Result<(), String> {
 /// системный API отвечает сразу, а человек нажимает кнопку потом. Поэтому
 /// интерфейс всё равно обязан перечитать статус, а не верить этому ответу.
 #[tauri::command]
-pub fn permission_request_os(
-    state: State<'_, AppState>,
-    category: String,
-) -> Result<bool, String> {
+pub fn permission_request_os(state: State<'_, AppState>, category: String) -> Result<bool, String> {
     let granted = crate::permissions::request_from_os(&category);
     crate::permissions::sync_os(&state.storage).map_err(err)?;
     Ok(granted)

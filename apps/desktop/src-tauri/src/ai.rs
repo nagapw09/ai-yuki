@@ -105,7 +105,7 @@ fn resolve(state: &AppState, id: Option<&str>) -> Result<(ProviderConfig, String
         })
         .map_err(|e| match e {
             crate::storage::StorageError::Sqlite(rusqlite::Error::QueryReturnedNoRows) => {
-                "провайдер не настроен: откройте Настройки и добавьте ключ".to_string()
+                "Модель не подключена. Выберите подписку CLI, API или локальную модель в Настройках.".to_string()
             }
             other => err(other),
         })?;
@@ -115,7 +115,9 @@ fn resolve(state: &AppState, id: Option<&str>) -> Result<(ProviderConfig, String
     let kind = ProviderKind::from_str(&raw_kind)
         .ok_or_else(|| format!("неизвестный тип провайдера: {raw_kind}"))?;
 
-    let base_url = if base_url.trim().is_empty() {
+    let base_url = if base_url.trim().is_empty()
+        || matches!(kind, ProviderKind::ClaudeCli | ProviderKind::CodexCli)
+    {
         kind.default_base_url().to_string()
     } else {
         base_url
@@ -124,7 +126,12 @@ fn resolve(state: &AppState, id: Option<&str>) -> Result<(ProviderConfig, String
     // Local Only (ТЗ §29) проверяется здесь, а не при выборе провайдера: через эту
     // функцию проходят все обращения к модели, и оставить проверку выше значило бы
     // оставить путь в обход.
-    crate::privacy::ensure_allowed(&state.storage, &base_url, "провайдер")?;
+    let privacy_url = if matches!(kind, ProviderKind::ClaudeCli | ProviderKind::CodexCli) {
+        kind.default_base_url()
+    } else {
+        &base_url
+    };
+    crate::privacy::ensure_allowed(&state.storage, privacy_url, "провайдер")?;
 
     let api_key = secret_ref
         .as_deref()
@@ -145,7 +152,16 @@ fn resolve(state: &AppState, id: Option<&str>) -> Result<(ProviderConfig, String
 
 #[tauri::command]
 pub fn provider_list(state: State<'_, AppState>) -> Result<Vec<ProviderRecord>, String> {
-    let rows: Vec<(String, String, String, String, String, bool, bool, Option<String>)> = state
+    let rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        String,
+        bool,
+        bool,
+        Option<String>,
+    )> = state
         .storage
         .with_conn(|conn| {
             let mut stmt = conn.prepare(
@@ -215,11 +231,7 @@ pub fn provider_save(
 
 /// Записывает ключ в хранилище ОС и включает провайдера.
 #[tauri::command]
-pub fn provider_set_key(
-    state: State<'_, AppState>,
-    id: String,
-    key: String,
-) -> Result<(), String> {
+pub fn provider_set_key(state: State<'_, AppState>, id: String, key: String) -> Result<(), String> {
     if key.trim().is_empty() {
         return Err("ключ не может быть пустым".into());
     }
@@ -273,10 +285,7 @@ pub fn provider_set_default(state: State<'_, AppState>, id: String) -> Result<()
 
 /// Test Connection: проверяет ключ и возвращает список моделей (ТЗ §17, §19).
 #[tauri::command]
-pub async fn provider_test(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<Vec<String>, String> {
+pub async fn provider_test(state: State<'_, AppState>, id: String) -> Result<Vec<String>, String> {
     let (config, _) = resolve(&state, Some(&id))?;
     let provider = yuki_ai::build(config, state.http.clone());
     provider.list_models().await.map_err(err)
@@ -341,9 +350,40 @@ pub async fn chat_send(
 
     let sink = AppSink {
         app: app.clone(),
-        request_id: args.request_id,
+        request_id: args.request_id.clone(),
     };
 
     let provider = yuki_ai::build(config, state.http.clone());
-    provider.chat(&request, &sink).await.map_err(err)
+    let (cancel, cancelled) = tokio::sync::oneshot::channel();
+    {
+        let mut requests = state
+            .chat_requests
+            .lock()
+            .map_err(|_| "Не удалось начать запрос")?;
+        if requests.contains_key(&args.request_id) {
+            return Err("Запрос с таким ID уже выполняется".into());
+        }
+        requests.insert(args.request_id.clone(), cancel);
+    }
+    let result = tokio::select! {
+        answer = provider.chat(&request, &sink) => answer.map_err(err),
+        _ = cancelled => Err("Запрос остановлен".to_string()),
+    };
+    if let Ok(mut requests) = state.chat_requests.lock() {
+        requests.remove(&args.request_id);
+    }
+    result
+}
+
+#[tauri::command]
+pub fn chat_cancel(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
+    if let Some(sender) = state
+        .chat_requests
+        .lock()
+        .map_err(|_| "Не удалось остановить запрос")?
+        .remove(&request_id)
+    {
+        let _ = sender.send(());
+    }
+    Ok(())
 }

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 
-import { sendMessage } from '../agent/session'
+import { cancelCurrentTurn, sendMessage } from '../agent/session'
+import { isVoiceActive, startVoice, stopVoice } from '../agent/voice'
+import { useUiStore } from '../state/store'
 import { CommandBar } from '../design-system/components/CommandBar'
 import { Markdown } from '../design-system/components/Markdown'
 import { useChatStore } from '../state/chatStore'
@@ -58,6 +60,8 @@ function Start() {
  * блоки `thinking` живут в истории, но в ленту не переносятся.
  */
 export function Chat() {
+  const voiceActive = useUiStore(s => s.voiceActive)
+  const headline = useUiStore(s => s.headline)
   const entries = useChatStore((s) => s.entries)
   const streaming = useChatStore((s) => s.streaming)
   const running = useChatStore((s) => s.running)
@@ -71,6 +75,7 @@ export function Chat() {
 
   return (
     <div className="chat">
+      <div className="chat__toolbar"><span>Разговор с Юки</span><button disabled={running} onClick={() => useChatStore.getState().clear()}>Новый разговор</button></div>
       <div className="chat__feed">
         {entries.length === 0 && !running && <Start />}
 
@@ -91,6 +96,7 @@ export function Chat() {
                   {entry.text}
                 </p>
               ))}
+            {entry.error && <p className="chat__error" role="alert" data-selectable>{entry.error}</p>}
           </article>
         ))}
 
@@ -108,7 +114,7 @@ export function Chat() {
           </div>
         )}
 
-        {error && (
+        {error && !entries.some(entry => entry.error === error) && (
           <p className="chat__error" role="alert" data-selectable>
             {error}
           </p>
@@ -118,10 +124,12 @@ export function Chat() {
       </div>
 
       <div className="chat__composer">
+        {headline && headline !== error && <p className="chat__error" role="status">{headline}</p>}
+        {running && <button type="button" className="chat__stop" onClick={cancelCurrentTurn}>Остановить ответ</button>}
         <CommandBar
           onSubmit={(text) => void sendMessage(text).catch(() => undefined)}
-          onToggleVoice={() => undefined}
-          listening={false}
+          onToggleVoice={() => { void (isVoiceActive() ? stopVoice() : startVoice('push_to_talk')).catch(() => undefined) }}
+          listening={voiceActive}
           disabled={running}
         />
       </div>
@@ -142,16 +150,19 @@ function ToolChip({ status }: { status: ToolStatus }) {
   const detail = status.state === 'ok' ? undefined : status.detail
 
   return (
-    <span className="tool-chip" data-state={status.state}>
+    <details className="tool-chip" data-state={status.state}>
+      <summary>
       <span className="tool-chip__dot" aria-hidden="true" />
       <span className="tool-chip__label">{status.label}</span>
       <span className="tool-chip__state">
-        {detail ?? TOOL_STATE_LABEL[status.state]}
+        {TOOL_STATE_LABEL[status.state]}
         {status.durationMs !== undefined && status.state === 'ok'
           ? ` · ${formatDuration(status.durationMs)}`
           : ''}
       </span>
-    </span>
+      </summary>
+      <div className="tool-chip__detail" data-selectable>{detail ?? (status.state === 'ok' ? 'Действие выполнено.' : 'Ожидание результата…')}</div>
+    </details>
   )
 }
 

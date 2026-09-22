@@ -12,10 +12,10 @@
   /* ── Поверхности ───────────────────────────────────────────────────────────
      Глубокий графит из ТЗ §13. Слои различаются на несколько процентов яркости:
      иерархия читается, но взгляд не цепляется за границы. */
-  --surface-abyss: #07090b;
-  --surface-base: #0b0d10;
-  --surface-raised: #101318;
-  --surface-overlay: #161a21;
+  --surface-abyss: #101115;
+  --surface-base: #15161b;
+  --surface-raised: #1b1c22;
+  --surface-overlay: #25262e;
   --surface-hover: #1c212a;
 
   /* Стекло — только для вторичных элементов (ТЗ §13). */
@@ -34,13 +34,13 @@
      все выше порога WCAG AA для своих размеров. */
   --text-primary: #f2f5f8;
   --text-secondary: #a8b2c0;
-  --text-muted: #6b7786;
+  --text-muted: #91939f;
   --text-inverse: #0b0d10;
 
   /* ── Ядро и акценты ───────────────────────────────────────────────────────
      Цвет несёт состояние Yuki, а не украшает: см. --orb-* ниже. */
   --accent-core: #e8f7ff;
-  --accent-cool: #7fd1ff;
+  --accent-cool: #c3b4ef;
   --accent-deep: #6c5ce7;
   --accent-warm: #ff9f6e;
   --accent-success: #4ade9b;
@@ -49,7 +49,7 @@
 
   /* Состояния Orb (ТЗ §13). Каждому состоянию — свой цвет, чтобы состояние
      считывалось периферийным зрением, без чтения подписи. */
-  --orb-idle: #6c5ce7;
+  --orb-idle: #a89ccb;
   --orb-listening: #7fd1ff;
   --orb-thinking: #a78bfa;
   --orb-working: #5eead4;
@@ -114,7 +114,7 @@
   /* ── Типографика ──────────────────────────────────────────────────────────
      Системный стек: на Windows и macOS он даёт родной для платформы гротеск
      без единого сетевого запроса, что важно для startup из ТЗ §37. */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text',
+  --font-sans: 'Avenir Next', 'Bahnschrift', 'Segoe UI Variable Text',
     'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
 

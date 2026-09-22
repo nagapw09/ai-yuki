@@ -46,9 +46,8 @@ impl Transport {
     ) -> McpResult<Self> {
         match kind {
             "stdio" => Ok(Transport::Stdio {
-                command: command.ok_or_else(|| {
-                    McpError::Spawn("для stdio не задана команда запуска".into())
-                })?,
+                command: command
+                    .ok_or_else(|| McpError::Spawn("для stdio не задана команда запуска".into()))?,
                 args,
                 env,
                 cwd: None,
@@ -159,7 +158,8 @@ impl McpClient {
         };
 
         // Протокол требует подтвердить готовность до любых других вызовов.
-        self.notify_raw("notifications/initialized", json!({})).await?;
+        self.notify_raw("notifications/initialized", json!({}))
+            .await?;
 
         let listed = self.call_raw("tools/list", json!({})).await?;
         self.tools = protocol::parse_tools(&listed);
@@ -231,21 +231,13 @@ mod tests {
 
     #[test]
     fn stdio_needs_a_command() {
-        let result = Transport::from_parts(
-            "stdio",
-            None,
-            Vec::new(),
-            HashMap::new(),
-            None,
-            None,
-        );
+        let result = Transport::from_parts("stdio", None, Vec::new(), HashMap::new(), None, None);
         assert!(matches!(result, Err(McpError::Spawn(_))));
     }
 
     #[test]
     fn http_needs_a_url() {
-        let result =
-            Transport::from_parts("http", None, Vec::new(), HashMap::new(), None, None);
+        let result = Transport::from_parts("http", None, Vec::new(), HashMap::new(), None, None);
         assert!(matches!(result, Err(McpError::Spawn(_))));
     }
 

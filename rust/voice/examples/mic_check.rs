@@ -16,8 +16,12 @@ use yuki_voice::{EnergyVad, SpeechDetector, VadEvent, FRAME_MS};
 const SECONDS: u64 = 5;
 
 fn main() {
-    println!("устройство по умолчанию: {:?}", yuki_voice::default_input_name());
+    println!(
+        "устройство по умолчанию: {:?}",
+        yuki_voice::default_input_name()
+    );
     println!("все входы: {:?}", yuki_voice::input_devices());
+    println!("формат входа: {:?}", yuki_voice::input_format());
     println!("слушаю {SECONDS} секунд — скажите что-нибудь…\n");
 
     let frames = Arc::new(AtomicUsize::new(0));
@@ -39,7 +43,9 @@ fn main() {
     let vad_report = vad_state.clone();
 
     let capture = yuki_voice::capture::start(move |frame| {
-        let Ok(mut vad) = vad_state.lock() else { return };
+        let Ok(mut vad) = vad_state.lock() else {
+            return;
+        };
         f.fetch_add(1, Ordering::Relaxed);
 
         let level = yuki_voice::vad::rms(frame);
@@ -76,7 +82,10 @@ fn main() {
     let speech = speech_frames.load(Ordering::Relaxed);
     let peak = peak_milli.load(Ordering::Relaxed) as f32 / 1000.0;
 
-    println!("кадров получено: {total} (ожидалось ~{})", SECONDS * 1000 / FRAME_MS as u64);
+    println!(
+        "кадров получено: {total} (ожидалось ~{})",
+        SECONDS * 1000 / FRAME_MS as u64
+    );
     println!("из них с речью:  {speech}");
     println!("фраз распознано VAD: {}", phrases.load(Ordering::Relaxed));
     println!("пиковая громкость: {peak:.3}");
@@ -91,13 +100,17 @@ fn main() {
     }
 
     if total == 0 {
-        println!("\nустройство открылось, но не отдало ни одного кадра — проверьте, \
-                  не занят ли микрофон другим приложением");
+        println!(
+            "\nустройство открылось, но не отдало ни одного кадра — проверьте, \
+                  не занят ли микрофон другим приложением"
+        );
     } else if peak < 0.01 {
         println!("\nв канале тишина: проверьте, что выбран нужный микрофон и он не приглушён");
     } else if phrases.load(Ordering::Relaxed) == 0 {
-        println!("\nзвук есть, но VAD не увидел законченной фразы — говорите громче \
-                  или сделайте паузу в конце");
+        println!(
+            "\nзвук есть, но VAD не увидел законченной фразы — говорите громче \
+                  или сделайте паузу в конце"
+        );
     } else {
         println!("\nконвейер работает: звук приходит, фразы выделяются");
     }

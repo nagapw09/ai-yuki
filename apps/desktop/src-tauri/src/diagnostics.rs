@@ -96,7 +96,9 @@ impl Drop for BufferWriter {
     fn drop(&mut self) {
         // Хвост без перевода строки — тоже сообщение, и терять его нельзя.
         if !self.pending.is_empty() {
-            let text = String::from_utf8_lossy(&self.pending).trim_end().to_string();
+            let text = String::from_utf8_lossy(&self.pending)
+                .trim_end()
+                .to_string();
             if !text.is_empty() {
                 self.buffer.push(text);
             }
@@ -146,7 +148,10 @@ fn err(e: impl std::fmt::Display) -> String {
 /// Markdown, а не JSON: отчёт читает человек, а не программа, и читаемость тут
 /// важнее машинной разборности.
 #[tauri::command]
-pub fn diagnostics_report(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+pub fn diagnostics_report(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
     let mut out = String::new();
     let info = state.adapters.system.system_info().map_err(err)?;
 
@@ -156,7 +161,10 @@ pub fn diagnostics_report(app: tauri::AppHandle, state: State<'_, AppState>) -> 
 
     out.push_str("## Версии\n\n");
     out.push_str(&format!("- Yuki: {}\n", app.package_info().version));
-    out.push_str(&format!("- Система: {} {}\n", info.platform, info.os_version));
+    out.push_str(&format!(
+        "- Система: {} {}\n",
+        info.platform, info.os_version
+    ));
     out.push_str(&format!("- Архитектура: {}\n", info.arch));
     out.push_str(&format!("- Ядер: {}\n", info.cpu_count));
     out.push_str(&format!(
@@ -182,8 +190,9 @@ pub fn diagnostics_report(app: tauri::AppHandle, state: State<'_, AppState>) -> 
     let permissions: Vec<(String, i64, i64)> = state
         .storage
         .with_conn(|conn| {
-            let mut stmt = conn
-                .prepare("SELECT category, granted, os_granted FROM permissions ORDER BY category")?;
+            let mut stmt = conn.prepare(
+                "SELECT category, granted, os_granted FROM permissions ORDER BY category",
+            )?;
             let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
             rows.collect()
         })
@@ -219,7 +228,11 @@ pub fn diagnostics_report(app: tauri::AppHandle, state: State<'_, AppState>) -> 
             "- {id} ({kind}): {base_url} · включён {} · основной {} · ключ {}\n",
             yes_no(enabled),
             yes_no(is_default),
-            if secret_ref.is_some() { "задан" } else { "нет" }
+            if secret_ref.is_some() {
+                "задан"
+            } else {
+                "нет"
+            }
         ));
     }
     out.push('\n');
@@ -344,7 +357,9 @@ mod tests {
         };
 
         writer.write_all("нача".as_bytes()).expect("запись");
-        writer.write_all("ло строки\nвторая\n".as_bytes()).expect("запись");
+        writer
+            .write_all("ло строки\nвторая\n".as_bytes())
+            .expect("запись");
 
         let lines = buffer.snapshot();
         assert_eq!(lines, vec!["начало строки", "вторая"]);
@@ -358,7 +373,9 @@ mod tests {
                 buffer: buffer.clone(),
                 pending: Vec::new(),
             };
-            writer.write_all("хвост без перевода".as_bytes()).expect("запись");
+            writer
+                .write_all("хвост без перевода".as_bytes())
+                .expect("запись");
         }
 
         assert_eq!(buffer.snapshot(), vec!["хвост без перевода"]);

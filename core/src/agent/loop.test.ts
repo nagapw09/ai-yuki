@@ -4,7 +4,7 @@ import { permissionMap } from '../permissions/gate'
 import type { GateDecision } from '../permissions/gate'
 import { runAgent } from './loop'
 import type { AgentDeps, AgentEvent } from './loop'
-import type { ChatResponse, Message } from './protocol'
+import type { ChatFn, ChatResponse, Message } from './protocol'
 import { ToolRegistry } from './registry'
 import type { Tool } from './types'
 
@@ -43,7 +43,7 @@ function makeTool(overrides: Partial<Tool> = {}): Tool {
 /** Отдаёт заранее заготовленные ответы модели по одному на вызов. */
 function scriptedChat(responses: ChatResponse[]) {
   let index = 0
-  return vi.fn(async () => {
+  return vi.fn<ChatFn>(async (_request) => {
     const response = responses[index]
     index += 1
     if (!response) throw new Error('модель вызвана больше раз, чем задано в сценарии')
@@ -71,11 +71,35 @@ function deps(overrides: Partial<AgentDeps> & Pick<AgentDeps, 'chat'>): {
 const ASK: readonly Message[] = [{ role: 'user', content: [{ type: 'text', text: 'привет' }] }]
 
 describe('agent loop', () => {
+  it('не выполняет инструмент, если отмена пришла во время ответа модели', async () => {
+    const controller = new AbortController()
+    const execute = vi.fn(async () => ({ ok: true }))
+    const registry = new ToolRegistry().register(makeTool({ execute }))
+    const { deps: d } = deps({ registry, signal: controller.signal, chat: async () => {
+      controller.abort()
+      return toolResponse('open_app')
+    } })
+    await expect(runAgent(ASK, d)).rejects.toThrow('отменена')
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('не выполняет действие после отмены в диалоге подтверждения', async () => {
+    const controller = new AbortController()
+    const execute = vi.fn(async () => ({ ok: true }))
+    const registry = new ToolRegistry().register(makeTool({ execute }))
+    const { deps: d } = deps({ registry, signal: controller.signal,
+      chat: scriptedChat([toolResponse('open_app')]), decide: () => ({ kind: 'confirm', risk: 'high' }),
+      confirm: async () => { controller.abort(); return 'allow' },
+    })
+    await expect(runAgent(ASK, d)).rejects.toThrow('отменена')
+    expect(execute).not.toHaveBeenCalled()
+  })
   it('возвращает ответ без инструментов, когда модель закончила ход', async () => {
     const { deps: d } = deps({ chat: scriptedChat([textResponse('Привет!')]) })
     const outcome = await runAgent(ASK, d)
 
     expect(outcome.reply).toBe('Привет!')
+    expect(outcome.completed).toBe(true)
     expect(outcome.steps).toBe(1)
   })
 
@@ -197,6 +221,18 @@ describe('agent loop', () => {
     expect(execute).toHaveBeenCalledTimes(1)
   })
 
+  it('передаёт модели полный результат, сохраняя короткую запись в журнале', async () => {
+    const result = { contents: 'A'.repeat(1500) + 'END_OF_FILE' }
+    const registry = new ToolRegistry().register(makeTool({ execute: async () => result }))
+    const chat = scriptedChat([toolResponse('open_app'), textResponse('Прочитано')])
+    const log = vi.fn()
+    const { deps: d } = deps({ registry, chat, log })
+    await runAgent(ASK, d)
+    const block = chat.mock.calls[1]?.[0].messages.at(-1)?.content[0]
+    expect(block).toMatchObject({ type: 'tool_result', content: JSON.stringify(result) })
+    expect(log.mock.calls[0]?.[0].result.length).toBeLessThan(500)
+  })
+
   it('останавливается на потолке шагов, а не крутится вечно', async () => {
     const registry = new ToolRegistry().register(
       makeTool({
@@ -212,6 +248,8 @@ describe('agent loop', () => {
     const outcome = await runAgent(ASK, d)
 
     expect(outcome.steps).toBe(3)
+    expect(outcome.completed).toBe(false)
+    expect(outcome.reply).toContain('продолжать ли')
     expect(chat).toHaveBeenCalledTimes(3)
     expect(events.at(-1)).toMatchObject({ kind: 'error' })
   })

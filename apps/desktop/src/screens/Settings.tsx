@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { listen } from '@tauri-apps/api/event'
 
 import { startVoice, stopVoice } from '../agent/voice'
 import { getTheme, setTheme, type ThemeMode } from '../design-system/theme'
@@ -46,6 +47,10 @@ import {
   diagnosticsSave,
   hotkeyGet,
   hotkeySet,
+  localSpeechInstall,
+  localSpeechStatus,
+  localSpeechStop,
+  type LocalSpeechStatus,
   openUrl,
   permissionHint,
   permissionSet,
@@ -67,7 +72,6 @@ import {
   updateCheck,
   updateInstall,
   updateStatus,
-  voiceConfigureStt,
   voiceSetVoice,
   voiceSpeak,
   voiceStatus,
@@ -96,6 +100,8 @@ import {
   type VoiceStatus as VoiceStatusRecord,
 } from '../bridge'
 import './Settings.css'
+import { VoiceSetup } from './VoiceSetup'
+import { CliHelp, isCli } from './CliHelp'
 
 /** Подписи категорий разрешений из ТЗ §21. */
 const PERMISSION_LABEL: Record<string, string> = {
@@ -115,28 +121,37 @@ export function Settings() {
   return (
     <div className="settings">
       <div className="settings__inner">
-        <CapabilitiesEntry />
-        <Character />
-        <Appearance />
-        <PersonaSection />
-        <Everyday />
-        <Privacy />
-        <Remote />
         <Providers />
+        <LocalSpeech />
+        <VoiceSetup />
         <Voice />
-        <Speech />
         <WakeWord />
-        <Calendar />
-        <Avatar />
-        <Hotkey />
-        <Background />
-        <Permissions />
-        <SystemSection />
-        <Updates />
-        <DataTransfer />
+        <SettingsGroup title="Озвучивание ответов" hint="Системный или внешний голос">
+          <Speech />
+        </SettingsGroup>
+        <SettingsGroup title="Характер и внешний вид" hint="Имя, манера общения, тема и аватар">
+          <Character /><Appearance /><PersonaSection /><Avatar />
+        </SettingsGroup>
+        <SettingsGroup title="Приватность и разрешения" hint="Что Yuki может делать и какие данные отправляет в сеть">
+          <Privacy /><Permissions />
+        </SettingsGroup>
+        <SettingsGroup title="Интеграции" hint="Возможности, календарь, Telegram и повседневные сервисы">
+          <CapabilitiesEntry /><Everyday /><Calendar /><Remote />
+        </SettingsGroup>
+        <SettingsGroup title="Приложение и данные" hint="Горячая клавиша, фоновый режим, перенос настроек">
+          <Hotkey /><Background /><SystemSection /><Updates /><DataTransfer />
+        </SettingsGroup>
       </div>
     </div>
   )
+}
+
+function SettingsGroup({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return <details className="settings__group" onToggle={e => setOpen(e.currentTarget.open)}>
+    <summary><span>{title}</span><small>{hint}</small></summary>
+    {open && <div className="settings__group-body">{children}</div>}
+  </details>
 }
 
 // ── Персонаж (ТЗ §11) ───────────────────────────────────────────────────────────
@@ -317,7 +332,7 @@ function Character() {
  * должен знать, что его просьбы проходят через чужую инфраструктуру, до того как
  * включит, а не после.
  */
-function Remote() {
+export function Remote() {
   const [status, setStatus] = useState<TelegramStatus | null>(null)
   const [token, setToken] = useState('')
   const [fullAccess, setFullAccess] = useState(false)
@@ -340,8 +355,7 @@ function Remote() {
   // Код живёт минуты, и обратный отсчёт должен идти сам: показывать «осталось
   // 300 секунд» всё время его жизни — значит врать через минуту.
   useEffect(() => {
-    if (!status?.pairingCode) return
-    const timer = setInterval(() => void reload(), 1000)
+    const timer = setInterval(() => void reload(), status?.pairingCode ? 1000 : 5000)
     return () => clearInterval(timer)
   }, [status?.pairingCode, reload])
 
@@ -361,6 +375,8 @@ function Remote() {
   return (
     <section className="settings__section">
       <h3 className="settings__title">Управление с телефона</h3>
+      <p className="settings__hint">{status.running ? (status.lastError ? 'Проблема подключения · повторяю попытку' : 'Канал работает') : 'Канал выключен'}</p>
+      {status.lastError && <p className="settings__error" role="alert">{status.lastError}</p>}
       <p className="settings__hint">
         Yuki отвечает на сообщения в Telegram: можно попросить что-нибудь из дома
         или из дороги. <strong>Сообщения проходят через серверы Telegram</strong> —
@@ -575,17 +591,24 @@ function CapabilitiesEntry() {
   )
 }
 
-// ── Голос (ТЗ §10) ──────────────────────────────────────────────────────────────
+// ── Локальное распознавание (ТЗ §10, §29) ───────────────────────────────────────
 
-function Voice() {
-  const [status, setStatus] = useState<VoiceStatusRecord | null>(null)
-  const [model, setModel] = useState('')
-  const [language, setLanguage] = useState('')
+/**
+ * Распознавание речи на самом компьютере.
+ *
+ * Постоянное прослушивание и облако плохо сочетаются: чтобы услышать своё имя,
+ * ассистенту приходится распознавать всё подряд, а значит — отправлять наружу
+ * комнату целиком и платить за это. Локальный движок снимает оба возражения, и
+ * ключ ему не нужен. Цена — разовая загрузка модели.
+ */
+function LocalSpeech() {
+  const [status, setStatus] = useState<LocalSpeechStatus | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ what: string; downloaded: number; total: number } | null>(null)
 
   const reload = useCallback(async () => {
     try {
-      setStatus(await voiceStatus())
+      setStatus(await localSpeechStatus())
     } catch (e) {
       setNote(describe(e))
     }
@@ -593,27 +616,146 @@ function Voice() {
 
   useEffect(() => {
     void reload()
-    settingGet('voice.stt.model').then((v) => setModel(v ?? '')).catch(() => undefined)
-    settingGet('voice.language').then((v) => setLanguage(v ?? '')).catch(() => undefined)
+    // Загрузка идёт минутами: без хода в мегабайтах кнопка выглядит зависшей.
+    const pending = listen<{ what: string; downloaded: number; total: number; done: boolean }>(
+      'yuki://speech-download',
+      (event) => {
+        setProgress(event.payload.done ? null : event.payload)
+        if (event.payload.done) void reload()
+      },
+    )
+    return () => {
+      void pending.then((off) => off())
+    }
   }, [reload])
 
-  const save = () => {
-    void voiceConfigureStt({ model, language })
-      .then(() => {
-        setNote('сохранено')
-        return reload()
-      })
-      .catch((e: unknown) => setNote(describe(e)))
+  const mb = (bytes: number) => Math.round(bytes / 1048576)
+
+  if (status && !status.supported) {
+    return (
+      <section className="settings__section">
+        <header className="settings__header">
+          <h2 className="settings__title">Распознавание на этом компьютере</h2>
+          <p className="settings__hint">
+            Готовой сборки движка для этой системы нет. Подключите сервис распознавания ниже.
+          </p>
+        </header>
+      </section>
+    )
   }
 
   return (
     <section className="settings__section">
       <header className="settings__header">
-        <h2 className="settings__title">Голос</h2>
+        <h2 className="settings__title">Распознавание на этом компьютере</h2>
         <p className="settings__hint">
-          Речь синтезирует сама операционная система — без ключей и без сети.
-          Для распознавания нужен провайдер с протоколом OpenAI: облачный или
-          локальный Whisper на своём порту.
+          Yuki скачает движок whisper.cpp и модель и будет понимать речь без ключей
+          и без интернета. Это единственный режим, в котором постоянное прослушивание
+          не отправляет звук наружу.
+        </p>
+      </header>
+
+      <div className="provider__row">
+        <label className="setup-field">
+          Модель
+          <select
+            className="settings__input"
+            value={status?.model ?? 'small'}
+            disabled={status?.busy}
+            onChange={(e) => {
+              const model = e.target.value
+              setStatus((prev) => (prev ? { ...prev, model } : prev))
+              setNote(null)
+            }}
+          >
+            {status?.models.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.id === 'small' ? 'small — точнее, ~2,5 с' : 'base — быстрее, ~1 с'}
+                {` · ${mb(model.bytes)} МБ`}
+                {model.downloaded ? ' · скачана' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="provider__row">
+        <button
+          type="button"
+          className="settings__button"
+          disabled={status?.busy}
+          onClick={() => {
+            setNote(null)
+            localSpeechInstall(status?.model)
+              .then(() => setNote('Готово: распознавание работает на этом компьютере.'))
+              .catch((e: unknown) => setNote(describe(e)))
+              .finally(() => void reload())
+          }}
+        >
+          {status?.busy
+            ? 'Скачиваю…'
+            : status?.enabled
+              ? 'Переустановить'
+              : 'Скачать и включить'}
+        </button>
+        {status?.enabled && (
+          <button
+            type="button"
+            className="settings__button"
+            disabled={status.busy}
+            onClick={() => {
+              setNote(null)
+              localSpeechStop()
+                .then(() => setNote('Локальное распознавание выключено.'))
+                .catch((e: unknown) => setNote(describe(e)))
+                .finally(() => void reload())
+            }}
+          >
+            Выключить
+          </button>
+        )}
+        <span className="provider__status">
+          {progress
+            ? `${progress.what === 'runtime' ? 'движок' : 'модель'}: ${mb(progress.downloaded)} из ${mb(progress.total)} МБ`
+            : status?.enabled
+              ? status.running
+                ? 'работает локально'
+                : 'включено, но процесс не запущен'
+              : 'выключено'}
+          {note ? ` · ${note}` : ''}
+        </span>
+      </div>
+    </section>
+  )
+}
+
+// ── Голос (ТЗ §10) ──────────────────────────────────────────────────────────────
+
+function Voice() {
+  const [status, setStatus] = useState<VoiceStatusRecord | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [always, setAlways] = useState(false)
+
+  const reload = useCallback(async () => {
+    try {
+      setStatus(await voiceStatus())
+      setAlways((await settingGet('voice.wake.always')) === 'on')
+    } catch (e) {
+      setNote(describe(e))
+    }
+  }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  return (
+    <section className="settings__section">
+      <header className="settings__header">
+        <h2 className="settings__title">Режим разговора</h2>
+        <p className="settings__hint">
+          Включите ожидание слова «Юки», затем произнесите имя и свой запрос.
+          Можно сделать паузу после имени: начните запрос в течение восьми секунд.
         </p>
       </header>
 
@@ -621,57 +763,15 @@ function Voice() {
         // Прямая причина вместо молчания: без этого кнопка микрофона просто
         // не работала бы, и понять почему было бы неоткуда.
         <p className="settings__error">
-          Распознавание не настроено — включите провайдера протокола OpenAI выше.
+          Сначала подключите распознавание в разделе «Давайте поговорим» выше.
         </p>
-      )}
-
-      <div className="provider__row">
-        <input
-          className="settings__input"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          onBlur={save}
-          placeholder="Модель распознавания (по умолчанию whisper-1)"
-          spellCheck={false}
-        />
-        <input
-          className="settings__input"
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          onBlur={save}
-          placeholder="Язык: ru, en, uk"
-          spellCheck={false}
-          style={{ maxWidth: 160 }}
-        />
-      </div>
-
-      {status && status.voices.length > 0 && (
-        <div className="provider__row">
-          <select
-            className="settings__input"
-            defaultValue=""
-            onChange={(e) => {
-              if (!e.target.value) return
-              void voiceSetVoice(e.target.value)
-                .then(() => setNote('голос выбран'))
-                .catch((err: unknown) => setNote(describe(err)))
-            }}
-          >
-            <option value="">Голос Yuki — выбрать…</option>
-            {status.voices.map((voice) => (
-              <option key={voice} value={voice}>
-                {voice}
-              </option>
-            ))}
-          </select>
-        </div>
       )}
 
       <div className="provider__row">
         <button
           type="button"
           className="settings__button"
-          disabled={!status?.sttReady}
+          disabled={!status?.sttReady && !status?.listening}
           onClick={() => {
             // Сообщение прошлой попытки надо убрать до новой: иначе рядом
             // с успешно включённым микрофоном висит старая причина отказа.
@@ -690,10 +790,33 @@ function Voice() {
         </span>
       </div>
 
+      <label className="provider__row" style={{ marginTop: 'var(--space-3)' }}>
+        <input
+          type="checkbox"
+          checked={always}
+          onChange={(e) => {
+            const on = e.target.checked
+            setAlways(on)
+            setNote(null)
+            void settingSet('voice.wake.always', on ? 'on' : 'off').catch((err: unknown) =>
+              setNote(describe(err)),
+            )
+            // Включили — начинаем слушать сразу, а не со следующего запуска:
+            // галочка, которая сработает «когда-нибудь потом», выглядит сломанной.
+            if (on && !status?.listening) {
+              void startVoice('wake_word')
+                .catch((err: unknown) => setNote(describe(err)))
+                .finally(() => void reload())
+            }
+          }}
+        />
+        <span>Слушать имя сразу после запуска Yuki</span>
+      </label>
+
       <p className="settings__hint" style={{ marginTop: 'var(--space-3)' }}>
-        Постоянное прослушивание распознаёт фразу целиком и только потом ищет
-        в ней обращение, поэтому отзыв наступает после того, как вы договорили.
-        Мгновенная реакция требует отдельной модели пробуждения — она в планах.
+        Без записи обращения фразы сначала проходят распознавание, затем проверяется
+        имя. Запишите обращение ниже, чтобы проверять его локально до отправки звука.
+        Для разговора с озвучиванием используйте наушники.
       </p>
     </section>
   )
@@ -982,6 +1105,27 @@ function WakeWord() {
         всего не будет услышан — и вы сами с сильно изменившимся голосом тоже.
         В таком случае запишите обращение заново.
       </p>
+
+      {!status.enrolled && (
+        /* Пока слово не записано, обращение ищется в уже распознанном тексте —
+           а текст берётся у распознавания, которое на чужой речи выдумывает.
+           Отсюда и отзывы посреди разговора не с ней: сказать об этом надо
+           здесь, а не оставлять человека гадать. */
+        <p className="settings__hint">
+          Сейчас обращение ищется в распознанном тексте — так она иногда
+          отзывается посреди чужого разговора. Запись слова это убирает.
+        </p>
+      )}
+
+      {status.legacy && (
+        /* Старое слово работает, но прежним детектором: он не выравнивает
+           громкость и объявляет обращение по одному совпадению, из-за чего
+           чаще просыпается на чужом разговоре. */
+        <p className="settings__hint">
+          Обращение записано прежней версией. Запишите заново — новый детектор
+          терпимее к громкости и реже просыпается от чужого разговора.
+        </p>
+      )}
 
       {note && <p className="settings__hint">{note}</p>}
 
@@ -1951,7 +2095,10 @@ function Providers() {
 
       <div className="settings__list">
         {providers.map((provider) => (
-          <ProviderRow key={provider.id} provider={provider} onChanged={reload} />
+          <details className="provider-disclosure" key={provider.id} open={provider.isDefault || undefined}>
+            <summary>{provider.label}<span>{provider.isDefault ? 'Основное подключение' : isCli(provider.kind) ? 'Без API-ключа' : provider.hasKey ? 'Ключ сохранён' : 'Настроить'}</span></summary>
+            <ProviderRow provider={provider} onChanged={reload} />
+          </details>
         ))}
       </div>
     </section>
@@ -2003,7 +2150,7 @@ function ProviderRow({
 
         {/* Провайдеры без ключа (Ollama, LM Studio) включаются вручную:
             включать их автоматически нельзя — сервер может быть не запущен. */}
-        {!provider.requiresKey && (
+        {!provider.requiresKey && !isCli(provider.kind) && (
           <button
             type="button"
             className="settings__link"
@@ -2020,6 +2167,7 @@ function ProviderRow({
         )}
       </div>
 
+      <CliHelp kind={provider.kind} />
       <div className="provider__row">
         <input
           className="settings__input"
@@ -2040,7 +2188,7 @@ function ProviderRow({
 
       {/* Адрес редактируется у всех: ТЗ §4 требует Custom API, а корпоративный
           прокси или локальный сервер меняют его и у обычных провайдеров. */}
-      <div className="provider__row">
+      {!isCli(provider.kind) && <div className="provider__row">
         <input
           className="settings__input"
           value={baseUrl}
@@ -2056,7 +2204,7 @@ function ProviderRow({
           placeholder="Адрес API"
           spellCheck={false}
         />
-      </div>
+      </div>}
 
       {provider.requiresKey && (
         <div className="provider__row">
@@ -2109,6 +2257,11 @@ function ProviderRow({
           onClick={() =>
             void run(async () => {
               const models = await providerTest(provider.id)
+              if (isCli(provider.kind)) {
+                await providerSave(provider.id, { enabled: true, defaultModel: model.trim() || 'default' })
+                await providerSetDefault(provider.id)
+                return 'Вход подтверждён. Это основное подключение Yuki.'
+              }
               // Показываем не «успех», а то, что реально вернул провайдер:
               // подтверждение соединения — это список моделей, а не зелёная галочка.
               return models.length > 0
@@ -2117,7 +2270,7 @@ function ProviderRow({
             })
           }
         >
-          Проверить подключение
+          {isCli(provider.kind) ? 'Проверить вход и подключить' : 'Проверить подключение'}
         </button>
         {status && <span className="provider__status">{status}</span>}
       </div>

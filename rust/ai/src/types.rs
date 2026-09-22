@@ -18,7 +18,11 @@ pub enum Role {
 
 /// Блок содержимого сообщения.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
 pub enum ContentBlock {
     Text {
         text: String,
@@ -185,6 +189,8 @@ impl StreamSink for NullSink {
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiError {
+    #[error("ошибка CLI: {0}")]
+    Cli(String),
     #[error("ключ провайдера не задан")]
     MissingApiKey,
 

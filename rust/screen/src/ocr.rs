@@ -46,8 +46,16 @@ pub fn recognize(png: &[u8]) -> SystemResult<Vec<TextLine>> {
     let writer = DataWriter::CreateDataWriter(&stream.GetOutputStreamAt(0).map_err(platform)?)
         .map_err(platform)?;
     writer.WriteBytes(png).map_err(platform)?;
-    writer.StoreAsync().map_err(platform)?.get().map_err(platform)?;
-    writer.FlushAsync().map_err(platform)?.get().map_err(platform)?;
+    writer
+        .StoreAsync()
+        .map_err(platform)?
+        .get()
+        .map_err(platform)?;
+    writer
+        .FlushAsync()
+        .map_err(platform)?
+        .get()
+        .map_err(platform)?;
     stream.Seek(0).map_err(platform)?;
 
     let decoder = BitmapDecoder::CreateAsync(&stream)

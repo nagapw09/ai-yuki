@@ -205,11 +205,8 @@ pub fn backup_export(
         "tables": data,
     });
 
-    std::fs::write(
-        &path,
-        serde_json::to_vec_pretty(&document).map_err(err)?,
-    )
-    .map_err(|e| format!("{path}: {e}"))?;
+    std::fs::write(&path, serde_json::to_vec_pretty(&document).map_err(err)?)
+        .map_err(|e| format!("{path}: {e}"))?;
 
     Ok(BackupSummary {
         version: FORMAT_VERSION,
@@ -260,7 +257,9 @@ pub fn backup_import(
                 };
 
                 for row in rows {
-                    let Some(object) = row.as_object() else { continue };
+                    let Some(object) = row.as_object() else {
+                        continue;
+                    };
                     if object.is_empty() {
                         continue;
                     }
@@ -283,10 +282,7 @@ pub fn backup_import(
                     let values: Vec<rusqlite::types::Value> =
                         columns.iter().map(|c| from_json(&object[*c])).collect();
 
-                    tx.execute(
-                        &sql,
-                        rusqlite::params_from_iter(values.iter()),
-                    )?;
+                    tx.execute(&sql, rusqlite::params_from_iter(values.iter()))?;
                 }
             }
 
@@ -304,8 +300,8 @@ pub fn backup_import(
 /// Читает и проверяет файл копии.
 fn read_document(path: &str) -> Result<Value, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let document: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("это не файл копии Yuki: {e}"))?;
+    let document: Value =
+        serde_json::from_str(&text).map_err(|e| format!("это не файл копии Yuki: {e}"))?;
 
     if document["format"].as_str() != Some("yuki-backup") {
         return Err("это не файл копии Yuki".into());
@@ -426,7 +422,10 @@ mod tests {
     #[test]
     fn dependent_tables_are_restored_after_the_ones_they_reference() {
         // Внешние ключи включены: обратный порядок упал бы на первой же строке.
-        let commands = TABLES.iter().position(|t| *t == "commands").expect("commands");
+        let commands = TABLES
+            .iter()
+            .position(|t| *t == "commands")
+            .expect("commands");
         let nodes = TABLES
             .iter()
             .position(|t| *t == "command_nodes")

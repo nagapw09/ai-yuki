@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 /// Версия схемы. Инкрементируется вместе с добавлением шага в [`MIGRATIONS`].
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 
 /// Шаги миграции. Индекс в массиве + 1 = версия, до которой шаг поднимает базу.
 const MIGRATIONS: &[&str] = &[
@@ -20,6 +20,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("005_calendar.sql"),
     include_str!("006_profiles.sql"),
     include_str!("007_remote.sql"),
+    include_str!("008_cli_providers.sql"),
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -101,8 +102,7 @@ impl Storage {
     fn migrate(&self) -> StorageResult<()> {
         let guard = self.conn.lock().map_err(|_| StorageError::Poisoned)?;
 
-        let current: i64 =
-            guard.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        let current: i64 = guard.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
         if current > SCHEMA_VERSION {
             // Откатывать схему вслепую нельзя: пользователь мог поставить более
@@ -192,13 +192,17 @@ mod tests {
         let count: i64 = storage
             .with_conn(|c| c.query_row("SELECT count(*) FROM providers", [], |r| r.get(0)))
             .expect("запрос должен выполниться");
-        assert_eq!(count, 7);
+        assert_eq!(count, 9);
 
         // Заготовки обязаны быть выключены: включение — осознанное действие
         // пользователя после ввода ключа.
         let enabled: i64 = storage
             .with_conn(|c| {
-                c.query_row("SELECT count(*) FROM providers WHERE enabled = 1", [], |r| r.get(0))
+                c.query_row(
+                    "SELECT count(*) FROM providers WHERE enabled = 1",
+                    [],
+                    |r| r.get(0),
+                )
             })
             .expect("запрос должен выполниться");
         assert_eq!(enabled, 0);
@@ -209,8 +213,9 @@ mod tests {
         let storage = Storage::in_memory().expect("база должна открыться");
         let granted: Vec<String> = storage
             .with_conn(|c| {
-                let mut stmt =
-                    c.prepare("SELECT category FROM permissions WHERE granted = 1 ORDER BY category")?;
+                let mut stmt = c.prepare(
+                    "SELECT category FROM permissions WHERE granted = 1 ORDER BY category",
+                )?;
                 let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
                 rows.collect()
             })
@@ -219,7 +224,13 @@ mod tests {
         assert_eq!(granted, ["browser", "files", "network", "notifications"]);
 
         // Категории, дающие качественно новый доступ, обязаны остаться выключенными.
-        for invasive in ["shell", "accessibility", "screen_recording", "microphone", "camera"] {
+        for invasive in [
+            "shell",
+            "accessibility",
+            "screen_recording",
+            "microphone",
+            "camera",
+        ] {
             assert!(
                 !granted.iter().any(|c| c == invasive),
                 "категория {invasive} не должна быть выдана без участия пользователя"
@@ -230,6 +241,8 @@ mod tests {
     #[test]
     fn migration_is_idempotent() {
         let storage = Storage::in_memory().expect("база должна открыться");
-        storage.migrate().expect("повторная миграция не должна падать");
+        storage
+            .migrate()
+            .expect("повторная миграция не должна падать");
     }
 }

@@ -91,10 +91,7 @@ fn write_node(node: &AccessibilityNode, depth: usize, out: &mut String) {
     if let Some(b) = &node.bounds {
         // Координаты нужны как запасной путь: если элемент не объявляет действий,
         // остаётся кликнуть по его центру.
-        out.push_str(&format!(
-            " @{},{} {}×{}",
-            b.x, b.y, b.width, b.height
-        ));
+        out.push_str(&format!(" @{},{} {}×{}", b.x, b.y, b.width, b.height));
     }
     out.push('\n');
 

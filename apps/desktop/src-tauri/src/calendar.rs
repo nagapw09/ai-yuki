@@ -24,9 +24,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::State;
-use yuki_calendar::{
-    oauth, CalendarClient, CalendarEvent, CalendarProvider, EventDraft, Tokens,
-};
+use yuki_calendar::{oauth, CalendarClient, CalendarEvent, CalendarProvider, EventDraft, Tokens};
 
 use crate::state::AppState;
 
@@ -56,11 +54,7 @@ pub struct TokenCache {
 
 impl TokenCache {
     fn get(&self, provider: CalendarProvider) -> Option<Tokens> {
-        self.tokens
-            .lock()
-            .ok()?
-            .get(provider.as_str())
-            .cloned()
+        self.tokens.lock().ok()?.get(provider.as_str()).cloned()
     }
 
     fn put(&self, provider: CalendarProvider, tokens: Tokens) {
@@ -180,9 +174,8 @@ pub async fn calendar_connect(
 
     // Порт выбирает система: занятый фиксированный порт сделал бы вход
     // невозможным, а угадывать свободный — гадание.
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| {
-        format!("не удалось открыть локальный порт для ответа браузера: {e}")
-    })?;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| format!("не удалось открыть локальный порт для ответа браузера: {e}"))?;
     let port = listener.local_addr().map_err(err)?.port();
 
     // Google разрешает настольным клиентам любой порт на 127.0.0.1; Azure —
@@ -198,11 +191,10 @@ pub async fn calendar_connect(
     crate::commands::open_external(&request.url)?;
 
     let expected_state = request.state.clone();
-    let code = tauri::async_runtime::spawn_blocking(move || {
-        wait_for_code(listener, &expected_state)
-    })
-    .await
-    .map_err(err)??;
+    let code =
+        tauri::async_runtime::spawn_blocking(move || wait_for_code(listener, &expected_state))
+            .await
+            .map_err(err)??;
 
     let tokens = oauth::exchange(
         provider,
@@ -375,7 +367,11 @@ async fn connected_client(
     let access_token = tokens.access_token.clone();
     state.calendar.put(provider, tokens);
 
-    Ok(CalendarClient::new(provider, access_token, state.http.clone()))
+    Ok(CalendarClient::new(
+        provider,
+        access_token,
+        state.http.clone(),
+    ))
 }
 
 /// Ждёт возврата браузера и достаёт код авторизации.
@@ -527,7 +523,10 @@ mod tests {
 
     #[test]
     fn secret_references_are_namespaced_per_provider() {
-        assert_eq!(refresh_ref(CalendarProvider::Google), "calendar:google:refresh");
+        assert_eq!(
+            refresh_ref(CalendarProvider::Google),
+            "calendar:google:refresh"
+        );
         assert_eq!(
             secret_ref(CalendarProvider::Microsoft),
             "calendar:microsoft:client_secret"
@@ -537,13 +536,18 @@ mod tests {
     /// Стучится в локальный сервер так же, как это сделал бы браузер.
     fn knock(port: u16, target: &str) {
         use std::io::Read;
-        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port))
-            .expect("сервер должен слушать");
+        let mut stream =
+            std::net::TcpStream::connect(("127.0.0.1", port)).expect("сервер должен слушать");
         stream
-            .write_all(format!("GET {target} HTTP/1.1
+            .write_all(
+                format!(
+                    "GET {target} HTTP/1.1
 Host: localhost
 
-").as_bytes())
+"
+                )
+                .as_bytes(),
+            )
             .expect("запрос должен уйти");
         // Ответ вычитываем целиком: иначе сервер получит разорванное соединение.
         let mut sink = Vec::new();
@@ -588,7 +592,10 @@ Host: localhost
         let port = listener.local_addr().expect("адрес").port();
 
         let caller = std::thread::spawn(move || {
-            knock(port, "/?error=access_denied&error_description=User%20denied")
+            knock(
+                port,
+                "/?error=access_denied&error_description=User%20denied",
+            )
         });
 
         let outcome = wait_for_code(listener, "expected");

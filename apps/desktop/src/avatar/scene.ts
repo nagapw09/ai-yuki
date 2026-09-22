@@ -7,18 +7,15 @@
  * они считаются каждый кадр и зависят от времени, а не от заранее записанного
  * ролика.
  *
- * Lip-sync — приближение, и это надо называть своим именем. Синтез речи у Yuki
- * системный (SAPI на Windows, AVSpeechSynthesizer на macOS), и звуковой буфер
- * оттуда не приходит: анализировать нечего. Поэтому рот двигается по фазе речи —
- * пока состояние SPEAKING, губы отрабатывают правдоподобный ритм слогов, а
- * громкость микрофона используется, когда она есть. Настоящий lip-sync по
- * амплитуде появится, когда синтез будет проигрываться самим приложением.
+ * Windows и HTTP TTS передают громкость фактически проигрываемого аудио:
+ * она управляет раскрытием рта. Это синхронизация по амплитуде, без фонем.
+ * Для системного macOS TTS пока используется ритм слогов во время озвучки.
  */
 
 import {
   VRMExpressionPresetName,
-  VRMLoaderPlugin,
-  VRMUtils,
+  VRMSpringBoneCollider,
+  VRMSpringBoneColliderShapePlane,
   type VRM,
 } from '@pixiv/three-vrm'
 import {
@@ -31,6 +28,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 import type { OrbState } from '../state/types'
 import { ALL_EXPRESSIONS, LOOKS } from './states'
+import { assignedMotion, isPoseClip, type Action, type MotionMap } from './motions'
+import { acquireModel } from './model-cache'
+import { avatarAnimationBytes } from '../bridge'
 
 /** Насколько быстро выражение догоняет целевое (доля расхождения в секунду). */
 const EXPRESSION_EASE = 6
@@ -119,6 +119,7 @@ export interface Framing {
   halfHeight: number
   halfWidth: number
 }
+const framingCache = new WeakMap<VRM, Record<AvatarPose,Framing|null>>()
 
 /**
  * Считает, что показывать: голову и торс примерно до пояса.
@@ -247,7 +248,23 @@ async function loadAnimation(
     const first = list?.[0]
     if (!first) return null
 
-    return mixer.clipAction(createVRMAnimationClip(first, vrm))
+    const clip = createVRMAnimationClip(first, vrm)
+    if (source.name === 'greeting') {
+      const hips = vrm.humanoid.getNormalizedBoneNode('hips')
+      const track = clip.tracks.find(track=>track.name === `${hips?.name}.position`)
+      if (track) {
+        const heights = Array.from(track.values).filter((_,index)=>index%3===1)
+        const upright = Math.max(...heights)*0.9
+        const start = heights.findIndex(value=>value>=upright)
+        const from = track.times[Math.max(0,start)] ?? 0
+        // This motion pack starts crouched. Use its standing wave, then return
+        // to idle once; reversing the clip would make the character sit again.
+        if (from > 0.2) for (const part of clip.tracks) part.trim(from,clip.duration).shift(-from)
+        clip.resetDuration()
+        for(let n=0;n<track.values.length;n+=3) {track.values[n]=hips?.position.x??0;track.values[n+2]=hips?.position.z??0}
+      }
+    }
+    return mixer.clipAction(clip)
   } catch (error) {
     console.warn(`анимация «${source.name}» не разобралась`, error)
     return null
@@ -285,7 +302,7 @@ export function isCyclic(clip: THREE.AnimationClip, tolerance = 0.05): boolean {
 }
 
 /** Снимок поворотов всех костей гуманоида. */
-type Pose = { node: THREE.Object3D; quaternion: THREE.Quaternion }[]
+type Pose = { node: THREE.Object3D; quaternion: THREE.Quaternion; position: THREE.Vector3 }[]
 
 function capturePose(vrm: VRM): Pose {
   const snapshot: Pose = []
@@ -293,15 +310,16 @@ function capturePose(vrm: VRM): Pose {
   if (!root) return snapshot
 
   root.traverse((node) => {
-    snapshot.push({ node, quaternion: node.quaternion.clone() })
+    snapshot.push({ node, quaternion: node.quaternion.clone(), position: node.position.clone() })
   })
 
   return snapshot
 }
 
 function restorePose(snapshot: Pose): void {
-  for (const { node, quaternion } of snapshot) {
+  for (const { node, quaternion, position } of snapshot) {
     node.quaternion.copy(quaternion)
+    node.position.copy(position)
   }
 }
 
@@ -339,6 +357,16 @@ export interface AnimationSource {
 }
 
 /** Сколько длится переход между покоем и анимацией, секунды. */
+/**
+ * Насколько далеко уводится взгляд за курсором и как быстро он его догоняет.
+ *
+ * Дальность в единицах сцены на расстоянии метра от глаз: больше — и персонаж
+ * начинает косить. Скорость подобрана так, чтобы взгляд ощущался вниманием, а
+ * не прицелом: полный поворот занимает около трети секунды.
+ */
+const GAZE_REACH = 0.55
+const GAZE_EASE = 3.2
+
 const CROSSFADE = 0.35
 
 /**
@@ -357,6 +385,17 @@ function clipForState(state: OrbState): string {
 }
 
 export interface AvatarScene {
+  configureMotions: (map:MotionMap) => void
+  hitTest: (x:number,y:number) => boolean
+  /** Куда попадает точка окна: по голове, по телу или мимо. */
+  touchZone: (x:number,y:number) => 'head' | 'body' | null
+  /** Есть ли у модели такое выражение: наборы у авторов разные. */
+  hasExpression: (name: string) => boolean
+  setPointer: (x: number, y: number) => void
+  activity: () => string
+  setSpeech: (speaking: boolean, level: number | null) => void
+  setDirection: (direction: number) => void
+  contact: () => number
   /** Меняет состояние: мимика и темп подхватываются плавно. */
   setState: (state: OrbState) => void
   /** Переключает кадр: голова и торс или во весь рост. */
@@ -385,16 +424,19 @@ export interface AvatarScene {
  */
 export async function createScene(
   canvas: HTMLCanvasElement,
-  model: ArrayBuffer,
+  model: string,
   pose: AvatarPose = 'portrait',
-  animations: readonly AnimationSource[] = [],
+  animations: readonly string[] = [],
 ): Promise<AvatarScene> {
+  const loadStarted = performance.now()
+  const resource = await acquireModel(model)
+  const vrm = resource.vrm
   const renderer = new THREE.WebGLRenderer({
     canvas,
     alpha: true,
     antialias: true,
   })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setPixelRatio(resource.economy ? Math.min(window.devicePixelRatio, 1.25) : Math.min(window.devicePixelRatio, 2))
   // Прозрачный фон — обязательное условие окна без рамки: иначе вокруг аватара
   // будет висеть чёрный прямоугольник.
   renderer.setClearColor(0x000000, 0)
@@ -421,41 +463,9 @@ export async function createScene(
   rim.position.set(-1.5, 1, -1)
   scene.add(rim)
 
-  const loader = new GLTFLoader()
-  loader.register((parser) => new VRMLoaderPlugin(parser))
-
-  const gltf = await loader.parseAsync(model, '')
-  const loaded = gltf.userData.vrm as VRM | undefined
-  if (!loaded) {
-    renderer.dispose()
-    throw new Error('это не VRM-модель')
-  }
-  const vrm: VRM = loaded
-
-  // Рекомендованная подготовка: убирает неиспользуемые вершины и объединяет
-  // скелеты. На маленьком окне это разница между 60 и 30 кадрами.
-  VRMUtils.removeUnnecessaryVertices(gltf.scene)
-  VRMUtils.combineSkeletons(gltf.scene)
-  VRMUtils.combineMorphs(vrm)
-
-  // Разворот делает библиотека, а не мы: 180 градусов нужны только моделям
-  // VRM 0.x, а у VRM 1.0 перёд уже направлен к зрителю. Безусловный поворот
-  // показывал бы половину моделей спиной.
-  VRMUtils.rotateVRM0(vrm)
-
-  // Части тела не должны исчезать при движении костей. Three.js считает объём
-  // отсечения по позе покоя, и поднятая рука или наклон головы выводят кусок
-  // меша за эту границу — он пропадает целиком. Для аватара в маленьком окне
-  // экономия на отсечении не стоит исчезающих рук.
-  vrm.scene.traverse((object) => {
-    object.frustumCulled = false
-  })
-
   scene.add(vrm.scene)
 
   const head = vrm.humanoid?.getNormalizedBoneNode('head')
-  const spine = vrm.humanoid?.getNormalizedBoneNode('spine')
-  const chest = vrm.humanoid?.getNormalizedBoneNode('chest') ?? spine
 
   // Первое обновление до замера: нормализованный скелет three-vrm получает
   // настоящие положения только после него, а матрицы мира — только после
@@ -472,9 +482,59 @@ export async function createScene(
   let currentPose: AvatarPose = pose
 
   // Кадры считаются ниже, после загрузки анимаций: их размах входит в замер.
-  let framings: Record<AvatarPose, Framing | null> = {
-    portrait: measureUpperBody(vrm, head),
-    full: measureWholeBody(vrm),
+  let measured = framingCache.get(vrm)
+  if (!measured) {
+    measured={portrait:measureUpperBody(vrm,head),full:measureWholeBody(vrm)}
+    framingCache.set(vrm,measured)
+  }
+  const framings: Record<AvatarPose, Framing | null> = {
+    portrait: measured.portrait ? {...measured.portrait} : null,
+    full: measured.full ? {...measured.full} : null,
+  }
+
+  // Long hair, a tail, or a wide animation must not change a character's height.
+  // The full-body camera keeps a common vertical fill; the wider overlay provides
+  // room for hands. Portrait framing can still fit by width.
+  const full = framings.full
+  const standingFloor = full ? full.centerY - full.halfHeight : 0
+  if (full) {
+    const headroom = full.halfHeight * 0.2
+    const bottomMargin = full.halfHeight * 0.05
+    full.centerY += (headroom - bottomMargin) / 2
+    full.halfHeight += (headroom + bottomMargin) / 2
+    full.halfWidth = full.halfHeight * 0.55
+  }
+  const restingHip = vrm.humanoid.getNormalizedBoneNode('hips')?.getWorldPosition(new THREE.Vector3()).y ?? 0.8
+  // A desktop surface is also a physical floor for hair and skirt springs.
+  const floor = new VRMSpringBoneCollider(new VRMSpringBoneColliderShapePlane({normal:new THREE.Vector3(0,1,0)}))
+  floor.position.y = standingFloor + 0.025
+  scene.add(floor);floor.updateWorldMatrix(true,false)
+  const floorGroup = {name:'yuki-surface',colliders:[floor]}
+  for (const joint of vrm.springBoneManager?.joints ?? []) joint.colliderGroups.push(floorGroup)
+  let surfaceY = standingFloor
+  const pointer = {x:0,y:0}
+  const raycaster = new THREE.Raycaster()
+
+  /**
+   * Куда попадает точка окна: `head`, `body` или `null`.
+   *
+   * Голова берётся из настоящей кости и проецируется на экран — так зона
+   * совпадает с головой на любой модели и в любом кадрировании. Тело остаётся
+   * прямоугольником: перебирать треугольники скина на каждый опрос курсора
+   * незачем, а промах по руке ничего не ломает.
+   */
+  function touchZone(x:number, y:number): 'head' | 'body' | null {
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null
+    const head = vrm.humanoid.getNormalizedBoneNode('head')
+    if (head) {
+      const point = head.getWorldPosition(new THREE.Vector3()).project(camera)
+      const hx = (point.x + 1) / 2
+      const hy = (1 - point.y) / 2
+      // Радиус в долях окна: голова занимает примерно седьмую часть высоты.
+      if (Math.hypot((x - hx) * 0.75, y - hy - 0.02) < 0.1) return 'head'
+    }
+    if (y < 0.1 && x > 0.15 && x < 0.85) return 'head'
+    return x > 0.2 && x < 0.8 && y > 0.08 && y < 0.98 ? 'body' : null
   }
 
   const applyFraming = () => {
@@ -483,13 +543,22 @@ export async function createScene(
   }
   applyFraming()
 
-  // Взгляд следует за камерой: аватар смотрит на пользователя, а не сквозь него.
+  /**
+   * Куда смотрит персонаж.
+   *
+   * Точка живёт перед камерой и сдвигается за курсором: когда мышь рядом,
+   * взгляд идёт за ней, когда далеко или её нет — возвращается к человеку,
+   * то есть в камеру. Именно слежение взглядом отличает предмет на экране от
+   * существа в пространстве: без него аватар смотрит сквозь вас всегда.
+   */
+  const gaze = new THREE.Object3D()
+  gaze.position.set(0, 0, -1)
+  /** Текущее смещение взгляда, догоняющее курсор. */
+  const gazeAt = {x: 0, y: 0}
   if (vrm.lookAt) {
-    const target = new THREE.Object3D()
-    camera.add(target)
-    target.position.set(0, 0, -1)
+    camera.add(gaze)
     scene.add(camera)
-    vrm.lookAt.target = target
+    vrm.lookAt.target = gaze
   }
 
   const state = {
@@ -511,63 +580,32 @@ export async function createScene(
   // костей, и после остановки без этого снимка руки остались бы там, где их
   // бросил танец, — то есть в произвольном месте, а не вдоль тела.
   const restPose = capturePose(vrm)
+  let gesture: Action = 'stand'
+  let motionMap:MotionMap = {}
+  /** Как проигрывать: разрешённый режим и то, что попросили. */
+  let playback:'once'|'loop'|'hold' = 'once'
+  let wanted:'once'|'loop'|'hold'|'auto' = 'once'
+  let frameTimer:ReturnType<typeof setTimeout>|undefined
+  let renderedFrames=0
+  let emotion = ''
+  let emotionUntil = 0
+  let speech = false
+  let speechLevel: number | null = null
+  let facing = 0
+  const baseYaw = vrm.scene.rotation.y
+  const hips = vrm.humanoid.getNormalizedBoneNode('hips')
+  const feet = ['leftFoot','rightFoot'].map(name => vrm.humanoid.getNormalizedBoneNode(name as 'leftFoot' | 'rightFoot')).filter((v): v is THREE.Object3D => !!v)
+  const feetRest = feet.map(foot => foot.getWorldPosition(new THREE.Vector3()).y)
 
   const mixer = new THREE.AnimationMixer(vrm.scene)
   const actions = new Map<string, THREE.AnimationAction>()
 
-  for (const source of animations) {
-    const action = await loadAnimation(vrm, mixer, source)
-    if (action) actions.set(source.name, action)
-  }
-
-  // Кадр пересчитывается по размаху анимаций.
-  //
-  // Замер по одной позе покоя обрезал поднятые руки: клип «потянуться»
-  // выводит кисти выше макушки и шире плеч, а камера стояла так, будто руки
-  // всегда внизу. Теперь каждый клип прогоняется по нескольким моментам, и
-  // кадр строится по самому размашистому из них — тогда за края не выходит
-  // ничто и никогда.
-  //
-  // Цена — аватар немного мельче в покое. Это дешевле, чем исчезающие кисти:
-  // обрезанная рука читается как поломка, а полсантиметра запаса не читается
-  // вовсе.
-  if (actions.size > 0) {
-    const reach = new THREE.Box3()
-
-    for (const action of actions.values()) {
-      const clip = action.getClip()
-      action.reset().play()
-
-      // Десять моментов на клип: чаще — лишняя работа при загрузке, реже —
-      // можно проскочить мимо самой размашистой позы.
-      for (let step = 0; step <= 10; step += 1) {
-        mixer.setTime((clip.duration * step) / 10)
-        vrm.update(0)
-        vrm.scene.updateMatrixWorld(true)
-        refreshBounds(vrm.scene)
-        reach.union(new THREE.Box3().setFromObject(vrm.scene))
-      }
-
-      action.stop()
-    }
-
-    // Возврат в покой: после прогона кости остались там, где их бросил
-    // последний клип.
-    mixer.setTime(0)
-    restorePose(restPose)
-    vrm.update(0)
-    vrm.scene.updateMatrixWorld(true)
-
-    framings = {
-      portrait: measureUpperBody(vrm, head),
-      full: widen(measureWholeBody(vrm), reach),
-    }
-
-    applyFraming()
-  }
+  const loadingClips = new Set<string>()
 
   /** Играющая анимация; `null` — только своё движение. */
   let playing: THREE.AnimationAction | null = null
+  let transitionFrom: Pose | null = null
+  let transitionAt = 0
 
   /**
    * Анимация, которую попросили явно.
@@ -583,16 +621,24 @@ export async function createScene(
 
     if (next === playing) return
 
-    if (playing) playing.fadeOut(CROSSFADE)
+    // Stop stale actions: an old mixer track must not overwrite procedural arms.
+    if (playing) {
+      if (!next) {transitionFrom=capturePose(vrm);transitionAt=clock.elapsedTime}
+      playing.stop()
+    }
 
     if (next) {
+      // «Авто» решается здесь: только тут известен сам клип. Поза — это один-два
+      // ключевых кадра, и проигранная «один раз» она мелькает за сотые доли
+      // секунды. Её надо удерживать, а цикл бега из двух десятков кадров —
+      // проигрывать.
+      playback = wanted === 'auto' ? (isPoseClip(next.getClip()) ? 'hold' : 'once') : wanted
+
       next.reset()
       // Незамкнутый клип идёт туда и обратно: так его конец всегда совпадает
       // с началом следующего повтора, и рывка на стыке нет.
-      next.setLoop(
-        isCyclic(next.getClip()) ? THREE.LoopRepeat : THREE.LoopPingPong,
-        Infinity,
-      )
+      next.setLoop(playback==='loop' ? THREE.LoopRepeat : THREE.LoopOnce, playback==='loop' ? Infinity : 1)
+      next.clampWhenFinished = true
       next.fadeIn(CROSSFADE).play()
     }
 
@@ -605,11 +651,36 @@ export async function createScene(
 
   /** Что должно играть прямо сейчас: просьба важнее состояния. */
   function resolve() {
-    apply(requested || clipForState(state.current))
+    apply(requested)
   }
 
   function play(name: string) {
+    if (name.startsWith('emotion:')) {
+      emotion = name.slice(8); emotionUntil = clock.elapsedTime + 4; return
+    }
+    if (name.startsWith('builtin:')) {
+      const action=name.slice(8) as Action
+      const clip=assignedMotion(action,animations,motionMap)
+      if (!clip) {if(action==='stand') {gesture='stand';requested='';apply('')} return}
+      gesture=action
+      wanted=action==='wave'||action==='stretch'||action==='fidget'?'once':action==='sit'||action==='lie'||action==='sleep'?'hold':'loop'
+      name=clip
+    } else {
+      gesture='stand'
+      const mode=/^(once|loop|hold|auto):/.exec(name)
+      // Без явного режима решаем по самому клипу: список движений отдаёт и позы,
+      // и танцы, и одинаковое «один раз» подходит только вторым.
+      wanted=(mode?.[1] as typeof wanted)||'auto'
+      if(mode)name=name.slice(mode[0].length)
+    }
     requested = name.trim()
+    if (animations.includes(requested) && !actions.has(requested) && !loadingClips.has(requested)) {
+      const loading = requested
+      loadingClips.add(loading)
+      void avatarAnimationBytes(loading).then(bytes => loadAnimation(vrm, mixer, {name:loading,bytes})).then(action => {
+        if (state.running && action) { actions.set(loading, action); resolve() }
+      }).catch(console.warn).finally(() => loadingClips.delete(loading))
+    }
     resolve()
   }
 
@@ -618,6 +689,9 @@ export async function createScene(
   resolve()
 
   const clock = new THREE.Clock()
+  mixer.addEventListener('finished', event => {
+    if (event.action===playing && playback==='once') {gesture='stand';requested='';apply('');play('builtin:stand')}
+  })
 
   function applyExpression(name: string, value: number) {
     vrm.expressionManager?.setValue(name, value)
@@ -625,27 +699,27 @@ export async function createScene(
 
   function frame() {
     if (!state.running) return
+    if(document.hidden || document.documentElement.dataset.paused) {clock.getDelta();frameTimer=setTimeout(frame,500);return}
 
     const delta = Math.min(clock.getDelta(), 0.1)
     const time = clock.elapsedTime
-    const look = LOOKS[state.current]
+    const look = LOOKS[speech ? 'speaking' : gesture === 'sleep' ? 'sleeping' : state.current]
+
+    // ── Взгляд ─────────────────────────────────────────────────────────────
+    //
+    // Спящий никуда не смотрит. В остальное время глаза идут за курсором с
+    // задержкой: мгновенное слежение выглядит как прицел, а не как внимание.
+    const wantX = look.asleep ? 0 : pointer.x * GAZE_REACH
+    const wantY = look.asleep ? 0 : pointer.y * GAZE_REACH * 0.6
+    gazeAt.x += (wantX - gazeAt.x) * Math.min(1, delta * GAZE_EASE)
+    gazeAt.y += (wantY - gazeAt.y) * Math.min(1, delta * GAZE_EASE)
+    gaze.position.set(gazeAt.x, gazeAt.y, -1)
 
     // ── Дыхание и покачивание ──────────────────────────────────────────────
     //
     // Только в покое: пока играет анимация, эти строки спорили бы с ней за те
     // же кости и превращали движение в дрожь. Мимика и моргание остаются —
     // они живут на других каналах и танцу не мешают.
-    if (!playing) {
-      const breath = Math.sin(time * Math.PI * 2 * look.breath)
-      if (chest) chest.rotation.x = breath * 0.02
-      if (spine) spine.rotation.z = Math.sin(time * 0.7) * 0.01 * look.sway
-      if (head) {
-        head.rotation.y = Math.sin(time * 0.53) * 0.04 * look.sway
-        head.rotation.x = Math.sin(time * 0.41) * 0.03 * look.sway
-        // Спящий аватар роняет голову — это читается даже без выражения лица.
-        if (look.asleep) head.rotation.x += 0.18
-      }
-    }
 
     // ── Моргание ───────────────────────────────────────────────────────────
     if (look.asleep) {
@@ -670,21 +744,28 @@ export async function createScene(
     }
 
     // ── Выражение лица ─────────────────────────────────────────────────────
-    for (const name of ALL_EXPRESSIONS) {
-      const target = name === look.expression ? look.weight : 0
+    const expressionNames = new Set<string>([...ALL_EXPRESSIONS, ...state.weights.keys(), ...(time < emotionUntil ? [emotion] : [])])
+    for (const name of expressionNames) {
+      const expression = time < emotionUntil ? emotion : gesture === 'wave' || gesture === 'dance' ? 'happy' : look.expression
+      const target = name === expression ? (time < emotionUntil || gesture === 'wave' || gesture === 'dance' ? 0.8 : look.weight) : 0
       const previous = state.weights.get(name) ?? 0
       // Экспоненциальное сглаживание: переход занимает доли секунды и не
       // зависит от частоты кадров.
       const next = previous + (target - previous) * Math.min(1, delta * EXPRESSION_EASE)
-      state.weights.set(name, next)
-      applyExpression(name, next)
+      if (target === 0 && next < 0.001 && !(ALL_EXPRESSIONS as readonly string[]).includes(name)) {
+        state.weights.delete(name)
+        applyExpression(name, 0)
+      } else {
+        state.weights.set(name, next)
+        applyExpression(name, next)
+      }
     }
 
     // ── Рот ────────────────────────────────────────────────────────────────
-    if (look.speaking) {
+    if (speech || look.speaking) {
       // Настоящая громкость, если она есть: рот открывается ровно на звуке.
       // Так работает синтез, который проигрывает Yuki сама (`HttpTts`).
-      const fresh = time - state.audioLevelAt < LEVEL_FRESH
+      const fresh = speechLevel !== null || time - state.audioLevelAt < LEVEL_FRESH
 
       // Иначе — слоговый ритм плюс вторая, более медленная волна: иначе рот
       // стучит как метроном и выглядит хуже, чем неподвижный. Это приближение,
@@ -693,7 +774,7 @@ export async function createScene(
       const phrase = 0.55 + 0.45 * Math.sin(time * 1.7)
 
       const openness = fresh
-        ? Math.min(1, state.audioLevel * MOUTH_GAIN)
+        ? Math.min(1, (speechLevel ?? state.audioLevel) * MOUTH_GAIN)
         : syllable * phrase
       applyExpression(VRMExpressionPresetName.Aa, openness * 0.7)
       applyExpression(VRMExpressionPresetName.Ih, openness * 0.25)
@@ -705,14 +786,86 @@ export async function createScene(
     // Микшер до vrm.update: он пишет в нормализованные кости, а vrm.update
     // переносит их в настоящий скелет. Обратный порядок отставал на кадр.
     mixer.update(delta)
+    if (!playing) {
+      if (transitionFrom) restorePose(restPose)
+      if (transitionFrom) {
+        const progress = Math.min(1,(time-transitionAt)/0.65)
+        const ease = progress*progress*(3-2*progress)
+        for (const from of transitionFrom) {
+          from.node.quaternion.slerpQuaternions(from.quaternion,from.node.quaternion.clone(),ease)
+          from.node.position.lerpVectors(from.position,from.node.position.clone(),ease)
+        }
+        if (progress>=1) transitionFrom=null
+      }
+    }
+    const desiredYaw = baseYaw + (gesture === 'walk' ? facing * Math.PI * 0.38 : 0)
+    vrm.scene.rotation.y += (desiredYaw - vrm.scene.rotation.y) * Math.min(1, delta * 7)
+    vrm.scene.rotation.z = 0
+    vrm.scene.position.set(0, 0, 0)
+    vrm.humanoid.update()
+    vrm.scene.updateMatrixWorld(true)
+    if (gesture === 'walk' && feet.length) {
+      const lift = Math.min(...feet.map((foot,index) => foot.getWorldPosition(new THREE.Vector3()).y - (feetRest[index] ?? 0)))
+      vrm.scene.position.y = -lift
+    }
+    // Contact follows the actual authored seated pelvis, not the standing height.
+    const seat=gesture==='sit' && hips ? hips.getWorldPosition(new THREE.Vector3()).y - restingHip*0.055 : standingFloor
+    surfaceY += (seat - surfaceY) * (1 - Math.exp(-delta * 12))
     vrm.update(delta)
+    vrm.scene.updateMatrixWorld(true)
     renderer.render(scene, camera)
-    requestAnimationFrame(frame)
+    renderedFrames++
+    frameTimer=setTimeout(()=>requestAnimationFrame(frame), speech||gesture==='dance'||gesture==='walk'||gesture==='wave' ? 25 : 50)
   }
 
   requestAnimationFrame(frame)
+  canvas.dataset.loadMs = String(Math.round(performance.now() - loadStarted))
+  canvas.dataset.cached = String(resource.cached)
+  if (import.meta.env.DEV) Object.assign(canvas, {yukiSeek: (seconds:number) => {if(playing){playing.time=seconds;mixer.update(0)}},yukiDebug: () => ({
+    gesture, requested, playback, renderedFrames, model, loadingMs:canvas.dataset.loadMs, cached:resource.cached,
+    bones:Object.fromEntries(['head','hips','leftHand','rightHand','leftFoot','rightFoot'].map(name => {
+      const bone = vrm.humanoid.getNormalizedBoneNode(name as 'head')
+      return [name,bone?.getWorldPosition(new THREE.Vector3()).toArray()]
+    })), root:vrm.scene.position.toArray(), mouth:vrm.expressionManager?.getValue('aa'),
+    expressionWeights: Object.fromEntries(vrm.expressionManager?.expressions.map(expression=>[expression.expressionName,expression.weight]) || []),
+    economy:resource.economy,pixelRatio:renderer.getPixelRatio(),
+    // Взгляд: есть ли он у модели вообще, куда смотрит и где курсор.
+    lookAt:!!vrm.lookAt, pointer:{...pointer}, gazeAt:{...gazeAt},
+    lookApplier:vrm.lookAt?.applier?.constructor?.name, lookAuto:vrm.lookAt?.autoUpdate,
+    lookYaw:vrm.lookAt?.yaw, lookPitch:vrm.lookAt?.pitch,
+    eyeBones:['leftEye','rightEye'].map(n=>!!vrm.humanoid.getNormalizedBoneNode(n as 'leftEye')),
+    gazeWorld:gaze.getWorldPosition(new THREE.Vector3()).toArray().map(v=>+v.toFixed(3)),
+  })})
 
   return {
+    configureMotions: map=>{motionMap=map;if(gesture==='stand')play('builtin:stand')},
+    hitTest: (x,y) => touchZone(x,y) !== null,
+    /**
+     * Есть ли у модели такое выражение.
+     *
+     * Наборы у авторов разные: у одной модели есть «удивление», у другой его
+     * нет вовсе, и просьба показать несуществующее выражение молча ничего не
+     * делает. Спрашивающий подбирает замену сам.
+     */
+    hasExpression: name => !!vrm.expressionManager?.getExpression(name),
+    /**
+     * Куда попал курсор: по голове, по телу или мимо.
+     *
+     * Голова ищется по настоящей кости, спроецированной на экран, а не по
+     * доле окна: у разных моделей и кадрирований она в разных местах, и
+     * «верхние десять процентов» на одной модели голова, а на другой — воздух.
+     */
+    touchZone,
+    setPointer: (x,y) => {pointer.x=THREE.MathUtils.clamp(x,-1,1);pointer.y=THREE.MathUtils.clamp(y,-1,1)},
+    activity: () => `builtin:${gesture}`,
+    setSpeech: (speaking, level) => { speech = speaking; speechLevel = level },
+    setDirection: direction => { facing = direction },
+    contact: () => {
+      // Anchor to a rest surface, never to a swinging foot.
+      const point = new THREE.Vector3(0, surfaceY, 0)
+      point.project(camera)
+      return Math.max(0.05, Math.min(1, (1 - point.y) / 2))
+    },
     setState: (next) => {
       state.current = next
       resolve()
@@ -722,7 +875,7 @@ export async function createScene(
       applyFraming()
     },
     play,
-    clips: [...actions.keys()],
+    clips: [...animations],
     setAudioLevel: (level) => {
       state.audioLevel = Math.max(0, Math.min(1, level))
       state.audioLevelAt = clock.elapsedTime
@@ -738,8 +891,11 @@ export async function createScene(
     },
     dispose: () => {
       state.running = false
+      clearTimeout(frameTimer)
       mixer.stopAllAction()
-      VRMUtils.deepDispose(vrm.scene)
+      mixer.uncacheRoot(vrm.scene)
+      for (const joint of vrm.springBoneManager?.joints ?? []) joint.colliderGroups = joint.colliderGroups.filter(group=>group!==floorGroup)
+      resource.release()
       renderer.dispose()
     },
   }

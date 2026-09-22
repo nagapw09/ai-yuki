@@ -22,7 +22,7 @@ import {
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 
-import { activityRecord, memoryContext, permissionsList, settingGet } from '../bridge'
+import { activityRecord, memoryContext, permissionsList, settingGet, personaName } from '../bridge'
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { mcpTools } from '../tools/capabilities'
@@ -118,9 +118,10 @@ let requestCounter = 0
  * Подписка на события живёт ровно один запрос: слушатель, переживший свой вызов,
  * начал бы дописывать текст в следующий ход.
  */
-function createChat(systemExtra: string | undefined): ChatFn {
+function createChat(systemExtra: string | undefined, signal: AbortSignal): ChatFn {
   return async ({ messages, tools }) => {
     const requestId = `req-${(requestCounter += 1)}`
+    if (signal.aborted) throw new Error('Запрос остановлен')
 
     const unlisten = await listen<ChatDeltaEvent>('yuki://chat-delta', (event) => {
       if (event.payload.requestId === requestId) {
@@ -128,7 +129,10 @@ function createChat(systemExtra: string | undefined): ChatFn {
       }
     })
 
+    const cancel = () => { void invoke('chat_cancel', { requestId }).catch(() => undefined) }
+    signal.addEventListener('abort', cancel, { once: true })
     try {
+      if (signal.aborted) throw new Error('Запрос остановлен')
       return await invoke<ChatResponse>('chat_send', {
         args: {
           requestId,
@@ -142,6 +146,7 @@ function createChat(systemExtra: string | undefined): ChatFn {
         },
       })
     } finally {
+      signal.removeEventListener('abort', cancel)
       unlisten()
     }
   }
@@ -187,11 +192,14 @@ async function buildSystemExtra(): Promise<string | undefined> {
     `Сейчас ${now.toLocaleString('ru-RU')} (${zone}), ` +
       `unix-время ${Math.floor(now.getTime() / 1000)}.`,
   )
+  parts.push('После создания напоминания назови его точные дату и время из scheduledLocal результата инструмента. Не ограничивайся словом «готово». Для Telegram Desktop сначала прочитай интерфейс целевого окна; проверь название чата перед отправкой. Не путай управление Telegram Desktop с Telegram-ботом для удалённого доступа к Yuki.')
 
   const memory = await memoryContext().catch(() => '')
   if (memory) parts.push(memory)
 
   const persona = await settingGet('persona.extra').catch(() => null)
+  const name = await personaName().catch(() => '')
+  if (name) parts.push(`Пользователь выбрал тебе имя «${name}». Представляйся этим именем.`)
   if (persona) parts.push(persona)
 
   return parts.length > 0 ? parts.join('\n\n') : undefined
@@ -214,8 +222,30 @@ function describePlan(tool: Tool, input: unknown): string {
  * Возвращается после того, как ход завершён: и успех, и ошибка уже отражены
  * в состоянии — вызывающему коду ничего доделывать не нужно.
  */
-export async function sendMessage(
+let activeTurn: AbortController | null = null
+
+export function cancelCurrentTurn() {
+  activeTurn?.abort()
+  useChatStore.getState().resolveConfirmation(false)
+}
+
+export async function sendMessage(text: string, origin?: RemoteOrigin): Promise<string | null> {
+  if (activeTurn) return null
+  const controller = new AbortController()
+  activeTurn = controller
+  try { return await performMessage(text, controller.signal, origin) }
+  catch (error) {
+    const message = controller.signal.aborted ? 'Запрос остановлен' : describeError(error)
+    useChatStore.getState().failTurn(message)
+    useUiStore.getState().setHeadline(message)
+    useUiStore.getState().setOrbState(controller.signal.aborted ? 'idle' : 'error')
+    return origin ? `Не получилось: ${message}` : null
+  } finally { if (activeTurn === controller) activeTurn = null }
+}
+
+async function performMessage(
   text: string,
+  signal: AbortSignal,
   origin?: RemoteOrigin,
 ): Promise<string | null> {
   // Сначала команды (ТЗ §16): записанная последовательность выполняется сразу,
@@ -246,7 +276,8 @@ export async function sendMessage(
 
   try {
     const outcome = await runAgent(history, {
-      chat: createChat(origin ? remoteExtra(systemExtra, origin) : systemExtra),
+      chat: createChat(origin ? remoteExtra(systemExtra, origin) : systemExtra, signal),
+      signal,
       registry: origin ? remoteRegistry(origin) : registry,
       decide: (tool) => evaluate(tool, settings),
 
@@ -321,7 +352,7 @@ export async function sendMessage(
     })
 
     chat.finishTurn(outcome.reply, outcome.messages)
-    ui.flashResult('success')
+    ui.flashResult(outcome.completed ? 'success' : 'error')
 
     // Удалённую просьбу вслух не читаем: человека у компьютера нет, и говорить
     // в пустую комнату незачем.

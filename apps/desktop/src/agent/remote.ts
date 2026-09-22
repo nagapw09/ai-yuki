@@ -79,7 +79,7 @@ export function startRemote(): () => void {
 let busy = false
 
 async function handle(message: IncomingMessage): Promise<void> {
-  if (busy) {
+  if (busy || useChatStore.getState().running) {
     await telegramSend(
       message.chatId,
       'Сейчас занята предыдущей просьбой. Напишите ещё раз, когда закончу.',

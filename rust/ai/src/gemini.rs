@@ -170,13 +170,16 @@ impl Provider for GeminiProvider {
         let mut finish: Option<String> = None;
 
         read_events(response, |data| {
-            let event: Value = serde_json::from_str(data)
-                .map_err(|e| AiError::Decode(format!("{e}: {data}")))?;
+            let event: Value =
+                serde_json::from_str(data).map_err(|e| AiError::Decode(format!("{e}: {data}")))?;
 
             if let Some(err) = event.get("error") {
                 return Err(AiError::Api {
                     status: err["code"].as_u64().unwrap_or(0) as u16,
-                    message: err["message"].as_str().unwrap_or("ошибка провайдера").to_string(),
+                    message: err["message"]
+                        .as_str()
+                        .unwrap_or("ошибка провайдера")
+                        .to_string(),
                 });
             }
 
@@ -192,7 +195,11 @@ impl Provider for GeminiProvider {
                 finish = Some(reason.to_string());
             }
 
-            for part in candidate["content"]["parts"].as_array().into_iter().flatten() {
+            for part in candidate["content"]["parts"]
+                .as_array()
+                .into_iter()
+                .flatten()
+            {
                 if let Some(piece) = part["text"].as_str() {
                     text.push_str(piece);
                     sink.text_delta(piece);

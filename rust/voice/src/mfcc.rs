@@ -439,11 +439,7 @@ mod tests {
         let a = extract_normalised(&quiet);
         let b = extract_normalised(&loud);
 
-        let distance: f32 = a[20]
-            .iter()
-            .zip(&b[20])
-            .map(|(x, y)| (x - y).abs())
-            .sum();
+        let distance: f32 = a[20].iter().zip(&b[20]).map(|(x, y)| (x - y).abs()).sum();
 
         assert!(distance < 0.5, "громкость изменила признаки на {distance}");
     }

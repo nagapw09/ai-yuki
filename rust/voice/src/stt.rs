@@ -77,6 +77,21 @@ impl HttpStt {
     }
 }
 
+/// Куда именно отправлять запись.
+///
+/// У OpenAI, Groq и совместимых сервисов путь один — `/audio/transcriptions`.
+/// У локального `whisper.cpp` он свой, `/inference`, и это единственное, чем
+/// локальный движок отличается от облачного. Настройка хранит полный адрес, и
+/// уже заданный путь мы не дописываем второй раз.
+pub fn transcription_endpoint(base_url: &str) -> String {
+    let base = base_url.trim().trim_end_matches('/');
+    if base.ends_with("/inference") || base.ends_with("/audio/transcriptions") {
+        base.to_string()
+    } else {
+        format!("{base}/audio/transcriptions")
+    }
+}
+
 #[async_trait]
 impl SpeechToText for HttpStt {
     async fn transcribe(&self, samples: &[f32], language: Option<&str>) -> VoiceResult<String> {
@@ -93,15 +108,17 @@ impl SpeechToText for HttpStt {
 
         let mut form = reqwest::multipart::Form::new()
             .text("model", self.model.clone())
+            // Подробный ответ нужен ради оценки языка: по ней отсеиваются
+            // выдумки на шуме, см. `is_hallucination`. Облачные сервисы такой
+            // оценки не дают — тогда фильтр просто не срабатывает.
+            .text("response_format", "verbose_json")
             .part("file", part);
 
         if let Some(language) = language {
             form = form.text("language", language.to_string());
         }
 
-        let mut request = self
-            .http
-            .post(format!("{}/audio/transcriptions", self.base_url));
+        let mut request = self.http.post(transcription_endpoint(&self.base_url));
         if let Some(key) = self.api_key.as_deref().filter(|k| !k.trim().is_empty()) {
             request = request.bearer_auth(key);
         }
@@ -129,7 +146,44 @@ impl SpeechToText for HttpStt {
         let parsed: serde_json::Value =
             serde_json::from_str(&body).map_err(|e| VoiceError::Stt(e.to_string()))?;
 
-        Ok(parsed["text"].as_str().unwrap_or_default().trim().to_string())
+        let text = parsed["text"].as_str().unwrap_or_default().trim();
+        if is_hallucination(&parsed, language) {
+            // Пустая строка означает «услышали тишину» — вызывающий уже умеет
+            // молча вернуться к прослушиванию.
+            return Ok(String::new());
+        }
+        Ok(text.to_string())
+    }
+}
+
+/// Порог: ниже этой уверенности в языке запись не считается речью.
+///
+/// Замеры на `whisper.cpp` с русской моделью: настоящая речь даёт 0,57…0,98
+/// даже на командах в одно слово, чистый шум — 0,02. Четверть лежит посередине
+/// с запасом в обе стороны.
+const LANGUAGE_FLOOR: f64 = 0.25;
+
+/// Выдумка ли это на шуме.
+///
+/// Распознаватель почти никогда не молчит: на шуме вентилятора он уверенно
+/// выдаёт связную фразу вроде «Возьмите и не забывайте». Поле `no_speech_prob`
+/// в этом не помогает — на чистом шуме оно равно 0,000016, то есть «это точно
+/// речь». Зато оценка языка честная: на шуме распознаватель «слышит» нюнорск и
+/// даёт русскому две сотых.
+///
+/// Если оценок нет (так отвечают облачные сервисы), запись не отбрасывается:
+/// лучше лишняя фраза, чем потерянная команда.
+fn is_hallucination(parsed: &serde_json::Value, language: Option<&str>) -> bool {
+    let Some(expected) = language else {
+        return false;
+    };
+    let Some(scores) = parsed["language_probabilities"].as_object() else {
+        return false;
+    };
+    match scores.get(expected).and_then(serde_json::Value::as_f64) {
+        Some(score) => score < LANGUAGE_FLOOR,
+        // Языка нет в списке вовсе — судить не по чему.
+        None => false,
     }
 }
 
@@ -179,9 +233,71 @@ mod tests {
     }
 
     #[test]
+    fn local_whisper_keeps_its_own_path_and_the_cloud_gets_the_openai_one() {
+        assert_eq!(
+            transcription_endpoint("https://api.openai.com/v1"),
+            "https://api.openai.com/v1/audio/transcriptions"
+        );
+        assert_eq!(
+            transcription_endpoint("http://127.0.0.1:8756/inference"),
+            "http://127.0.0.1:8756/inference"
+        );
+        // Лишняя косая черта в настройке не должна порождать двойную в адресе.
+        assert_eq!(
+            transcription_endpoint("https://api.groq.com/openai/v1/"),
+            "https://api.groq.com/openai/v1/audio/transcriptions"
+        );
+        // Полный путь, введённый руками, не дописывается второй раз.
+        assert_eq!(
+            transcription_endpoint("https://example.com/v1/audio/transcriptions"),
+            "https://example.com/v1/audio/transcriptions"
+        );
+    }
+
+    #[test]
+    fn noise_that_sounds_like_a_sentence_is_dropped() {
+        // Настоящие ответы whisper.cpp: слева шум вентилятора, справа речь.
+        let noise = serde_json::json!({
+            "text": " Возьмите и не забывайте.",
+            "detected_language": "nynorsk",
+            "language_probabilities": {"ru": 0.0224, "en": 0.1168, "nn": 0.5706},
+        });
+        let speech = serde_json::json!({
+            "text": " Юки, открой браузер",
+            "detected_language": "russian",
+            "language_probabilities": {"ru": 0.9847, "en": 0.004},
+        });
+        assert!(is_hallucination(&noise, Some("ru")));
+        assert!(!is_hallucination(&speech, Some("ru")));
+    }
+
+    #[test]
+    fn a_one_word_command_is_not_mistaken_for_noise() {
+        // Замер: «Юки» — 0,723, «Юки, стоп» — 0,567. Короткая команда должна
+        // проходить, иначе слово пробуждения перестанет работать.
+        for score in [0.723, 0.567] {
+            let short = serde_json::json!({"text": "Юки", "language_probabilities": {"ru": score}});
+            assert!(!is_hallucination(&short, Some("ru")), "порог отсёк {score}");
+        }
+    }
+
+    #[test]
+    fn without_language_scores_nothing_is_dropped() {
+        // Облачные сервисы оценок не присылают — фильтр обязан молчать.
+        let cloud = serde_json::json!({"text": "привет"});
+        assert!(!is_hallucination(&cloud, Some("ru")));
+        // И без заданного языка судить тоже не по чему.
+        let scored = serde_json::json!({"language_probabilities": {"ru": 0.01}});
+        assert!(!is_hallucination(&scored, None));
+    }
+
+    #[test]
     fn reads_provider_error_text_out_of_the_body() {
         let message = extract_error(r#"{"error":{"message":"неверный ключ"}}"#);
         assert_eq!(message, "неверный ключ");
-        assert_eq!(extract_error(""), "сервис распознавания не вернул подробностей");
+        assert_eq!(
+            extract_error(""),
+            "сервис распознавания не вернул подробностей"
+        );
     }
 }

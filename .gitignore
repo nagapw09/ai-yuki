@@ -34,3 +34,21 @@ desktop.ini
 # logs
 *.log
 npm-debug.log*
+graphify-out/
+.cache/
+artifacts/
+release/
+
+tmp/
+~/
+window.__TAURI_INTERNALS__*
+# Unity-проект конвертера: кэш и чужие ассеты с их лицензиями
+tools/motion-converter/Library/
+tools/motion-converter/Temp/
+tools/motion-converter/Logs/
+tools/motion-converter/UserSettings/
+tools/motion-converter/Output/
+tools/motion-converter/Assets/Motions/
+tools/motion-converter/Assets/Models/
+tools/motion-converter/*.sln
+tools/motion-converter/*.csproj

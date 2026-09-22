@@ -213,3 +213,13 @@
     opacity: 0.3;
   }
 }
+.chat__stop { padding: 9px 15px; font-size: 12px; border: 1px solid var(--line-strong); border-radius: 9px; margin-bottom: 10px; color: var(--text-secondary); background: var(--surface-raised); }
+.chat__composer { flex-direction: column; align-items: center; }
+.chat__toolbar { display:flex; justify-content:space-between; padding:20px 32px; border-bottom:1px solid var(--line-subtle); font-size:12px; color:var(--text-secondary); }
+.chat__toolbar button { color:var(--accent-cool); font-size:11px; }
+
+.tool-chip { border-radius: 12px; max-width: 100%; }
+.tool-chip summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.tool-chip__detail { padding: 10px 4px 5px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; max-width: 680px; }
+.tool-chip[open] { flex-basis: 100%; }
+

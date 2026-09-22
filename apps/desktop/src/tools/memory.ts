@@ -119,7 +119,8 @@ const createReminder: Tool = {
       dueAt: number
       recurrence?: 'daily' | 'weekly'
     }
-    return bridge.reminderCreate(text, Math.round(dueAt), recurrence)
+    return bridge.reminderCreate(text, Math.round(dueAt), recurrence).then(reminder=>({...reminder,
+      scheduledLocal:new Date(reminder.dueAt*1000).toLocaleString('ru-RU'),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone}))
   },
 }
 

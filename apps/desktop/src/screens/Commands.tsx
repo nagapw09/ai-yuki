@@ -24,10 +24,13 @@ export function Commands() {
   const [editing, setEditing] = useState<CommandRecord | null>(null)
   const [library, setLibrary] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const reload = useCallback(async () => {
     try {
-      setCommands(await commandList())
+      const list = await commandList()
+      setCommands(list)
+      setEditing(current => current ?? list[0] ?? null)
       setError(null)
     } catch (e) {
       setError(describe(e))
@@ -38,7 +41,8 @@ export function Commands() {
     void reload()
   }, [reload])
 
-  const create = () =>
+  const create = () => {
+    setLibrary(false)
     setEditing({
       id: `cmd-${Date.now().toString(36)}`,
       name: '',
@@ -49,6 +53,17 @@ export function Commands() {
       enabled: true,
       steps: [],
     })
+  }
+
+  const toggleEnabled = async (command: CommandRecord, enabled: boolean) => {
+    try {
+      await commandSave({ ...command, enabled })
+      setEditing(current => current?.id === command.id ? { ...current, enabled } : current)
+      await reload()
+    } catch (error) {
+      setError(describe(error))
+    }
+  }
 
   return (
     <div className="commands">
@@ -57,9 +72,7 @@ export function Commands() {
           <div>
             <h2 className="commands__title">Команды</h2>
             <p className="commands__hint">
-              Записанная последовательность выполняется без модели: мгновенно
-              и без расхода токенов. Каждый шаг проходит те же разрешения,
-              что и действия Yuki.
+              Выберите команду слева, настройте шаги и запустите её.
             </p>
           </div>
           <div className="commands__actions-top">
@@ -76,7 +89,15 @@ export function Commands() {
           </div>
         </header>
 
-        {library && !editing && (
+        <div className="commands__workspace"><aside className="commands__sidebar">
+          <input className="commands__input" aria-label="Поиск команд" placeholder="Найти команду…" value={query} onChange={e=>setQuery(e.target.value)}/>
+          {(['phrase','hotkey','startup','manual'] as const).map(kind=>{
+            const group=commands.filter(c=>c.triggerKind===kind&&c.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+            return group.length>0&&<section key={kind}><h3>{TRIGGER_LABEL[kind]} <span>{group.length}</span></h3>{group.map(c=><div className="commands__nav-row" data-selected={editing?.id===c.id} key={c.id}><button onClick={()=>{setLibrary(false);setEditing(c)}}><strong>{c.name}</strong><small>{c.steps.length} шагов{c.hotkey?` · ${c.hotkey}`:''}</small></button><input type="checkbox" aria-label={`Включить ${c.name}`} checked={c.enabled} onChange={e=>void toggleEnabled(c,e.target.checked)}/></div>)}</section>
+          })}
+          {!commands.length&&<p className="commands__hint">Начните с готового примера в библиотеке.</p>}
+        </aside><main className="commands__detail">
+        {library && (
           <Library
             onPick={(template) => {
               setLibrary(false)
@@ -98,12 +119,12 @@ export function Commands() {
 
         {error && <p className="commands__error">{error}</p>}
 
-        {editing ? (
+        {!library && (editing ? (
           <Editor
+            key={editing.id}
             command={editing}
             onCancel={() => setEditing(null)}
             onSaved={async () => {
-              setEditing(null)
               await reload()
             }}
           />
@@ -130,7 +151,8 @@ export function Commands() {
               />
             ))}
           </div>
-        )}
+        ))}
+        </main></div>
       </div>
     </div>
   )
@@ -263,6 +285,11 @@ function Editor({
 }) {
   const [draft, setDraft] = useState<CommandRecord>(command)
   const [note, setNote] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+
+  useEffect(() => {
+    setDraft(current => ({ ...current, enabled: command.enabled }))
+  }, [command.enabled])
 
   // Полотно по умолчанию: на нём видно форму команды целиком, а ветвления
   // читаются как ветвления, а не как отступ в списке. Список остаётся — на
@@ -290,6 +317,7 @@ function Editor({
 
   return (
     <div className="editor">
+      <div className="editor__toolbar"><span>Редактор команды</span><div><button className="commands__button" disabled={running||!draft.name.trim()||!draft.steps.length} onClick={()=>{setRunning(true);setNote(null);void commandSave(draft).then(()=>runById(draft.id)).then(result=>{setNote(result.ok?`Выполнено шагов: ${result.executed}`:result.error||'Не выполнено');return onSaved()}).catch(e=>setNote(describe(e))).finally(()=>setRunning(false))}}>{running?'Выполняется…':'▷ Запустить'}</button><button className="commands__link commands__link--danger" disabled={running} onClick={()=>void commandDelete(draft.id).then(()=>{onCancel();return onSaved()}).catch(e=>setNote(describe(e)))}>Удалить</button></div></div>
       <div className="editor__row">
         <input
           className="commands__input"

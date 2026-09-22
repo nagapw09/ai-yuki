@@ -26,7 +26,11 @@ pub struct HttpTransport {
 }
 
 impl HttpTransport {
-    pub fn new(url: impl Into<String>, authorization: Option<String>, http: reqwest::Client) -> Self {
+    pub fn new(
+        url: impl Into<String>,
+        authorization: Option<String>,
+        http: reqwest::Client,
+    ) -> Self {
         Self {
             url: url.into(),
             authorization,
@@ -96,7 +100,11 @@ impl HttpTransport {
             return Err(McpError::Transport(format!(
                 "{}: {}",
                 status.as_u16(),
-                if text.is_empty() { "сервер не вернул подробностей" } else { &text }
+                if text.is_empty() {
+                    "сервер не вернул подробностей"
+                } else {
+                    &text
+                }
             )));
         }
 
@@ -106,9 +114,8 @@ impl HttpTransport {
         }
 
         let payload = if content_type.contains("text/event-stream") {
-            first_sse_payload(&text).ok_or_else(|| {
-                McpError::Decode("поток событий не содержит данных".into())
-            })?
+            first_sse_payload(&text)
+                .ok_or_else(|| McpError::Decode("поток событий не содержит данных".into()))?
         } else {
             text
         };

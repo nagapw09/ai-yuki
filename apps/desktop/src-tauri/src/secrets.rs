@@ -8,7 +8,7 @@ use keyring::Entry;
 
 /// Имя сервиса в системном хранилище. Меняться не должно: по нему пользователь
 /// находит записи Yuki в Keychain / Credential Manager.
-const SERVICE: &str = "ai.yuki.desktop";
+const SERVICE: &str = "ai.yuki.companion";
 
 #[derive(Debug, thiserror::Error)]
 pub enum SecretError {

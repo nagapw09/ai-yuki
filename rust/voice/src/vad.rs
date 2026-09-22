@@ -94,10 +94,36 @@ pub struct VadConfig {
     pub max_start_threshold: f32,
     /// Потолок порога продолжения речи.
     pub max_stop_threshold: f32,
+    /// Во сколько раз потолок порога поднимается над фоном у громкого входа.
+    ///
+    /// Должен быть выше пиков шума, но ниже обычной речи. Замеры на Realtek с
+    /// усилением: фон 0,055…0,076, пики 0,125…0,27.
+    ///
+    /// Полного разделения у такого микрофона нет: пики шума и тихая речь
+    /// перекрываются. Поэтому множитель выбран в пользу чувствительности —
+    /// лучше лишний раз услышать, чем пропустить команду. Выдумки на шуме
+    /// отсеивает уже распознавание, по оценке языка (см. `stt.rs`).
+    ///
+    /// На тихом микрофоне множитель не связывает вовсе: там постоянный потолок
+    /// 0,12 всё равно выше.
+    pub noise_ceiling_ratio: f32,
+    /// Выше этого порог не поднимается ни при каком шуме.
+    ///
+    /// Без этой границы гул стройки за окном увёл бы порог за громкость речи, и
+    /// Yuki перестала бы слышать вовсе. Связывает только в нелепых условиях:
+    /// у обычного микрофона потолок остаётся постоянным.
+    pub absolute_max_threshold: f32,
     /// Сколько миллисекунд тишины подряд завершают фразу.
     pub silence_ms: u32,
     /// Минимальная длина фразы: короче — это щелчок или кашель, а не команда.
     pub min_speech_ms: u32,
+    /// Сколько миллисекунд звук должен держаться выше порога, чтобы это
+    /// считалось началом речи.
+    ///
+    /// Всплеск фона длится один-два кадра, речь — десятки. Без этого условия
+    /// любой щелчок начинал фразу, а у громкого микрофона фраза начиналась
+    /// непрерывно.
+    pub start_ms: u32,
     /// Длина кадра в миллисекундах.
     pub frame_ms: u32,
 }
@@ -125,10 +151,13 @@ impl Default for VadConfig {
             // выше 0.12 порог поднимать нельзя.
             max_start_threshold: 0.12,
             max_stop_threshold: 0.07,
+            noise_ceiling_ratio: 2.4,
+            absolute_max_threshold: 0.22,
             // 700 мс: короче — режет фразу на паузе между словами, длиннее —
             // пользователь ждёт реакции уже после того, как договорил.
             silence_ms: 700,
             min_speech_ms: 250,
+            start_ms: 60,
             frame_ms: 20,
         }
     }
@@ -145,6 +174,8 @@ pub struct EnergyVad {
     speaking: bool,
     silence_frames: u32,
     speech_frames: u32,
+    /// Сколько кадров подряд уже держатся выше порога начала.
+    rising_frames: u32,
     /// Громкости последних кадров — по ним ищется минимум.
     recent: std::collections::VecDeque<f32>,
     /// Текущая оценка фонового шума.
@@ -158,6 +189,7 @@ impl EnergyVad {
             speaking: false,
             silence_frames: 0,
             speech_frames: 0,
+            rising_frames: 0,
             recent: std::collections::VecDeque::new(),
             // Ноль означает «фон ещё не измерен»: до первых измерений работают
             // абсолютные пороги.
@@ -167,14 +199,37 @@ impl EnergyVad {
 
     /// Порог начала речи с учётом шума.
     pub fn start_threshold(&self) -> f32 {
-        (self.noise_floor * self.config.noise_start_ratio)
-            .clamp(self.config.start_threshold, self.config.max_start_threshold)
+        (self.noise_floor * self.config.noise_start_ratio).clamp(
+            self.config.start_threshold,
+            self.ceiling(self.config.max_start_threshold),
+        )
     }
 
     /// Порог, ниже которого речь считается прерванной.
     pub fn stop_threshold(&self) -> f32 {
-        (self.noise_floor * self.config.noise_stop_ratio)
-            .clamp(self.config.stop_threshold, self.config.max_stop_threshold)
+        (self.noise_floor * self.config.noise_stop_ratio).clamp(
+            self.config.stop_threshold,
+            self.ceiling(self.config.max_stop_threshold),
+        )
+    }
+
+    /// Потолок порога, поднятый под громкий микрофон.
+    ///
+    /// Постоянный потолок рассчитан на тихий вход: он не даёт порогу уползти
+    /// выше обычной речи. Но у микрофона с сильным усилением фон сам подходит к
+    /// этому потолку, и тогда порог оказывается НИЖЕ шума — детектор слышит
+    /// речь в пустой комнате круглосуточно.
+    ///
+    /// Замер на Realtek с включённым усилением: фон 0,064, пики 0,129 при
+    /// потолке 0,120. Двести пятьдесят кадров тишины подряд считались речью, и
+    /// распознавание всё это время выдумывало текст.
+    ///
+    /// Поэтому потолок не ниже фона, умноженного на [`VadConfig::noise_ceiling_ratio`]:
+    /// у тихого входа он остаётся прежним, у громкого поднимается над шумом.
+    fn ceiling(&self, fixed: f32) -> f32 {
+        fixed
+            .max(self.noise_floor * self.config.noise_ceiling_ratio)
+            .min(self.config.absolute_max_threshold)
     }
 
     /// Текущая оценка уровня шума — её показывает диагностика микрофона.
@@ -245,6 +300,7 @@ impl SpeechDetector for EnergyVad {
         self.speaking = false;
         self.silence_frames = 0;
         self.speech_frames = 0;
+        self.rising_frames = 0;
         // Окно громкостей намеренно сохраняется: комната между фразами не
         // меняется, а повторный замер стоил бы первых слов следующей фразы.
     }
@@ -279,13 +335,23 @@ impl EnergyVad {
             };
         }
 
+        // Один громкий кадр — это щелчок мыши, стук по столу или всплеск фона.
+        // Речь держится выше порога подряд, поэтому начало требует нескольких
+        // кадров. Потерянного звука при этом нет: сессия держит упреждающий
+        // буфер и добирает из него начало слова.
         if level >= self.start_threshold() {
-            self.speaking = true;
-            self.speech_frames = 1;
-            self.silence_frames = 0;
-            return VadEvent::SpeechStart;
+            self.rising_frames += 1;
+            if self.rising_frames >= self.frames_for(self.config.start_ms).max(1) {
+                self.speaking = true;
+                self.speech_frames = self.rising_frames;
+                self.rising_frames = 0;
+                self.silence_frames = 0;
+                return VadEvent::SpeechStart;
+            }
+            return VadEvent::Silence;
         }
 
+        self.rising_frames = 0;
         VadEvent::Silence
     }
 }
@@ -318,6 +384,18 @@ mod tests {
         vec![0.015; FRAME]
     }
 
+    /// Сколько громких кадров подряд нужно, чтобы речь считалась начавшейся.
+    const RISING: usize = 3;
+
+    /// Начинает фразу и проверяет, что начало объявлено ровно на последнем
+    /// из подтверждающих кадров, а не раньше.
+    fn begin(vad: &mut EnergyVad) {
+        for _ in 0..RISING - 1 {
+            assert_eq!(vad.push_frame(&loud()), VadEvent::Silence);
+        }
+        assert_eq!(vad.push_frame(&loud()), VadEvent::SpeechStart);
+    }
+
     #[test]
     fn rms_of_silence_is_zero_and_of_constant_signal_is_its_level() {
         assert_eq!(rms(&[0.0; 10]), 0.0);
@@ -330,7 +408,7 @@ mod tests {
         let mut vad = warmed();
 
         assert_eq!(vad.push_frame(&quiet()), VadEvent::Silence);
-        assert_eq!(vad.push_frame(&loud()), VadEvent::SpeechStart);
+        begin(&mut vad);
 
         for _ in 0..20 {
             assert_eq!(vad.push_frame(&loud()), VadEvent::Speech);
@@ -346,7 +424,7 @@ mod tests {
     #[test]
     fn short_pause_inside_a_phrase_does_not_end_it() {
         let mut vad = warmed();
-        vad.push_frame(&loud());
+        begin(&mut vad);
 
         // Полсекунды паузы — вдох между словами.
         for _ in 0..25 {
@@ -365,7 +443,7 @@ mod tests {
         }
 
         // Но уже начатую — продолжает.
-        assert_eq!(vad.push_frame(&loud()), VadEvent::SpeechStart);
+        begin(&mut vad);
         assert_eq!(vad.push_frame(&middling()), VadEvent::Speech);
     }
 
@@ -373,8 +451,8 @@ mod tests {
     fn discards_clicks_that_are_too_short_to_be_speech() {
         let mut vad = warmed();
 
-        // Один громкий кадр — 20 мс, минимум 250 мс.
-        assert_eq!(vad.push_frame(&loud()), VadEvent::SpeechStart);
+        // Подтверждающие кадры — 80 мс, минимум для фразы 250 мс.
+        begin(&mut vad);
         for _ in 0..34 {
             vad.push_frame(&quiet());
         }
@@ -440,8 +518,13 @@ mod tests {
         }
         vad.reset();
 
-        // Обычная речь громче фона и обязана быть услышанной.
-        assert_eq!(vad.push_frame(&vec![0.2; FRAME]), VadEvent::SpeechStart);
+        // Обычная речь громче фона и обязана быть услышанной — после того,
+        // как продержится положенные кадры.
+        let speech = vec![0.2; FRAME];
+        for _ in 0..RISING - 1 {
+            assert_eq!(vad.push_frame(&speech), VadEvent::Silence);
+        }
+        assert_eq!(vad.push_frame(&speech), VadEvent::SpeechStart);
     }
 
     #[test]
@@ -452,18 +535,55 @@ mod tests {
             vad.push_frame(&vec![0.5; FRAME]);
         }
         assert!(
-            vad.start_threshold() <= 0.12,
+            vad.start_threshold() <= 0.22,
             "порог уполз до {}",
             vad.start_threshold()
         );
     }
 
+    /// Тихий микрофон работает как раньше.
+    #[test]
+    fn a_quiet_microphone_keeps_the_fixed_ceiling() {
+        let mut vad = EnergyVad::default();
+        for _ in 0..200 {
+            vad.push_frame(&vec![0.01; FRAME]);
+        }
+        assert!(vad.start_threshold() <= 0.12);
+        assert!(vad.stop_threshold() <= 0.07);
+    }
+
+    /// Громкий микрофон перестаёт слышать речь в пустой комнате.
+    ///
+    /// Замер на Realtek с усилением: фон 0,064, пики 0,129. При прежнем
+    /// постоянном потолке порог остановки был 0,07 — ниже фона, поэтому
+    /// начавшаяся «фраза» не заканчивалась никогда, и распознавание
+    /// круглосуточно выдумывало текст.
+    #[test]
+    fn a_hot_microphone_lifts_the_thresholds_above_its_own_noise() {
+        let mut vad = EnergyVad::default();
+        for _ in 0..200 {
+            vad.push_frame(&vec![0.064; FRAME]);
+        }
+        assert!(
+            vad.stop_threshold() > 0.129,
+            "порог остановки {} не поднялся над пиками шума",
+            vad.stop_threshold()
+        );
+        assert!(
+            vad.start_threshold() > 0.129,
+            "порог начала {} не поднялся над пиками шума",
+            vad.start_threshold()
+        );
+        // И при этом остаётся ниже обычной речи.
+        assert!(vad.start_threshold() < 0.22);
+    }
+
     #[test]
     fn reset_forgets_an_unfinished_phrase() {
         let mut vad = warmed();
-        vad.push_frame(&loud());
+        begin(&mut vad);
         vad.reset();
-        // После сброса громкий кадр снова начинает фразу, а не продолжает старую.
-        assert_eq!(vad.push_frame(&loud()), VadEvent::SpeechStart);
+        // После сброса фраза начинается заново, а не продолжает старую.
+        begin(&mut vad);
     }
 }

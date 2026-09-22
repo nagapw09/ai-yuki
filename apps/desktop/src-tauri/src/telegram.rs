@@ -65,6 +65,7 @@ const POLL_TIMEOUT: u64 = 30;
 
 /// Работает ли опрос прямо сейчас.
 static RUNNING: AtomicBool = AtomicBool::new(false);
+static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 /// Выданный код сопряжения. Одноразовый: использован — стёрт.
 static PAIRING: Mutex<Option<Pairing>> = Mutex::new(None);
@@ -100,6 +101,7 @@ pub struct RemoteDevice {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TelegramStatus {
+    pub last_error: Option<String>,
     /// Включён ли канал в настройках.
     pub enabled: bool,
     /// Задан ли токен бота.
@@ -198,6 +200,7 @@ pub fn telegram_status(state: State<'_, AppState>) -> TelegramStatus {
     let alive = pairing.filter(|p| p.expires_at > now());
 
     TelegramStatus {
+        last_error: LAST_ERROR.lock().ok().and_then(|v| v.clone()),
         enabled: setting(&state, KEY_ENABLED).as_deref() == Some("on"),
         has_token: secrets::exists(TOKEN_REF),
         running: RUNNING.load(Ordering::Relaxed),
@@ -235,7 +238,7 @@ pub async fn telegram_set_token(app: AppHandle, token: String) -> Result<String,
         .get(format!("https://api.telegram.org/bot{token}/getMe"))
         .send()
         .await
-        .map_err(|e| format!("не удалось связаться с Telegram: {e}"))?;
+        .map_err(|e| format!("не удалось связаться с Telegram: {}", e.without_url()))?;
 
     let body: serde_json::Value = response.json().await.map_err(err)?;
 
@@ -270,7 +273,9 @@ pub fn telegram_pair(state: State<'_, AppState>) -> Result<String, String> {
 
     let code = pairing_code();
 
-    let mut guard = PAIRING.lock().map_err(|_| "состояние сопряжения повреждено")?;
+    let mut guard = PAIRING
+        .lock()
+        .map_err(|_| "состояние сопряжения повреждено")?;
     *guard = Some(Pairing {
         code: code.clone(),
         expires_at: now() + PAIRING_TTL,
@@ -358,7 +363,9 @@ pub async fn telegram_send(app: AppHandle, chat_id: String, text: String) -> Res
 
         (
             state.http.clone(),
-            secrets::get(TOKEN_REF).map_err(err)?.ok_or("токен не задан")?,
+            secrets::get(TOKEN_REF)
+                .map_err(err)?
+                .ok_or("токен не задан")?,
         )
     };
 
@@ -376,7 +383,7 @@ async fn send(
         .json(&serde_json::json!({ "chat_id": chat_id, "text": text }))
         .send()
         .await
-        .map_err(|e| format!("не удалось отправить сообщение: {e}"))?;
+        .map_err(|e| format!("не удалось отправить сообщение: {}", e.without_url()))?;
 
     let body: serde_json::Value = response.json().await.map_err(err)?;
 
@@ -482,12 +489,18 @@ async fn poll(app: AppHandle) {
 
         match updates(&client, &token, offset).await {
             Ok(list) => {
+                if let Ok(mut error) = LAST_ERROR.lock() {
+                    *error = None
+                }
                 backoff = 1;
                 for update in list {
                     handle(&app, &client, &token, update).await;
                 }
             }
             Err(reason) => {
+                if let Ok(mut error) = LAST_ERROR.lock() {
+                    *error = Some(reason.clone())
+                }
                 tracing::warn!("Telegram: {reason}");
                 tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
                 // До минуты: чаще стучаться в недоступный сервис бессмысленно,
@@ -528,7 +541,7 @@ async fn updates(
         .timeout(std::time::Duration::from_secs(POLL_TIMEOUT + 15))
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.without_url().to_string())?;
 
     let body: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
 
@@ -748,7 +761,10 @@ mod tests {
         for _ in 0..200 {
             let code = pairing_code();
             assert_eq!(code.len(), 6, "код {code} не шестизначный");
-            assert!(code.chars().all(|c| c.is_ascii_digit()), "в коде {code} не цифра");
+            assert!(
+                code.chars().all(|c| c.is_ascii_digit()),
+                "в коде {code} не цифра"
+            );
         }
     }
 
@@ -766,7 +782,10 @@ mod tests {
     #[test]
     fn code_comparison_accepts_only_the_exact_code() {
         assert!(matches("123456", "123456"));
-        assert!(matches("123456", "  123456  "), "пробелы по краям не считаются");
+        assert!(
+            matches("123456", "  123456  "),
+            "пробелы по краям не считаются"
+        );
 
         assert!(!matches("123456", "123457"));
         assert!(!matches("123456", "023456"));

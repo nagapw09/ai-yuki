@@ -165,7 +165,10 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
     let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Выйти", true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&show, &settings, &separator, &autostart, &separator, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &settings, &separator, &autostart, &separator, &quit],
+    )?;
 
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(Image::new_owned(
@@ -408,7 +411,10 @@ mod tests {
             ("success", "#4ade9b"),
             ("error", "#ff6b7a"),
         ] {
-            assert!(tokens.contains(token), "токена {token} больше нет в палитре");
+            assert!(
+                tokens.contains(token),
+                "токена {token} больше нет в палитре"
+            );
 
             let [r, g, b] = state_color(state);
             assert_eq!(

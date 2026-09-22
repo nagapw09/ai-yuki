@@ -17,6 +17,8 @@ pub enum ProviderKind {
     OpenAi,
     Gemini,
     OpenAiCompatible,
+    ClaudeCli,
+    CodexCli,
 }
 
 impl ProviderKind {
@@ -25,6 +27,8 @@ impl ProviderKind {
             "anthropic" | "claude" => Self::Anthropic,
             "openai" => Self::OpenAi,
             "gemini" | "google" => Self::Gemini,
+            "claude_cli" => Self::ClaudeCli,
+            "codex_cli" => Self::CodexCli,
             "openrouter" | "xai" | "ollama" | "lmstudio" | "custom" | "openai_compatible" => {
                 Self::OpenAiCompatible
             }
@@ -38,6 +42,8 @@ impl ProviderKind {
             Self::Anthropic => "https://api.anthropic.com",
             Self::OpenAi | Self::OpenAiCompatible => "https://api.openai.com/v1",
             Self::Gemini => "https://generativelanguage.googleapis.com/v1beta",
+            Self::ClaudeCli => "https://claude.ai",
+            Self::CodexCli => "https://chatgpt.com",
         }
     }
 
@@ -47,9 +53,9 @@ impl ProviderKind {
             Self::Anthropic => "claude-opus-5",
             Self::OpenAi | Self::OpenAiCompatible => "gpt-4.1",
             Self::Gemini => "gemini-2.5-pro",
+            Self::ClaudeCli | Self::CodexCli => "default",
         }
     }
-
 }
 
 /// Нужен ли этому подключению ключ.
@@ -58,7 +64,10 @@ impl ProviderKind {
 /// говорят на протоколе OpenAI, но ключ им нужен, а Ollama и LM Studio — это
 /// локальные серверы на машине пользователя, и ключа у них нет вовсе.
 pub fn requires_key(raw_kind: &str) -> bool {
-    !matches!(raw_kind, "ollama" | "lmstudio" | "custom" | "openai_compatible")
+    !matches!(
+        raw_kind,
+        "ollama" | "lmstudio" | "custom" | "openai_compatible" | "claude_cli" | "codex_cli"
+    )
 }
 
 /// Подключение к конкретному провайдеру.

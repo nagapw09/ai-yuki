@@ -33,6 +33,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::mfcc::{self, COEFFS, FRAME_HOP, FRAME_LEN, SAMPLE_RATE};
 
+/// Эталон rustpotter хранится в настройках строкой.
+fn encode_base64(bytes: &[u8]) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+fn decode_base64(text: &str) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.decode(text).ok()
+}
+
 /// Сколько звука держать в окне анализа.
 ///
 /// 1.2 секунды: слово «Юки» занимает около полусекунды, и запас нужен на то,
@@ -64,15 +75,31 @@ const BAND: usize = 20;
 /// плохой день; больше — отзывается на постороннюю речь.
 const THRESHOLD_MARGIN: f32 = 1.35;
 
-/// Записанные образцы слова пробуждения.
+/// Записанное слово пробуждения.
 ///
 /// Хранится в настройках: это не секрет, но и не то, что стоит показывать —
 /// набор чисел, из которых звук не восстановить.
+///
+/// # Почему два поля вместо одного
+///
+/// Начиная с 0.3.3 эталон строит rustpotter (см. [`crate::spotter`]) — он
+/// выравнивает громкость и требует несколько подтверждений подряд, чего своя
+/// реализация не умела. Но слово, записанное в прежних версиях, лежит у людей
+/// в настройках уже сейчас, и выбрасывать его, заставляя перезаписывать, —
+/// плохая плата за обновление. Поэтому старые шаблоны продолжают работать
+/// прежним путём, а новые записи идут через rustpotter.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WakeModel {
-    /// Последовательности признаков по одному на образец.
+    /// Эталон rustpotter, base64 от его собственного формата.
+    ///
+    /// Base64, а не массив чисел: в настройках это строка на 26 КБ вместо
+    /// семидесяти, и глазами она читается как одно значение, а не как полотно.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// Последовательности признаков по одному на образец — путь до 0.3.3.
+    #[serde(default)]
     pub templates: Vec<Vec<[f32; COEFFS]>>,
-    /// Порог расстояния, посчитанный при записи.
+    /// Порог совпадения: у rustpotter — похожесть, у прежнего пути — расстояние.
     pub threshold: f32,
 }
 
@@ -82,6 +109,27 @@ impl WakeModel {
     /// Порог вычисляется, а не задаётся константой: у разных людей слово звучит
     /// с разной устойчивостью, и единое число подошло бы не всем.
     pub fn from_samples(samples: &[Vec<f32>]) -> Option<Self> {
+        // Основной путь. Прежний остаётся только на случай, когда эталон не
+        // собрался: это лучше, чем отказать в записи слова совсем.
+        match crate::spotter::build(samples) {
+            Ok(reference) => Some(Self {
+                reference: Some(encode_base64(&reference)),
+                templates: Vec::new(),
+                threshold: crate::spotter::THRESHOLD,
+            }),
+            Err(error) => {
+                tracing::warn!(%error, "эталон rustpotter не собрался, беру прежний путь");
+                Self::from_templates(samples)
+            }
+        }
+    }
+
+    /// Прежний путь: сравнение с признаками образцов напрямую.
+    ///
+    /// Остаётся ради слов, записанных до 0.3.3, и как запасной вариант, если
+    /// эталон rustpotter почему-то не собрался. Открыт наружу ради `wake_bench`:
+    /// сравнить два пути можно, только собрав оба.
+    pub fn from_templates(samples: &[Vec<f32>]) -> Option<Self> {
         // Образец — предмет сравнения целиком, поэтому его база считается
         // по нему самому.
         let templates: Vec<Vec<[f32; COEFFS]>> = samples
@@ -107,6 +155,7 @@ impl WakeModel {
         }
 
         Some(Self {
+            reference: None,
             templates,
             threshold: worst * THRESHOLD_MARGIN,
         })
@@ -226,6 +275,8 @@ fn window_frames() -> usize {
 /// окна заново на каждой проверке — это в десять раз больше преобразований
 /// Фурье, чем нужно, и именно на них уходило бы всё процессорное время.
 pub struct WakeDetector {
+    /// Эталон rustpotter, если слово записано начиная с 0.3.3.
+    spotter: Option<crate::spotter::Spotter>,
     model: WakeModel,
     extractor: mfcc::FrameExtractor,
     /// Хвост звука, из которого ещё не собран кадр.
@@ -239,15 +290,41 @@ pub struct WakeDetector {
 }
 
 impl WakeDetector {
-    pub fn new(model: WakeModel) -> Self {
-        Self {
+    /// Разворачивает записанное слово в работающий детектор.
+    ///
+    /// Возвращает `None`, когда из модели детектор не получается: эталон
+    /// повреждён, а прежних шаблонов в ней нет. Притворяться работающим в этом
+    /// случае нельзя — детектор, который никогда не срабатывает, отнимает у
+    /// человека голосовой режим молча. Пустой ответ, наоборот, возвращает
+    /// прежний путь: фраза распознаётся целиком, и обращение ищется в тексте.
+    pub fn new(model: WakeModel) -> Option<Self> {
+        let spotter = match model.reference.as_deref() {
+            Some(reference) => match decode_base64(reference)
+                .ok_or_else(|| "эталон записан не по base64".to_string())
+                .and_then(|bytes| crate::spotter::Spotter::new(&bytes))
+            {
+                Ok(spotter) => Some(spotter),
+                Err(error) => {
+                    tracing::warn!(%error, "эталон слова пробуждения не читается");
+                    None
+                }
+            },
+            None => None,
+        };
+
+        if spotter.is_none() && model.templates.is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            spotter,
             model,
             extractor: mfcc::FrameExtractor::new(),
             tail: Vec::with_capacity(FRAME_LEN + FRAME_HOP),
             frames: std::collections::VecDeque::with_capacity(window_frames() + 1),
             since_check: 0,
             cooldown: 0,
-        }
+        })
     }
 
     /// Добавляет кусок звука и говорит, услышано ли обращение.
@@ -257,6 +334,11 @@ impl WakeDetector {
     /// слово дало бы десяток срабатываний подряд — оно остаётся в окне ещё
     /// секунду.
     pub fn push(&mut self, samples: &[f32]) -> bool {
+        // Новый путь считает всё сам: своё окно, свои кадры, свой порог.
+        if let Some(spotter) = self.spotter.as_mut() {
+            return spotter.push(samples);
+        }
+
         self.tail.extend_from_slice(samples);
 
         let capacity = window_frames();
@@ -312,6 +394,16 @@ impl WakeDetector {
     /// Порог модели — для диагностики.
     pub fn threshold(&self) -> f32 {
         self.model.threshold
+    }
+
+    /// Работает ли детектор через rustpotter. Для диагностики и отчётов.
+    pub fn is_spotter(&self) -> bool {
+        self.spotter.is_some()
+    }
+
+    /// Совпадение последнего срабатывания. У прежнего пути его нет.
+    pub fn score(&self) -> Option<f32> {
+        self.spotter.as_ref().map(|spotter| spotter.score())
     }
 }
 
@@ -425,9 +517,15 @@ mod tests {
         let stretched = mfcc::extract_normalised(&slow);
 
         let same = distance(&normal, &stretched);
-        let other = distance(&normal, &mfcc::extract_normalised(&word(1200.0, 300.0, 0.0)));
+        let other = distance(
+            &normal,
+            &mfcc::extract_normalised(&word(1200.0, 300.0, 0.0)),
+        );
 
-        assert!(same < other, "растянутое слово дальше чужого: {same} / {other}");
+        assert!(
+            same < other,
+            "растянутое слово дальше чужого: {same} / {other}"
+        );
     }
 
     #[test]
@@ -451,7 +549,7 @@ mod tests {
             word(400.0, 900.0, 0.3),
             word(400.0, 900.0, 0.6),
         ];
-        let model = WakeModel::from_samples(&samples).expect("модель должна собраться");
+        let model = WakeModel::from_templates(&samples).expect("модель должна собраться");
 
         assert_eq!(model.templates.len(), 3);
         assert!(model.threshold > 0.0);
@@ -478,6 +576,117 @@ mod tests {
         );
     }
 
+    /// Три образца слова, как их записал бы человек: слово в тишине.
+    fn enrolled() -> Vec<Vec<f32>> {
+        [0.0, 0.25, 0.5]
+            .into_iter()
+            .map(|seed| {
+                let mut audio = vec![0.0f32; (SAMPLE_RATE * 0.3) as usize];
+                audio.extend(word(400.0, 900.0, seed));
+                audio.extend(vec![0.0f32; (SAMPLE_RATE * 0.3) as usize]);
+                audio
+            })
+            .collect()
+    }
+
+    /// Прогоняет звук так, как он приходит с микрофона, и считает срабатывания.
+    fn feed(detector: &mut WakeDetector, audio: &[f32]) -> usize {
+        let chunk = (SAMPLE_RATE * 0.016) as usize;
+        audio
+            .chunks(chunk)
+            .filter(|piece| detector.push(piece))
+            .count()
+    }
+
+    #[test]
+    fn a_new_model_goes_through_rustpotter() {
+        let model = WakeModel::from_samples(&enrolled()).expect("модель должна собраться");
+
+        assert!(model.reference.is_some(), "эталон не записан");
+        assert!(
+            model.templates.is_empty(),
+            "прежние шаблоны занимают место зря"
+        );
+        assert!(
+            WakeDetector::new(model)
+                .expect("детектор должен собраться")
+                .is_spotter(),
+            "детектор пошёл прежним путём"
+        );
+    }
+
+    #[test]
+    fn rustpotter_hears_the_enrolled_word() {
+        let model = WakeModel::from_samples(&enrolled()).expect("модель должна собраться");
+        let mut detector = WakeDetector::new(model).expect("детектор должен собраться");
+
+        let mut audio = vec![0.0f32; (SAMPLE_RATE * 0.4) as usize];
+        audio.extend(word(400.0, 900.0, 0.1));
+        audio.extend(vec![0.0f32; (SAMPLE_RATE * 0.6) as usize]);
+
+        assert!(
+            feed(&mut detector, &audio) > 0,
+            "детектор не узнал записанное слово, лучшее совпадение {:?}",
+            detector.score()
+        );
+    }
+
+    #[test]
+    fn rustpotter_stays_silent_on_a_different_word() {
+        let model = WakeModel::from_samples(&enrolled()).expect("модель должна собраться");
+        let mut detector = WakeDetector::new(model).expect("детектор должен собраться");
+
+        let mut audio = vec![0.0f32; (SAMPLE_RATE * 0.4) as usize];
+        audio.extend(word(1500.0, 250.0, 0.0));
+        audio.extend(vec![0.0f32; (SAMPLE_RATE * 0.6) as usize]);
+
+        assert_eq!(
+            feed(&mut detector, &audio),
+            0,
+            "детектор отозвался на чужое слово с совпадением {:?}",
+            detector.score()
+        );
+    }
+
+    #[test]
+    fn rustpotter_never_wakes_on_silence() {
+        let model = WakeModel::from_samples(&enrolled()).expect("модель должна собраться");
+        let mut detector = WakeDetector::new(model).expect("детектор должен собраться");
+
+        let silence = vec![0.0f32; (SAMPLE_RATE * 3.0) as usize];
+        assert_eq!(feed(&mut detector, &silence), 0);
+    }
+
+    #[test]
+    fn a_word_recorded_before_the_update_still_works() {
+        // Так модель лежит в настройках у тех, кто записал слово до 0.3.3:
+        // поля `reference` в ней нет вовсе.
+        let old = WakeModel::from_templates(&enrolled()).expect("модель должна собраться");
+        let stored = serde_json::to_string(&old).expect("модель должна сериализоваться");
+        assert!(
+            !stored.contains("reference"),
+            "в прежнем формате лишнее поле: {}",
+            &stored[..stored.len().min(80)]
+        );
+
+        let read: WakeModel = serde_json::from_str(&stored).expect("модель должна читаться");
+        let detector = WakeDetector::new(read).expect("детектор должен собраться");
+        assert!(!detector.is_spotter(), "прежняя модель ушла не туда");
+    }
+
+    #[test]
+    fn a_broken_reference_is_not_a_working_detector() {
+        // Детектор, который никогда не срабатывает, отнимает голосовой режим
+        // молча. Честный отказ возвращает прежний путь — поиск имени в тексте.
+        let model = WakeModel {
+            reference: Some("это не эталон".into()),
+            templates: Vec::new(),
+            threshold: 0.5,
+        };
+
+        assert!(WakeDetector::new(model).is_none());
+    }
+
     #[test]
     fn the_detector_hears_the_enrolled_word() {
         let samples = vec![
@@ -485,8 +694,8 @@ mod tests {
             word(400.0, 900.0, 0.25),
             word(400.0, 900.0, 0.5),
         ];
-        let model = WakeModel::from_samples(&samples).expect("модель должна собраться");
-        let mut detector = WakeDetector::new(model);
+        let model = WakeModel::from_templates(&samples).expect("модель должна собраться");
+        let mut detector = WakeDetector::new(model).expect("детектор должен собраться");
 
         // Кормим так, как приходит с микрофона: кусками по 16 мс.
         let mut audio = vec![0.0f32; (SAMPLE_RATE * 0.4) as usize];
@@ -506,8 +715,8 @@ mod tests {
             word(400.0, 900.0, 0.25),
             word(400.0, 900.0, 0.5),
         ];
-        let model = WakeModel::from_samples(&samples).expect("модель должна собраться");
-        let mut detector = WakeDetector::new(model);
+        let model = WakeModel::from_templates(&samples).expect("модель должна собраться");
+        let mut detector = WakeDetector::new(model).expect("детектор должен собраться");
 
         let mut audio = vec![0.0f32; (SAMPLE_RATE * 0.4) as usize];
         audio.extend(word(1500.0, 250.0, 0.0));
@@ -526,8 +735,8 @@ mod tests {
             word(400.0, 900.0, 0.25),
             word(400.0, 900.0, 0.5),
         ];
-        let model = WakeModel::from_samples(&samples).expect("модель должна собраться");
-        let mut detector = WakeDetector::new(model);
+        let model = WakeModel::from_templates(&samples).expect("модель должна собраться");
+        let mut detector = WakeDetector::new(model).expect("детектор должен собраться");
 
         let silence = vec![0.0f32; (SAMPLE_RATE * 3.0) as usize];
         let chunk = (SAMPLE_RATE * 0.016) as usize;
@@ -544,8 +753,8 @@ mod tests {
             word(400.0, 900.0, 0.25),
             word(400.0, 900.0, 0.5),
         ];
-        let model = WakeModel::from_samples(&samples).expect("модель должна собраться");
-        let mut detector = WakeDetector::new(model);
+        let model = WakeModel::from_templates(&samples).expect("модель должна собраться");
+        let mut detector = WakeDetector::new(model).expect("детектор должен собраться");
 
         let mut audio = vec![0.0f32; (SAMPLE_RATE * 0.4) as usize];
         audio.extend(word(400.0, 900.0, 0.1));
@@ -576,7 +785,7 @@ mod tests {
             word(400.0, 900.0, 0.25),
             word(400.0, 900.0, 0.5),
         ];
-        let model = WakeModel::from_samples(&samples).expect("модель должна собраться");
+        let model = WakeModel::from_templates(&samples).expect("модель должна собраться");
 
         let audio = vec![0.1f32; (SAMPLE_RATE * WINDOW_SECONDS) as usize];
         let frames = mfcc::extract(&audio);

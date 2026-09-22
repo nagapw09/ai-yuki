@@ -184,7 +184,10 @@ impl TextToSpeech for HttpTts {
     fn set_voice(&self, name: &str) -> VoiceResult<()> {
         let mut config = self.snapshot()?;
 
-        if !references(&config.reference_dir).iter().any(|item| item == name) {
+        if !references(&config.reference_dir)
+            .iter()
+            .any(|item| item == name)
+        {
             return Err(VoiceError::Tts(format!("образца «{name}» нет в папке")));
         }
 
@@ -226,7 +229,11 @@ pub fn references(dir: &str) -> Vec<String> {
                     .and_then(|ext| ext.to_str())
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("wav"))
         })
-        .filter_map(|path| path.file_name().and_then(|name| name.to_str()).map(String::from))
+        .filter_map(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(String::from)
+        })
         .collect();
 
     found.sort_by_key(|name| name.to_lowercase());
@@ -293,10 +300,7 @@ pub fn decode_wav(bytes: &[u8]) -> VoiceResult<(Vec<f32>, u32)> {
     let channels = spec.channels.max(1) as usize;
 
     let raw: Vec<f32> = match spec.sample_format {
-        hound::SampleFormat::Float => reader
-            .samples::<f32>()
-            .filter_map(Result::ok)
-            .collect(),
+        hound::SampleFormat::Float => reader.samples::<f32>().filter_map(Result::ok).collect(),
         hound::SampleFormat::Int => {
             // Нормируем по разрядности, а не по 16 битам всегда: сервис может
             // отдать 24 или 32 бита, и деление на 32768 превратило бы такой
@@ -366,7 +370,7 @@ pub fn rms(chunk: &[f32]) -> f32 {
 }
 
 /// Играет сигнал на устройстве вывода, обновляя громкость.
-fn play(
+pub(crate) fn play(
     samples: Vec<f32>,
     rate: u32,
     cancel: &Arc<AtomicBool>,
@@ -529,8 +533,16 @@ mod tests {
 
         assert_eq!(rate, 24_000);
         assert_eq!(samples.len(), 4);
-        assert!((samples[1] - 1.0).abs() < 0.001, "максимум стал {}", samples[1]);
-        assert!((samples[2] + 1.0).abs() < 0.001, "минимум стал {}", samples[2]);
+        assert!(
+            (samples[1] - 1.0).abs() < 0.001,
+            "максимум стал {}",
+            samples[1]
+        );
+        assert!(
+            (samples[2] + 1.0).abs() < 0.001,
+            "минимум стал {}",
+            samples[2]
+        );
     }
 
     /// Стерео сводится в моно.
@@ -556,7 +568,11 @@ mod tests {
         let (samples, _) = decode_wav(&bytes).expect("должно разобраться");
 
         assert_eq!(samples.len(), 1, "два канала должны стать одним отсчётом");
-        assert!((samples[0] - 0.5).abs() < 0.01, "смешалось в {}", samples[0]);
+        assert!(
+            (samples[0] - 0.5).abs() < 0.01,
+            "смешалось в {}",
+            samples[0]
+        );
     }
 
     #[test]
@@ -571,7 +587,11 @@ mod tests {
         let signal: Vec<f32> = (0..1000).map(|i| (i as f32 / 50.0).sin()).collect();
 
         let up = resample(&signal, 24_000, 48_000);
-        assert_eq!(up.len(), 2000, "вдвое большая частота — вдвое больше отсчётов");
+        assert_eq!(
+            up.len(),
+            2000,
+            "вдвое большая частота — вдвое больше отсчётов"
+        );
 
         let down = resample(&signal, 48_000, 24_000);
         assert_eq!(down.len(), 500);
@@ -589,7 +609,11 @@ mod tests {
         let out = resample(&ramp, 100, 300);
 
         assert!((out[0] - 0.0).abs() < 0.01);
-        assert!((out[out.len() - 1] - 1.0).abs() < 0.02, "конец стал {}", out[out.len() - 1]);
+        assert!(
+            (out[out.len() - 1] - 1.0).abs() < 0.02,
+            "конец стал {}",
+            out[out.len() - 1]
+        );
 
         // Середина должна быть серединой.
         let middle = out[out.len() / 2];

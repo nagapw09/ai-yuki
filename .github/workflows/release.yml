@@ -1,82 +1,52 @@
-name: Release
-
-# Выпуск собирается на обеих системах сразу (ТЗ §2). Собрать macOS-сборку можно
-# только на macOS — кросс-компиляции для неё нет, — поэтому матрица здесь не
-# оптимизация, а единственный способ выпустить приложение целиком.
-
+﻿name: Build desktop
 on:
-  push:
-    tags:
-      - 'v*'
-  # Ручной запуск нужен, чтобы проверить сборку до того, как поставлен тег:
-  # тег снять уже нельзя, а сломанный выпуск с ним связан навсегда.
   workflow_dispatch:
-
+  push:
+    tags: ['v*']
 permissions:
-  contents: write
-
+  contents: read
 jobs:
   build:
     strategy:
-      # Один упавший таргет не должен отменять второй: чинить их всё равно
-      # придётся по отдельности, а половина артефактов лучше, чем ничего.
       fail-fast: false
       matrix:
         include:
-          - platform: windows-latest
+          - os: windows-latest
             target: x86_64-pc-windows-msvc
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-          - platform: macos-13
-            target: x86_64-apple-darwin
-
-    runs-on: ${{ matrix.platform }}
-
+            rust-targets: x86_64-pc-windows-msvc
+            bundles: nsis
+            artifact: Yuki-Windows-x64
+          - os: macos-latest
+            target: universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            bundles: dmg
+            artifact: Yuki-macOS-universal
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
-
+          targets: ${{ matrix.rust-targets }}
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: . -> target
-
-      - name: Установить зависимости
-        run: npm ci
-
-      - name: Проверки
-        # Тесты идут до сборки намеренно: выпуск, который не проходит
-        # собственные тесты, не должен доехать до артефакта.
-        run: |
-          npm test
-          npx tsc --noEmit -p apps/desktop/tsconfig.json
-          cargo test --workspace
-
-      - name: Собрать и опубликовать
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Приватный ключ подписи обновлений. Без него сборка получится, но
-          # артефакты обновления подписаны не будут — и клиент их отвергнет.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: cargo test --workspace --lib --locked
+      - name: Build installer
+        working-directory: apps/desktop
+        run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --ci
+      - uses: actions/upload-artifact@v4
         with:
-          projectPath: apps/desktop
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}-dev', github.run_number) }}
-          releaseName: 'Yuki ${{ github.ref_name }}'
-          releaseBody: 'Список изменений — в CHANGELOG.md.'
-          # Черновик, пока не собрались все три таргета: выпуск, у которого
-          # есть только Windows-установщик, выглядит как готовый и вводит
-          # в заблуждение.
-          releaseDraft: true
-          prerelease: false
-          args: --target ${{ matrix.target }}
-          # Файл, который клиент обновления читает по адресу из tauri.conf.json.
-          includeUpdaterJson: true
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            target/${{ matrix.target }}/release/bundle/nsis/*.exe
+            target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+

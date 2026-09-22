@@ -6,14 +6,14 @@
 pub mod ai;
 pub mod automation;
 pub mod avatar;
-pub mod profile;
-pub mod telegram;
+pub mod avatar_assets;
 pub mod backup;
 pub mod calendar;
 pub mod capabilities;
-pub mod diagnostics;
 pub mod catalog;
 pub mod commands;
+pub mod companion;
+pub mod diagnostics;
 pub mod everyday;
 pub mod hotkeys;
 pub mod memory;
@@ -23,12 +23,16 @@ pub mod permissions;
 pub mod persona;
 pub mod plugins;
 pub mod privacy;
+pub mod profile;
 pub mod reminders;
 pub mod requirements;
 pub mod secrets;
+pub mod speech_local;
 pub mod state;
 pub mod storage;
 pub mod system;
+pub mod telegram;
+pub mod telemetry;
 pub mod tray;
 pub mod updater;
 pub mod voice;
@@ -82,6 +86,7 @@ pub fn run() {
     let logs = init_logging();
 
     tauri::Builder::default()
+        .manage(companion::MotionClock::default())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Автозапуск без аргументов: при старте вместе с системой окно
@@ -121,9 +126,16 @@ pub fn run() {
             // Канал управления с телефона поднимается сам, если был включён
             // (ТЗ §28). Local Only и отсутствие токена он проверяет внутри.
             telegram::restore(app.handle().clone());
+            // Локальный движок распознавания поднимается заранее: он грузит
+            // модель несколько секунд, и делать это в момент, когда человек уже
+            // позвал Yuki, значит опоздать с ответом.
+            speech_local::restore(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            telemetry::system_metrics,
+            reminders::reminder_notices,
+            reminders::reminder_notice_read,
             // приложения и окна (ТЗ §6, §30)
             commands::open_app,
             commands::close_app,
@@ -182,6 +194,7 @@ pub fn run() {
             ai::provider_set_default,
             ai::provider_test,
             ai::chat_send,
+            ai::chat_cancel,
             // приватность (ТЗ §29)
             privacy::privacy_status,
             privacy::privacy_set_local_only,
@@ -208,9 +221,15 @@ pub fn run() {
             voice::voice_stop,
             voice::voice_finish_utterance,
             voice::voice_speak,
+            voice::voice_playback,
             voice::voice_stop_speaking,
             voice::voice_set_voice,
             voice::voice_configure_stt,
+            // локальное распознавание без ключей (ТЗ §10, §29)
+            speech_local::local_speech_status,
+            speech_local::local_speech_install,
+            speech_local::local_speech_start,
+            speech_local::local_speech_stop,
             // слово пробуждения (ТЗ §37)
             voice::wake_status,
             voice::wake_enroll_record,
@@ -264,6 +283,13 @@ pub fn run() {
             requirements::system_requirements,
             // аватар (ТЗ §12)
             avatar::avatar_status,
+            companion::companion_import,
+            companion::companion_attach,
+            companion::companion_motion_tick,
+            companion::companion_context,
+            companion::companion_pointer,
+            companion::media_now_playing,
+            companion::media_control,
             avatar::avatar_open,
             avatar::avatar_close,
             avatar::avatar_set_click_through,
@@ -293,6 +319,7 @@ pub fn run() {
             avatar::avatar_set_anchor,
             avatar::avatar_set_model,
             avatar::avatar_model_bytes,
+            avatar::avatar_expression_names,
             avatar::avatar_remember_placement,
             // календари (ТЗ §25)
             calendar::calendar_accounts,
@@ -334,6 +361,9 @@ pub fn run() {
                 && window.label() != avatar::WINDOW_LABEL
             {
                 voice::shutdown(window.app_handle());
+                // Дочерний процесс не переживает Yuki: иначе после выхода на
+                // машине остаётся сервер, слушающий порт.
+                speech_local::stop(window.app_handle());
             }
         })
         .run(tauri::generate_context!())

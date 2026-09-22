@@ -220,10 +220,12 @@ impl CalendarClient {
     /// Удаляет событие по идентификатору.
     pub async fn delete(&self, id: &str) -> CalendarResult<()> {
         let url = match self.provider {
-            CalendarProvider::Google => format!(
-                "https://www.googleapis.com/calendar/v3/calendars/primary/events/{id}"
-            ),
-            CalendarProvider::Microsoft => format!("https://graph.microsoft.com/v1.0/me/events/{id}"),
+            CalendarProvider::Google => {
+                format!("https://www.googleapis.com/calendar/v3/calendars/primary/events/{id}")
+            }
+            CalendarProvider::Microsoft => {
+                format!("https://graph.microsoft.com/v1.0/me/events/{id}")
+            }
         };
 
         let response = self

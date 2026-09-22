@@ -173,8 +173,7 @@ impl StdioTransport {
     }
 
     fn write_line(stdin: &mut ChildStdin, value: &Value) -> McpResult<()> {
-        let mut line = serde_json::to_string(value)
-            .map_err(|e| McpError::Decode(e.to_string()))?;
+        let mut line = serde_json::to_string(value).map_err(|e| McpError::Decode(e.to_string()))?;
         line.push('\n');
         stdin
             .write_all(line.as_bytes())

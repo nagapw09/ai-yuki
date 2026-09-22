@@ -14,21 +14,24 @@ import {
   onboardingCompleted,
   personaName,
   providerList,
+  settingGet,
   systemInfo,
 } from './bridge'
 import { ConfirmDialog } from './design-system/components/ConfirmDialog'
+import { ReminderNotice } from './design-system/components/ReminderNotice'
 import { Tabs } from './design-system/components/Tabs'
 import { TitleBar } from './design-system/components/TitleBar'
 import { useT } from './i18n'
 import { Activity } from './screens/Activity'
 import { Capabilities } from './screens/Capabilities'
 import { Chat } from './screens/Chat'
+import { Companion } from './screens/Companion'
 import { Commands } from './screens/Commands'
 import { Memory } from './screens/Memory'
 import { Onboarding } from './screens/Onboarding'
 import { Notes } from './screens/Notes'
 import { Orbital } from './screens/Orbital'
-import { Settings } from './screens/Settings'
+import { Settings, Remote } from './screens/Settings'
 import { useUiStore } from './state/store'
 import './App.css'
 
@@ -39,7 +42,7 @@ export function App() {
   const setOrbState = useUiStore((s) => s.setOrbState)
   const setHeadline = useUiStore((s) => s.setHeadline)
 
-  useProviderStatus()
+  useProviderStatus(onboarded?.done ?? false)
   useAssistantName()
 
   useEffect(() => {
@@ -47,6 +50,31 @@ export function App() {
     // приложению работать: без триггеров команды остаются доступны вручную.
     if (isTauri()) void initTriggers().catch(() => undefined)
   }, [])
+
+  // Постоянное прослушивание имени (ТЗ §37).
+  //
+  // Только если человек включил его явно: микрофон, который открывается сам по
+  // себе при запуске, — это не удобство, а сюрприз. Онбординг ждать не нужно,
+  // но до его завершения настройки ещё нет, и условие просто не выполнится.
+  useEffect(() => {
+    if (!isTauri()) return
+    let cancelled = false
+
+    void settingGet('voice.wake.always')
+      .then((value) => {
+        if (cancelled || value !== 'on' || isVoiceActive()) return
+        return startVoice('wake_word')
+      })
+      .catch((error: unknown) => {
+        // Не настроено распознавание или занят микрофон: молчать нельзя —
+        // человек ждёт, что его услышат, — но и мешать запуску незачем.
+        setHeadline(typeof error === 'string' ? error : 'Не удалось начать слушать')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [setHeadline])
 
   // Аватар живёт в соседнем окне и состояние знает только отсюда (ТЗ §12).
   useEffect(() => startAvatarBroadcast(), [])
@@ -116,12 +144,14 @@ export function App() {
               <Orbital onSubmit={handleSubmit} onToggleVoice={handleToggleVoice} />
             )}
             {screen === 'chat' && <Chat />}
+            {screen === 'companion' && <Companion />}
             {screen === 'activity' && <Activity />}
             {screen === 'memory' && <Memory />}
             {screen === 'notes' && <Notes />}
             {screen === 'capabilities' && <Capabilities />}
             {screen === 'settings' && <Settings />}
             {screen === 'commands' && <Commands />}
+            {screen === 'telegram' && <div className="settings"><div className="settings__inner"><header><h1>Telegram</h1><p>Управление Yuki с телефона и состояние подключения.</p></header><Remote /><section className="settings__section"><h2>Telegram на компьютере</h2><p>Работа с вашим аккаунтом выполняется через установленный Telegram Desktop. Разрешите чтение интерфейса, управление вводом и доступ к файлам в настройках.</p><button className="settings__button" onClick={()=>handleSubmit('Найди открытое окно Telegram Desktop и прочитай его интерфейс. Ничего не отправляй.')}>Проверить доступ к Telegram Desktop</button></section></div></div>}
           </div>
         </>
       ) : (
@@ -131,6 +161,7 @@ export function App() {
       )}
 
       <ConfirmDialog />
+      <ReminderNotice />
     </div>
   )
 }
@@ -184,6 +215,7 @@ function useAssistantName() {
     if (!isTauri()) return
 
     let cancelled = false
+    const changed = listen('yuki://character-changed', () => { void personaName().then(name => { if (!cancelled) setAssistantName(name) }) })
     personaName()
       .then((name) => {
         if (!cancelled) setAssistantName(name)
@@ -192,6 +224,7 @@ function useAssistantName() {
 
     return () => {
       cancelled = true
+      void changed.then(off => off())
     }
   }, [setAssistantName, screen])
 }
@@ -202,7 +235,7 @@ function useAssistantName() {
  * До настройки Yuki не может выполнить ни одной задачи, поэтому «не настроен
  * провайдер» — это не украшение, а единственная честная подпись.
  */
-function useProviderStatus() {
+function useProviderStatus(onboarded: boolean) {
   const setConnection = useUiStore((s) => s.setConnection)
   const screen = useUiStore((s) => s.screen)
 
@@ -235,5 +268,5 @@ function useProviderStatus() {
     }
     // Перечитываем при возврате с настроек: пользователь мог только что
     // ввести ключ, и статус должен это отразить без перезапуска.
-  }, [setConnection, screen])
+  }, [setConnection, screen, onboarded])
 }

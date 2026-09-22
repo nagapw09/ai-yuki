@@ -41,6 +41,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 opener = "0.7"
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 reqwest = { version = "0.12", default-features = false }
+zip = { version = "4.6", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+sysinfo = "0.33"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 
 yuki-ai = { workspace = true }
 yuki-calendar = { workspace = true }
@@ -59,6 +63,7 @@ tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(windows)'.dependencies]
 yuki-windows = { workspace = true }
+windows = { version = "0.58", features = ["Foundation", "Foundation_Collections", "Media_Control", "Devices_Geolocation", "System_UserProfile", "Win32_System_Performance", "Win32_Graphics_Dxgi", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 yuki-macos = { workspace = true }

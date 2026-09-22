@@ -106,9 +106,11 @@ fn saved_summon(state: &AppState) -> Option<String> {
     state
         .storage
         .with_conn(|conn| {
-            conn.query_row("SELECT value FROM settings WHERE key = ?1", [SETTING_KEY], |r| {
-                r.get::<_, String>(0)
-            })
+            conn.query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                [SETTING_KEY],
+                |r| r.get::<_, String>(0),
+            )
             .map(Some)
             .or_else(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => Ok(None),
@@ -188,7 +190,10 @@ mod tests {
     fn default_shortcut_parses_on_this_platform() {
         // Сочетание по умолчанию обязано быть разбираемым: иначе ассистента
         // нельзя вызвать вообще, и узнаётся это только в рантайме.
-        assert!(parse(DEFAULT_SUMMON).is_ok(), "{DEFAULT_SUMMON} не разбирается");
+        assert!(
+            parse(DEFAULT_SUMMON).is_ok(),
+            "{DEFAULT_SUMMON} не разбирается"
+        );
     }
 
     #[test]

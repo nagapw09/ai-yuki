@@ -1,0 +1,5 @@
+.reminder-notice { position: fixed; right: 24px; top: 68px; width: min(390px,calc(100vw - 48px)); z-index: 120; background: var(--surface, #26252e); border: 1px solid #a99cd0; border-radius: 16px; padding: 20px; box-shadow: 0 16px 50px #0005; color: var(--text-primary,#eee); }
+.reminder-notice__head { display:flex; justify-content:space-between; gap:12px; }
+.reminder-notice time { color:var(--text-secondary,#aaa); }
+.reminder-notice p { margin:14px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.reminder-notice button { border:1px solid #a99cd066; border-radius:8px; padding:8px 20px; background:#a99cd022; color:inherit; cursor:pointer; }

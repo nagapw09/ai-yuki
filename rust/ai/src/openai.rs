@@ -30,7 +30,12 @@ impl OpenAiProvider {
     /// Локальные серверы (Ollama, LM Studio) ключа не требуют, и слать пустой
     /// заголовок им нельзя — часть из них на этом падает.
     fn authorize(&self, builder: reqwest::RequestBuilder) -> AiResult<reqwest::RequestBuilder> {
-        match self.config.api_key.as_deref().filter(|k| !k.trim().is_empty()) {
+        match self
+            .config
+            .api_key
+            .as_deref()
+            .filter(|k| !k.trim().is_empty())
+        {
             Some(key) => Ok(builder.bearer_auth(key)),
             None if self.config.requires_key => Err(AiError::MissingApiKey),
             None => Ok(builder),
@@ -191,13 +196,16 @@ impl Provider for OpenAiProvider {
                 return Ok(Flow::Stop);
             }
 
-            let event: Value = serde_json::from_str(data)
-                .map_err(|e| AiError::Decode(format!("{e}: {data}")))?;
+            let event: Value =
+                serde_json::from_str(data).map_err(|e| AiError::Decode(format!("{e}: {data}")))?;
 
             if let Some(err) = event.get("error") {
                 return Err(AiError::Api {
                     status: 0,
-                    message: err["message"].as_str().unwrap_or("ошибка провайдера").to_string(),
+                    message: err["message"]
+                        .as_str()
+                        .unwrap_or("ошибка провайдера")
+                        .to_string(),
                 });
             }
 
@@ -377,7 +385,9 @@ mod tests {
         let wire = message_to_wire(&message);
         assert_eq!(wire.len(), 1);
 
-        let parts = wire[0]["content"].as_array().expect("должен быть массив частей");
+        let parts = wire[0]["content"]
+            .as_array()
+            .expect("должен быть массив частей");
         assert_eq!(parts[0]["type"], "text");
         assert_eq!(parts[1]["type"], "image_url");
         assert_eq!(parts[1]["image_url"]["url"], "data:image/png;base64,QUJD");

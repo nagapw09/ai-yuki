@@ -323,19 +323,25 @@ pub async fn integration_install(
     id: String,
     secret: Option<String>,
 ) -> Result<CapabilityRecord, String> {
-    let integration = catalog::find(&id)
-        .ok_or_else(|| format!("в каталоге нет интеграции «{id}»"))?;
+    let integration =
+        catalog::find(&id).ok_or_else(|| format!("в каталоге нет интеграции «{id}»"))?;
 
     if integration.secret_env.is_some() && secret.as_deref().unwrap_or("").trim().is_empty() {
         return Err(format!(
             "для этой интеграции нужен ключ: {}",
-            integration.secret_hint.unwrap_or("см. документацию сервиса")
+            integration
+                .secret_hint
+                .unwrap_or("см. документацию сервиса")
         ));
     }
 
     // Разрешения интеграции запоминаем до установки: манифест, который
     // соберётся после подключения, знает про инструменты, но не про категории.
-    let permissions: Vec<String> = integration.permissions.iter().map(|p| p.to_string()).collect();
+    let permissions: Vec<String> = integration
+        .permissions
+        .iter()
+        .map(|p| p.to_string())
+        .collect();
 
     let input = McpServerInput {
         id: integration.id.to_string(),
@@ -418,14 +424,30 @@ pub async fn mcp_call(
 
 /// Подключается к серверу и записывает результат в здоровье возможности.
 pub(crate) async fn connect_server(state: &AppState, id: &str) -> Result<(), String> {
-    let row: (String, Option<String>, String, Option<String>, String, Option<String>) = state
+    let row: (
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+    ) = state
         .storage
         .with_conn(|conn| {
             conn.query_row(
                 "SELECT transport, command, args, url, env, secret_ref
                  FROM mcp_servers WHERE id = ?1",
                 [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                    ))
+                },
             )
         })
         .map_err(|_| format!("сервер «{id}» не найден"))?;
@@ -474,16 +496,9 @@ pub(crate) async fn connect_server(state: &AppState, id: &str) -> Result<(), Str
         .and_then(|r| crate::secrets::get(r).ok().flatten())
         .map(|s| format!("Bearer {s}"));
 
-    let descriptor = Transport::from_parts(
-        &transport,
-        command,
-        args,
-        env,
-        url,
-        authorization,
-    )
-    .map_err(err)?
-    .with_cwd(cwd);
+    let descriptor = Transport::from_parts(&transport, command, args, env, url, authorization)
+        .map_err(err)?
+        .with_cwd(cwd);
 
     let outcome = McpClient::connect(descriptor, state.http.clone()).await;
 
@@ -553,37 +568,58 @@ pub(crate) fn single_capability(state: &AppState, id: &str) -> Result<Capability
 fn capability_list_inner(state: &AppState) -> Result<Vec<CapabilityRecord>, String> {
     // Отдельная функция, чтобы её могли звать и команда, и внутренний код:
     // `State` внутрь не пробросить.
-    let rows: Vec<(String, String, String, String, String, bool, String, Option<String>, String, i64)> =
-        state
-            .storage
-            .with_conn(|conn| {
-                let mut stmt = conn.prepare(
-                    "SELECT id, name, description, version, source, enabled, health,
+    let rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        String,
+        bool,
+        String,
+        Option<String>,
+        String,
+        i64,
+    )> = state
+        .storage
+        .with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, name, description, version, source, enabled, health,
                             health_note, manifest, installed_at
                      FROM capabilities ORDER BY source, name",
-                )?;
-                let rows = stmt.query_map([], |r| {
-                    Ok((
-                        r.get(0)?,
-                        r.get(1)?,
-                        r.get(2)?,
-                        r.get(3)?,
-                        r.get(4)?,
-                        r.get::<_, i64>(5)? != 0,
-                        r.get(6)?,
-                        r.get(7)?,
-                        r.get(8)?,
-                        r.get(9)?,
-                    ))
-                })?;
-                rows.collect()
-            })
-            .map_err(err)?;
+            )?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get::<_, i64>(5)? != 0,
+                    r.get(6)?,
+                    r.get(7)?,
+                    r.get(8)?,
+                    r.get(9)?,
+                ))
+            })?;
+            rows.collect()
+        })
+        .map_err(err)?;
 
     Ok(rows
         .into_iter()
         .map(
-            |(id, name, description, version, source, enabled, health, health_note, manifest, installed_at)| {
+            |(
+                id,
+                name,
+                description,
+                version,
+                source,
+                enabled,
+                health,
+                health_note,
+                manifest,
+                installed_at,
+            )| {
                 let manifest: serde_json::Value =
                     serde_json::from_str(&manifest).unwrap_or_else(|_| json!({}));
                 CapabilityRecord {
@@ -617,8 +653,7 @@ pub fn connect_enabled(app: tauri::AppHandle) {
         let ids: Vec<String> = state
             .storage
             .with_conn(|conn| {
-                let mut stmt =
-                    conn.prepare("SELECT id FROM mcp_servers WHERE enabled = 1")?;
+                let mut stmt = conn.prepare("SELECT id FROM mcp_servers WHERE enabled = 1")?;
                 let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
                 rows.collect()
             })

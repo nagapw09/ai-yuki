@@ -181,8 +181,8 @@ impl Provider for AnthropicProvider {
         let mut model = request.model.clone();
 
         read_events(response, |data| {
-            let event: Value = serde_json::from_str(data)
-                .map_err(|e| AiError::Decode(format!("{e}: {data}")))?;
+            let event: Value =
+                serde_json::from_str(data).map_err(|e| AiError::Decode(format!("{e}: {data}")))?;
 
             match event.get("type").and_then(Value::as_str) {
                 Some("message_start") => {
@@ -190,16 +190,17 @@ impl Provider for AnthropicProvider {
                     if let Some(m) = message.get("model").and_then(Value::as_str) {
                         model = m.to_string();
                     }
-                    usage.input_tokens = message["usage"]["input_tokens"].as_u64().unwrap_or(0) as u32;
+                    usage.input_tokens =
+                        message["usage"]["input_tokens"].as_u64().unwrap_or(0) as u32;
                 }
 
                 Some("content_block_start") => {
                     let index = event["index"].as_u64().unwrap_or(0) as usize;
                     let block = &event["content_block"];
                     let building = match block.get("type").and_then(Value::as_str) {
-                        Some("text") => Building::Text(
-                            block["text"].as_str().unwrap_or_default().to_string(),
-                        ),
+                        Some("text") => {
+                            Building::Text(block["text"].as_str().unwrap_or_default().to_string())
+                        }
                         Some("tool_use") => {
                             let name = block["name"].as_str().unwrap_or_default().to_string();
                             // ТЗ §15: пользователю показываем безопасный статус,
@@ -255,8 +256,7 @@ impl Provider for AnthropicProvider {
                 }
 
                 Some("message_delta") => {
-                    stop_reason =
-                        stop_reason_from_wire(event["delta"]["stop_reason"].as_str());
+                    stop_reason = stop_reason_from_wire(event["delta"]["stop_reason"].as_str());
                     if let Some(out) = event["usage"]["output_tokens"].as_u64() {
                         usage.output_tokens = out as u32;
                     }

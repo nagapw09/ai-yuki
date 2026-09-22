@@ -24,7 +24,7 @@
 //! распознавания и ключи тоже остаются на месте.
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::state::AppState;
 
@@ -43,8 +43,15 @@ pub const KEY_NAME: &str = "persona.name";
 /// Список явный, а не «всё, что начинается с persona и avatar»: под тот же
 /// префикс попадают положение окна и признак «окно открыто», и перенос облика
 /// таскал бы их за собой.
+/// Что входит в снимок облика.
+///
+/// Имени ассистента здесь намеренно нет, и записанного слова пробуждения тоже.
+/// Профиль — это внешность, голос и характер персонажа; имя принадлежит самой
+/// Yuki и меняется только руками. Пока имя лежало в снимке, смена модели
+/// переименовывала ассистента в название файла модели, хотя человек об этом не
+/// просил. Слово пробуждения ушло следом: оно привязано к имени, а не к облику,
+/// и после смены модели Yuki должна отзываться так же.
 const PROFILE_KEYS: &[&str] = &[
-    KEY_NAME,
     "persona.role",
     "persona.custom",
     "persona.formality",
@@ -58,10 +65,16 @@ const PROFILE_KEYS: &[&str] = &[
     "avatar.model",
     "avatar.animations",
     "avatar.pose",
-    // Слово пробуждения — обученная на голосе человека модель, и она привязана
-    // к имени: переименовав Yuki в Джарвиса, откликаться на «Юки» она не должна.
-    "voice.wake.model",
     "voice.language",
+    "voice.tts.voice",
+    "voice.tts.engine",
+    "voice.tts.url",
+    "voice.tts.samples",
+    "voice.tts.sample",
+    "voice.tts.prompt",
+    "avatar.behavior",
+    "avatar.music",
+    "avatar.motionmap",
 ];
 
 /// Профиль в списке.
@@ -199,11 +212,9 @@ pub fn profile_save(state: State<'_, AppState>, name: String) -> Result<Vec<Prof
     let existing: Option<String> = state
         .storage
         .with_conn(|conn| {
-            conn.query_row(
-                "SELECT id FROM profiles WHERE name = ?1",
-                [trimmed],
-                |r| r.get(0),
-            )
+            conn.query_row("SELECT id FROM profiles WHERE name = ?1", [trimmed], |r| {
+                r.get(0)
+            })
             .map(Some)
             .or_else(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => Ok(None),
@@ -238,11 +249,17 @@ pub fn profile_save(state: State<'_, AppState>, name: String) -> Result<Vec<Prof
 /// сделанных до появления новой настройки облика: сбрасывать её в пустоту
 /// значило бы терять то, чего профиль никогда не обещал менять.
 #[tauri::command]
-pub fn profile_apply(state: State<'_, AppState>, id: String) -> Result<Vec<Profile>, String> {
+pub fn profile_apply(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<Profile>, String> {
     let data: String = state
         .storage
         .with_conn(|conn| {
-            conn.query_row("SELECT data FROM profiles WHERE id = ?1", [&id], |r| r.get(0))
+            conn.query_row("SELECT data FROM profiles WHERE id = ?1", [&id], |r| {
+                r.get(0)
+            })
         })
         .map_err(|_| format!("профиля {id} нет"))?;
 
@@ -258,6 +275,9 @@ pub fn profile_apply(state: State<'_, AppState>, id: String) -> Result<Vec<Profi
     }
 
     set_setting(&state, KEY_CURRENT, &id)?;
+    state.voice.reset_tts();
+    let _ = app.emit("yuki://avatar-reload", ());
+    let _ = app.emit("yuki://character-changed", ());
     profile_list(state)
 }
 
@@ -301,11 +321,15 @@ mod tests {
     /// Человек, меняющий персонажа, не ждёт, что окно уедет в другой угол.
     #[test]
     fn the_profile_carries_the_character_and_not_the_window() {
-        for key in ["persona.role", "avatar.model", "avatar.animations", "persona.name"] {
+        for key in ["persona.role", "avatar.model", "avatar.animations"] {
             assert!(PROFILE_KEYS.contains(&key), "в облике нет {key}");
         }
 
         for key in [
+            // Имя ассистента и записанное слово пробуждения к облику
+            // не относятся: смена модели их не трогает.
+            "persona.name",
+            "voice.wake.model",
             "avatar.placement",
             "avatar.enabled",
             "avatar.click_through",
@@ -315,18 +339,24 @@ mod tests {
             "voice.stt.provider",
             "voice.stt.model",
         ] {
-            assert!(!PROFILE_KEYS.contains(&key), "{key} не должен быть в облике");
+            assert!(
+                !PROFILE_KEYS.contains(&key),
+                "{key} не должен быть в облике"
+            );
         }
     }
 
-    /// Слово пробуждения переносится вместе с именем.
+    /// Имя и слово пробуждения не принадлежат облику.
     ///
-    /// Иначе переименованный в Джарвиса ассистент продолжал бы откликаться на
-    /// «Юки» — то есть имя было бы надписью, а не именем.
+    /// Смена модели меняет внешность, а не то, как зовут ассистента: раньше
+    /// применение профиля переименовывало Yuki в название файла модели.
     #[test]
-    fn renaming_carries_the_wake_word() {
-        assert!(PROFILE_KEYS.contains(&"voice.wake.model"));
-        assert!(PROFILE_KEYS.contains(&KEY_NAME));
+    fn appearance_does_not_rename_the_assistant() {
+        assert!(!PROFILE_KEYS.contains(&KEY_NAME));
+        assert!(!PROFILE_KEYS.contains(&"voice.wake.model"));
+        // Облик — это модель, движения и голос, и они в снимке остаются.
+        assert!(PROFILE_KEYS.contains(&"avatar.model"));
+        assert!(PROFILE_KEYS.contains(&"voice.tts.voice"));
     }
 
     /// Ключи в списке не повторяются.

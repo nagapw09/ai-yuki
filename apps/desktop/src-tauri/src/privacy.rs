@@ -85,9 +85,11 @@ pub fn is_local_url(url: &str) -> bool {
 pub fn is_local_only(storage: &Storage) -> bool {
     storage
         .with_conn(|conn| {
-            conn.query_row("SELECT value FROM settings WHERE key = ?1", [SETTING_KEY], |r| {
-                r.get::<_, String>(0)
-            })
+            conn.query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                [SETTING_KEY],
+                |r| r.get::<_, String>(0),
+            )
             .map(Some)
             .or_else(|e| match e {
                 rusqlite::Error::QueryReturnedNoRows => Ok(None),
@@ -179,6 +181,9 @@ pub fn privacy_status(state: tauri::State<'_, AppState>) -> Result<PrivacyStatus
         })
         .map_err(|e| e.to_string())?;
 
+    let stt_url = setting(&state, "voice.stt.url")
+        .filter(|url| !url.trim().is_empty())
+        .or(stt_url);
     let provider_local = provider.as_ref().is_some_and(|(_, url)| is_local_url(url));
     let stt_local = stt_url.as_deref().is_some_and(is_local_url);
 

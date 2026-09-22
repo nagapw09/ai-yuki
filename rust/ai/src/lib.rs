@@ -12,6 +12,7 @@
 //! Агентный цикл при этом остаётся в TypeScript: он оркестрирует, а не ходит в сеть.
 
 pub mod anthropic;
+pub mod cli;
 pub mod embeddings;
 pub mod gemini;
 pub mod openai;
@@ -52,6 +53,9 @@ pub fn build(config: ProviderConfig, http: reqwest::Client) -> Box<dyn Provider>
     match config.kind {
         ProviderKind::Anthropic => Box::new(anthropic::AnthropicProvider::new(config, http)),
         ProviderKind::Gemini => Box::new(gemini::GeminiProvider::new(config, http)),
+        ProviderKind::ClaudeCli | ProviderKind::CodexCli => {
+            Box::new(cli::CliProvider::new(config.kind))
+        }
         ProviderKind::OpenAi | ProviderKind::OpenAiCompatible => {
             Box::new(openai::OpenAiProvider::new(config, http))
         }
