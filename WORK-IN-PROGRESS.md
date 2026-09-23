@@ -35,7 +35,7 @@
 ## 23 сентября
 
 - Голос Yuki: F5-TTS (русская модель Misha24-10 v2), образец — Мита из MiSide
-  (`Documents\Yukioices\mita.wav` + `mita.txt`). Выбран владельцем на слух
+  (`Documents\Yuki\voices\mita.wav` + `mita.txt`). Выбран владельцем на слух
   против XTTS и обученной RVC-модели. Сервис `tools/f5/server.py`, Yuki
   поднимает его сама (`tts_server.rs`). Окружения — `D:\yuki-voice\`.
 - Telegram: голосовые сообщения (OGG/Opus → opus-pure → whisper) выполняются
