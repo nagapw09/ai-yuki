@@ -16,6 +16,8 @@ describe('быстрые команды', () => {
     expect(recognize('Громкость на 40 процентов')).toEqual({ kind: 'volume', level: 0.4 })
     expect(recognize('Станцуй, пожалуйста')).toMatchObject({ kind: 'avatar', action: 'builtin:dance' })
     expect(recognize('Который час?')).toEqual({ kind: 'time' })
+    expect(recognize('Появись!')).toEqual({ kind: 'show', visible: true })
+    expect(recognize('спрячься')).toEqual({ kind: 'show', visible: false })
   })
 
   it('незнакомое оставляют модели', () => {

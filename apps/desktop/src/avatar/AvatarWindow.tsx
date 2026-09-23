@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   avatarAnimations, avatarRememberPlacement,
   avatarStatus, avatarClose, avatarPlay, avatarSetAnchor, settingGet, companionMotionTick, companionContext, companionPointer, voicePlayback, settingSet,
-  AVATAR_EVENT, AVATAR_PLAY_EVENT, AVATAR_POSE_EVENT, type AvatarSignal, type AvatarPose,
+  AVATAR_EVENT, AVATAR_PLAY_EVENT, AVATAR_POSE_EVENT, type AvatarSignal, type AvatarPose, companionAttach, companionSurfaces,
 } from '../bridge'
 import type { AvatarScene } from './scene'
 import { CompanionBehavior, type BehaviorMode, type CompanionContext } from './behavior'
@@ -50,6 +50,9 @@ export function AvatarWindow() {
   const restored=useRef(false)
   const savedAt=useRef(0)
   const available=(action:Action)=>action==='stand'||!!assignedMotion(action,clips,mapping)
+  /** Когда прыгала последний раз: прыжки каждые полминуты — это суета, а не жизнь. */
+  const hoppedAt=useRef(performance.now()/1000)
+  const hopping=useRef(false)
 
   useEffect(() => {
     const events = [
@@ -138,6 +141,7 @@ export function AvatarWindow() {
         idleSeconds: input.idleSeconds,
       })
       if (action) {sceneRef.current.play(action);motion.current=motionFor(sceneRef.current.activity())}
+      void maybeHop(input.mode)
     }, 1000)
     return () => {disposed=true;clearInterval(poll);clearInterval(tick)}
   }, [])
@@ -155,6 +159,45 @@ export function AvatarWindow() {
     }, 120)
     return () => { disposed = true; clearInterval(poll) }
   }, [])
+
+  /**
+   * Перепрыгнуть на другое окно или обратно на панель задач (Desktop Mate §14–16).
+   *
+   * Решает скука, а не таймер: заскучав, персонаж ищет, куда бы переместиться.
+   * Не прыгает, пока его держат, пока он свободно стоит там, куда его поставили,
+   * во время разговора и в тихом режиме.
+   */
+  const maybeHop = useCallback(async (mode: BehaviorMode) => {
+    const scene = sceneRef.current
+    const now = performance.now() / 1000
+    if (!scene || hopping.current || dragging.current || free.current || mode === 'quiet') return
+    if (latest.current.state !== 'idle' && !latest.current.passive) return
+    const pause = mode === 'playful' ? 90 : 180
+    if (now - hoppedAt.current < pause || brain.current.vitals.boredom < 0.3 || Math.random() > 0.25) return
+    hopping.current = true
+    hoppedAt.current = now
+    try {
+      const surfaces = (await companionSurfaces()).filter(s => s.id !== target.current)
+      // С окна — то на другое окно, то домой на панель задач.
+      const next = target.current !== null && (surfaces.length === 0 || Math.random() < 0.4)
+        ? null
+        : surfaces[Math.floor(Math.random() * surfaces.length)]?.id ?? null
+      if (next === null && target.current === null) return
+      if (clips.includes(JUMP_CLIP)) scene.play(`once:${JUMP_CLIP}`)
+      target.current = next
+      await companionAttach(next)
+      // Приземлилась: на окне садится, на панели задач стоит.
+      setTimeout(() => {
+        const landing = next !== null && available('sit') ? 'builtin:sit' : 'builtin:stand'
+        brain.current.manual(landing, performance.now() / 1000)
+        sceneRef.current?.play(landing)
+      }, 900)
+    } catch {
+      /* окна могли закрыться — прыгнем в следующий раз */
+    } finally {
+      hopping.current = false
+    }
+  }, [clips, mapping])
 
   /**
    * Отклик на касание.
@@ -261,6 +304,9 @@ export function AvatarWindow() {
     {(problem || loading) && <div className="avatar__fallback"><div className="avatar__orb" /><p className="avatar__note">{problem || 'Знакомлюсь с персонажем…'}</p></div>}
   </div>
 }
+
+/** Авторский клип прыжка из библиотеки: скелет прыгает им, окно летит по дуге. */
+const JUMP_CLIP = 'Arisa__NewJump'
 
 function motionFor(action: string) {
   if (!action || action === 'builtin:stand' || action === 'builtin:wave' || action.startsWith('emotion:')) return 'stand'

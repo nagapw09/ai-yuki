@@ -219,11 +219,38 @@ fn import_files(app: &tauri::AppHandle, paths: Vec<String>) -> Result<ImportRepo
     Ok(report)
 }
 
-pub struct MotionClock(Mutex<(Instant, i32)>);
+pub struct MotionClock(Mutex<(Instant, i32)>, Mutex<Option<Jump>>);
 impl Default for MotionClock {
     fn default() -> Self {
-        Self(Mutex::new((Instant::now(), 1)))
+        Self(Mutex::new((Instant::now(), 1)), Mutex::new(None))
     }
+}
+
+/// Перелёт на другую поверхность (разбор Desktop Mate §16).
+///
+/// Скелет прыгает клипом, а само окно летит по дуге: `P(t) = lerp(start, end, t)
+/// + 4·H·t·(1−t)`. Раньше смена места была телепортом — персонаж пропадал с
+/// панели задач и возникал на окне.
+#[derive(Clone, Copy)]
+struct Jump {
+    from: (i32, i32),
+    to: (i32, i32),
+    progress: f64,
+}
+
+/// Смещение, с которого смена места — прыжок, а не следование за окном.
+/// Окно, которое тянут мышью, сдвигается по чуть-чуть, и его надо просто
+/// догонять; прыжок нужен, когда поверхность сменилась целиком.
+const JUMP_DISTANCE: i32 = 150;
+/// Длительность прыжка и высота дуги.
+const JUMP_SECONDS: f64 = 0.7;
+const JUMP_HEIGHT: f64 = 140.0;
+
+fn jump_point(jump: &Jump) -> (i32, i32) {
+    let t = jump.progress.clamp(0.0, 1.0);
+    let x = jump.from.0 as f64 + (jump.to.0 - jump.from.0) as f64 * t;
+    let y = jump.from.1 as f64 + (jump.to.1 - jump.from.1) as f64 * t - 4.0 * JUMP_HEIGHT * t * (1.0 - t);
+    (x.round() as i32, y.round() as i32)
 }
 
 #[tauri::command]
@@ -293,9 +320,27 @@ pub fn companion_motion_tick(
             1.0
         };
         let y = (surface - (size.height as f64 * ratio).round() as i32).max(area.position.y);
-        if pos.x != x || pos.y != y {
+        let mut jump = clock.1.lock().map_err(|e| e.to_string())?;
+        let far = (pos.x - x).abs().max((pos.y - y).abs()) > JUMP_DISTANCE;
+        if jump.is_none() && far && !walking {
+            *jump = Some(Jump { from: (pos.x, pos.y), to: (x, y), progress: 0.0 });
+        }
+        let (nx, ny) = match jump.as_mut() {
+            Some(flight) => {
+                // Цель могла сдвинуться за время полёта — летим туда, где она сейчас.
+                flight.to = (x, y);
+                flight.progress += delta / JUMP_SECONDS;
+                let point = jump_point(flight);
+                if flight.progress >= 1.0 {
+                    *jump = None;
+                }
+                point
+            }
+            None => (x, y),
+        };
+        if pos.x != nx || pos.y != ny {
             window
-                .set_position(tauri::PhysicalPosition::new(x, y))
+                .set_position(tauri::PhysicalPosition::new(nx, ny))
                 .map_err(|e| e.to_string())?;
         }
     }
@@ -390,6 +435,39 @@ fn read_context() -> CompanionContext {
     CompanionContext::default()
 }
 
+/// Окно, на верхнем крае которого можно сидеть.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Surface {
+    id: u64,
+    title: String,
+}
+
+/// Куда можно перепрыгнуть: видимые окна с достаточно широким верхним краем.
+///
+/// Отсеиваются свёрнутые, крошечные, развёрнутые во весь экран (над ними нет
+/// места — персонаж улетел бы за верх экрана) и окна самой Yuki.
+#[tauri::command]
+pub fn companion_surfaces(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<Vec<Surface>, String> {
+    let window = app.get_webview_window(WINDOW_LABEL).ok_or("Окно аватара закрыто")?;
+    let height = window.outer_size().map_err(|e| e.to_string())?.height as i32;
+    let own = std::process::id();
+    let list = state.adapters.system.list_windows().map_err(|e| e.to_string())?;
+    Ok(list
+        .into_iter()
+        .filter(|w| {
+            !w.is_minimized
+                && w.pid != own
+                && !w.title.trim().is_empty()
+                && w.bounds.width >= 320
+                && w.bounds.height >= 200
+                // Над окном должно хватать места для персонажа во весь рост.
+                && w.bounds.y > height / 2
+        })
+        .map(|w| Surface { id: w.id, title: w.title })
+        .collect())
+}
+
 #[tauri::command]
 pub fn companion_attach(
     app: tauri::AppHandle,
@@ -417,6 +495,16 @@ pub fn companion_attach(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_jump_arcs_over_and_lands_on_the_target() {
+        let flight = super::Jump { from: (0, 1000), to: (400, 600), progress: 0.0 };
+        assert_eq!(super::jump_point(&flight), (0, 1000));
+        let top = super::jump_point(&super::Jump { progress: 0.5, ..flight });
+        // На середине пути выше прямой между точками на высоту дуги.
+        assert_eq!(top, (200, 800 - super::JUMP_HEIGHT as i32));
+        assert_eq!(super::jump_point(&super::Jump { progress: 1.0, ..flight }), (400, 600));
+    }
+
     #[test]
     fn archive_names_cannot_escape_library() {
         assert_eq!(asset_name("../../evil:path\\file"), "evilpathfile");

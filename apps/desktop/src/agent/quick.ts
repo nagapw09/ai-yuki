@@ -12,7 +12,7 @@
 
 import { evaluate, type Message } from '@yuki/core'
 
-import { avatarPlay, activityRecord, mediaControl, voiceStopSpeaking } from '../bridge'
+import { activityRecord, avatarClose, avatarOpen, avatarPlay, avatarSetPose, mediaControl, voiceStopSpeaking } from '../bridge'
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { gateSettings } from './commands'
@@ -68,6 +68,7 @@ export type Intent =
   | { kind: 'volume'; level: number }
   | { kind: 'avatar'; action: string; reply: string }
   | { kind: 'time' }
+  | { kind: 'show'; visible: boolean }
 
 const AVATAR: [RegExp, string, string][] = [
   [/^(станцуй|потанцуй|танцуй|давай потанцуем)/, 'builtin:dance', 'С удовольствием!'],
@@ -103,6 +104,10 @@ export function recognize(raw: string): Intent | null {
   if (volume) return { kind: 'volume', level: Math.min(100, Number(volume[1])) / 100 }
 
   if (/^(который час|сколько времени|сколько сейчас времени)$/.test(text)) return { kind: 'time' }
+
+  // Персонаж на рабочем столе: позвать и отпустить.
+  if (/^(появись|покажись|выходи|вылезай|иди сюда|приходи)$/.test(text)) return { kind: 'show', visible: true }
+  if (/^(спрячься|исчезни|скройся|уйди с экрана|иди отдыхай)$/.test(text)) return { kind: 'show', visible: false }
 
   for (const [pattern, action, reply] of AVATAR) {
     if (pattern.test(text)) return { kind: 'avatar', action, reply }
@@ -193,6 +198,21 @@ export async function tryQuick(said: string): Promise<string | null> {
       record(said, reply)
       return reply
     }
+    case 'show':
+      try {
+        if (intent.visible) {
+          await avatarSetPose('full')
+          await avatarOpen()
+          // Появилась — помахала: так понятно, что это ответ на просьбу.
+          await avatarPlay('builtin:wave').catch(() => undefined)
+        } else {
+          await avatarClose()
+        }
+      } catch {
+        return null
+      }
+      record(said, intent.visible ? 'Я тут!' : 'Пока-пока!', intent.visible ? 'Вышла на рабочий стол.' : 'Ушла с рабочего стола.')
+      return intent.visible ? 'Я тут!' : 'Пока-пока!'
     case 'avatar':
       await avatarPlay(intent.action).catch(() => undefined)
       record(said, intent.reply)

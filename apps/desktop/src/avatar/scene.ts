@@ -650,15 +650,21 @@ export async function createScene(
    */
   let requested = ''
 
+  /** Длительность следующего перехода: у пола смена позы медленнее. */
+  let nextFade = CROSSFADE
+
   function apply(name: string) {
     const next = name ? actions.get(name) ?? null : null
 
     if (next === playing) return
 
-    // Stop stale actions: an old mixer track must not overwrite procedural arms.
-    if (playing) {
-      if (!next) {transitionFrom=capturePose(vrm);transitionAt=clock.elapsedTime}
-      playing.stop()
+    // Прежний клип не обрывается, а перетекает в новый. Раньше он
+    // останавливался сразу, и новый проявлялся из позы покоя: между двумя
+    // позами персонаж на миг вставал столбом.
+    const previous = playing
+    if (previous && !next) {
+      transitionFrom=capturePose(vrm);transitionAt=clock.elapsedTime
+      previous.stop()
     }
 
     if (next) {
@@ -673,10 +679,20 @@ export async function createScene(
       // с началом следующего повтора, и рывка на стыке нет.
       next.setLoop(playback==='loop' ? THREE.LoopRepeat : THREE.LoopOnce, playback==='loop' ? Infinity : 1)
       next.clampWhenFinished = true
-      next.fadeIn(CROSSFADE).play()
+      next.play()
+      if (previous) {
+        next.crossFadeFrom(previous, nextFade, false)
+        // Отыгравший клип снимается после перехода: иначе микшер держал бы его
+        // с нулевым весом вечно.
+        const fade = nextFade
+        setTimeout(() => { if (previous !== playing) previous.stop() }, fade * 1000 + 100)
+      } else {
+        next.fadeIn(nextFade)
+      }
     }
 
     playing = next
+    nextFade = CROSSFADE
 
     // Возврат к своему движению: снимок восстанавливается сразу, а микшер
     // догасит собственный вклад за время перехода.
@@ -688,12 +704,42 @@ export async function createScene(
     apply(requested)
   }
 
+  /**
+   * Вход и выход у пола (разбор VPet §4, Desktop Mate §34).
+   *
+   * Лечь и уснуть из стойки — не мгновенная смена картинки: сначала персонаж
+   * опускается на колени, потом ложится; вставая — наоборот. Отдельных клипов
+   * «ложится» и «встаёт» в библиотеке нет, поэтому шаги собраны из готовых
+   * авторских поз с медленным переходом между ними, а не нарисованы заново.
+   */
+  const GROUND: readonly Action[] = ['lie', 'sleep']
+  const KNEEL = '_muamm_pose__mpose6'
+  let stepTimer: ReturnType<typeof setTimeout> | undefined
+  /** Промежуточный шаг уже сделан — теперь сама цель. */
+  let stepped = false
+
   function play(name: string) {
+    clearTimeout(stepTimer)
     if (name.startsWith('emotion:')) {
       emotion = name.slice(8); emotionUntil = clock.elapsedTime + 4; return
     }
     if (name.startsWith('builtin:')) {
       const action=name.slice(8) as Action
+      const afterStep = stepped
+      stepped = false
+      const goingDown = !afterStep && GROUND.includes(action) && !GROUND.includes(gesture)
+      const gettingUp = !afterStep && !GROUND.includes(action) && GROUND.includes(gesture) && action !== 'sit'
+      if ((goingDown || gettingUp) && animations.includes(KNEEL)) {
+        // Промежуточный шаг — поза на коленях; затем цель. Оба перехода
+        // медленные: так смена позы читается как движение, а не как склейка.
+        gesture = 'sit'
+        wanted = 'hold'
+        nextFade = 0.8
+        requestClip(KNEEL)
+        stepTimer = setTimeout(() => { nextFade = 0.9; stepped = true; play(name) }, 1100)
+        return
+      }
+      if (GROUND.includes(action) || action === 'sit' || GROUND.includes(gesture)) nextFade = Math.max(nextFade, 0.7)
       // Покой не перебирается на каждом тике: смена клипа покоя посреди
       // стояния выглядит как рывок, а не как разнообразие.
       const clip=action==='stand'&&gesture==='stand'&&requested?requested:pickMotion(action,animations,motionMap,requested)
@@ -709,7 +755,12 @@ export async function createScene(
       wanted=(mode?.[1] as typeof wanted)||'auto'
       if(mode)name=name.slice(mode[0].length)
     }
-    requested = name.trim()
+    requestClip(name.trim())
+  }
+
+  /** Просит клип: загружает при первом обращении и сразу применяет. */
+  function requestClip(name: string) {
+    requested = name
     if (animations.includes(requested) && !actions.has(requested) && !loadingClips.has(requested)) {
       const loading = requested
       loadingClips.add(loading)

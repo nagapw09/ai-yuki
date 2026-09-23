@@ -764,6 +764,8 @@ export const profileDelete = (id: string) => invoke<Profile[]>('profile_delete',
 export const avatarStatus = () => invoke<AvatarStatus>('avatar_status')
 export const companionImport = (paths: string[]) => invoke<{models: number; animations: number; unsupported: string[]}>('companion_import', { paths })
 export const companionAttach = (target: number | null) => invoke<void>('companion_attach', { target })
+/** Окна, на которые персонаж может перепрыгнуть. */
+export const companionSurfaces = () => invoke<{ id: number; title: string }[]>('companion_surfaces')
 export const companionContext = () => invoke<import('../avatar/behavior').CompanionContext>('companion_context')
 export const companionMotionTick = (contact: number, walking: boolean, target: number | null) => invoke<number>('companion_motion_tick', { contact, walking, target })
 export const voicePlayback = () => invoke<{speaking: boolean; level: number | null}>('voice_playback')

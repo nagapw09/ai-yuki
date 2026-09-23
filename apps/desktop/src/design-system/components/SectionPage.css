@@ -95,3 +95,6 @@
 
 .section-page__link { color: var(--accent-cool); font-size: inherit; padding: 0; }
 .section-page__link:hover { text-decoration: underline; }
+
+/* Нумерованные шаги в подсказках — например, как сменить голос. */
+.section-page__body ol.settings__hint { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }

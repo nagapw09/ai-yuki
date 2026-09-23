@@ -235,6 +235,7 @@ pub fn run() {
             speech_local::local_speech_start,
             speech_local::local_speech_stop,
             tts_server::tts_server_restart,
+            companion::companion_surfaces,
             voice::voice_input_name,
             // слово пробуждения (ТЗ §37)
             voice::wake_status,

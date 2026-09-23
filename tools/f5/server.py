@@ -56,12 +56,18 @@ def setup(models: str, ref: str, steps: int):
     _state["steps"] = steps
 
 
-def transcript(ref: str) -> str:
-    """Текст образца лежит рядом с ним: F5 сверяет звук со словами."""
+def transcript(ref: str, fallback: str = "") -> str:
+    """Текст образца: из файла рядом (``mita.wav`` → ``mita.txt``), иначе из настроек Yuki.
+
+    Файл важнее: он принадлежит конкретному образцу, а поле в настройках одно
+    на все и после смены образца может остаться от прежнего.
+    """
     sidecar = os.path.splitext(ref)[0] + ".txt"
-    if not os.path.isfile(sidecar):
-        raise ValueError(f"нет текста образца: {sidecar}")
-    return open(sidecar, encoding="utf-8").read().strip()
+    if os.path.isfile(sidecar):
+        return open(sidecar, encoding="utf-8").read().strip()
+    if fallback.strip():
+        return fallback.strip()
+    raise ValueError(f"нет текста образца: положите {os.path.basename(sidecar)} рядом или впишите текст в настройках")
 
 
 def numbers_to_words(text: str) -> str:
@@ -73,14 +79,14 @@ def numbers_to_words(text: str) -> str:
     return re.sub(r"\d+", lambda m: num2words(int(m.group()), lang="ru"), text)
 
 
-def synthesize(text: str, ref: str | None) -> bytes:
-    # Образец из запроса — если у него есть текст; иначе тот, с которым запущен сервис.
-    if not ref or not os.path.isfile(os.path.splitext(ref)[0] + ".txt"):
-        ref = _state["ref"]
+def synthesize(text: str, ref: str | None, prompt: str = "") -> bytes:
+    # Образец из запроса, если он есть на диске; иначе тот, с которым запущен сервис.
+    if not ref or not os.path.isfile(ref):
+        ref, prompt = _state["ref"], ""
     clean = numbers_to_words(text).strip()[:600] or "Готово."
     with _lock:
         wav, rate, _ = _state["tts"].infer(
-            ref, transcript(ref), clean, nfe_step=_state["steps"], seed=42, show_info=lambda *a: None,
+            ref, transcript(ref, prompt), clean, nfe_step=_state["steps"], seed=42, show_info=lambda *a: None,
         )
     buffer = io.BytesIO()
     sf.write(buffer, wav, rate, format="WAV", subtype="PCM_16")
@@ -95,7 +101,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
-            wav = synthesize(str(body.get("text", "")), body.get("ref_audio_path"))
+            wav = synthesize(str(body.get("text", "")), body.get("ref_audio_path"), str(body.get("prompt_text") or ""))
         except Exception as error:  # одна плохая фраза не должна ронять сервис
             message = str(error).encode("utf-8")
             self.send_response(500)
