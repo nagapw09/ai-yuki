@@ -42,6 +42,21 @@ torchaudio.load = _load
 _lock = threading.Lock()
 _state: dict = {}
 
+# Короткие фразы повторяются: «Секунду», «Да?», «Открываю». Синтез каждой — две
+# секунды видеокарты, а отклик, пока Yuki думает, должен звучать сразу.
+_cache: dict[tuple[str, str, str], bytes] = {}
+CACHE_TEXT = 60
+CACHE_SIZE = 128
+
+# Отклики из apps/desktop/src/agent/ack.ts и voice.ts — готовятся при старте.
+WARM = [
+    "Да?", "Слушаю.", "Да-да?", "М?",
+    "Секунду.", "Сейчас сделаю.", "Минутку.", "Секунду, открываю.", "Сейчас открою.",
+    "Сейчас поищу.", "Минутку, смотрю.", "Сейчас запишу.", "Секунду, запоминаю.",
+    "Сейчас напишу.", "Сейчас подумаю.", "Хм, секунду.",
+    "Открываю.", "Открываю, секунду.", "Готово.", "Я тут!", "Пока-пока!",
+]
+
 
 def setup(models: str, ref: str, steps: int):
     from f5_tts.api import F5TTS
@@ -84,13 +99,22 @@ def synthesize(text: str, ref: str | None, prompt: str = "") -> bytes:
     if not ref or not os.path.isfile(ref):
         ref, prompt = _state["ref"], ""
     clean = numbers_to_words(text).strip()[:600] or "Готово."
+    # Путь нормализуется: Yuki и прогрев могут записать один файл по-разному.
+    key = (os.path.normcase(os.path.abspath(ref)), prompt, clean)
+    if key in _cache:
+        return _cache[key]
     with _lock:
         wav, rate, _ = _state["tts"].infer(
             ref, transcript(ref, prompt), clean, nfe_step=_state["steps"], seed=42, show_info=lambda *a: None,
         )
     buffer = io.BytesIO()
     sf.write(buffer, wav, rate, format="WAV", subtype="PCM_16")
-    return buffer.getvalue()
+    data = buffer.getvalue()
+    if len(clean) <= CACHE_TEXT:
+        if len(_cache) >= CACHE_SIZE:
+            _cache.pop(next(iter(_cache)))
+        _cache[key] = data
+    return data
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -128,6 +152,8 @@ def main():
     args = parser.parse_args()
     setup(args.models, args.ref, args.steps)
     synthesize("Привет.", None)  # прогрев: первая настоящая фраза не должна ждать
+    # Отклики — в фоне: сервис уже отвечает, пока они готовятся.
+    threading.Thread(target=lambda: [synthesize(t, None) for t in WARM], daemon=True).start()
     # Только петлевой адрес: голос не должен быть доступен соседям по сети.
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"F5 готов: http://127.0.0.1:{args.port}/tts", flush=True)

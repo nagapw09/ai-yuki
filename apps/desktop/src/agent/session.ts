@@ -267,11 +267,12 @@ async function performMessage(
   if (await tryRun(text).catch(() => false)) return null
 
   // Затем частые просьбы, которые понятны без модели: «открой браузер»,
-  // «стоп», «пауза». С телефона этот путь закрыт — там свой набор инструментов.
-  if (!origin) {
+  // «стоп», «пауза». С телефона — только при полном доступе: иначе быстрый путь
+  // обошёл бы урезанный удалённый набор инструментов.
+  if (!origin || origin.fullAccess) {
     const quick = await tryQuick(text).catch(() => null)
     if (quick !== null) {
-      if (quick) void speakIfVoice(quick)
+      if (quick && !origin) void speakIfVoice(quick)
       return quick
     }
   }

@@ -27,6 +27,7 @@ import {
 import { listen } from '@tauri-apps/api/event'
 
 import { useChatStore } from '../state/chatStore'
+import { withAck } from './ack'
 import { sendMessage, type RemoteOrigin } from './session'
 
 /** Настройка «открыть удалённо все инструменты». */
@@ -112,7 +113,11 @@ async function handle(message: IncomingMessage): Promise<void> {
       result: message.text,
     }).catch(() => undefined)
 
-    const reply = await sendMessage(message.text, origin)
+    // Долгий ответ предваряется коротким «сейчас»: молчание в чате на пять
+    // секунд выглядит так, будто Yuki не услышала.
+    const reply = await withAck(sendMessage(message.text, origin), message.text, (text) =>
+      telegramSend(message.chatId, text),
+    )
 
     // `null` означает, что просьбу выполнила записанная команда, минуя модель:
     // ответа в словах у неё нет, но молчать в мессенджере нельзя.

@@ -621,9 +621,8 @@ async fn handle(app: &AppHandle, client: &reqwest::Client, token: &str, update: 
         if let Some(file_id) = update.voice.take() {
             match transcribe_voice(app, client, token, &file_id).await {
                 Ok(text) if !text.is_empty() => {
-                    // Человек видит, что именно поняли: ошибка распознавания
-                    // иначе выглядела бы как странный ответ на другую просьбу.
-                    let _ = send(client, token, &update.chat_id, &format!("🎤 {text}")).await;
+                    // Распознанный текст обратно не шлём: владелец счёл это
+                    // лишним сообщением. Он виден в чате Yuki на компьютере.
                     update.text = text;
                 }
                 Ok(_) => {

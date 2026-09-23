@@ -20,6 +20,7 @@ import {
 } from '../bridge'
 import { useUiStore } from '../state/store'
 import { speakable } from './reply'
+import { withAck } from './ack'
 import { recognize } from './quick'
 import { cancelCurrentTurn, isTurnActive, sendMessage } from './session'
 
@@ -210,7 +211,7 @@ export async function startVoice(mode: ListenMode): Promise<void> {
       useUiStore.getState().setHeadline('Секунду, заканчиваю прошлое')
       return
     }
-    void sendMessage(said).catch(() => undefined)
+    void withAck(sendMessage(said), said, (text) => speakIfVoice(text)).catch(() => undefined)
   })
 
   unlisteners = [level, state, text]
