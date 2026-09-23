@@ -237,6 +237,7 @@ pub fn run() {
             tts_server::tts_server_restart,
             companion::companion_surfaces,
             voice::voice_input_name,
+            telegram::telegram_ask,
             // слово пробуждения (ТЗ §37)
             voice::wake_status,
             voice::wake_enroll_record,

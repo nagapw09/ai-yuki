@@ -988,6 +988,8 @@ export const localSpeechStop = () => invoke<void>('local_speech_stop')
 export const ttsServerRestart = () => invoke<void>('tts_server_restart')
 /** Микрофон по умолчанию — чтобы заметить подключённые наушники. */
 export const voiceInputName = () => invoke<string | null>('voice_input_name')
+/** Вопрос с кнопками «Да / Нет» на телефоне. */
+export const telegramAsk = (chatId: string, text: string) => invoke<void>('telegram_ask', { chatId, text })
 
 export const voiceStatus = () => invoke<VoiceStatus>('voice_status')
 /** Громкость речи 0…1; `null` — движок звука не отдаёт. */

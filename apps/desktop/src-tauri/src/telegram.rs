@@ -372,15 +372,56 @@ pub async fn telegram_send(app: AppHandle, chat_id: String, text: String) -> Res
     send(&client, &token, &chat_id, &text).await
 }
 
+/// Спрашивает подтверждение на телефоне: сообщение с кнопками «Да» и «Нет».
+///
+/// Раньше опасное действие ждало подтверждения только у компьютера, и вне дома
+/// просьба вроде «напиши такому-то в Telegram» не выполнялась никак. Ответ
+/// приходит обычным сообщением `да`/`нет` из того же сопряжённого чата — чужой
+/// чат нажать эти кнопки не может: его обновления сюда не доходят.
+#[tauri::command]
+pub async fn telegram_ask(app: AppHandle, chat_id: String, text: String) -> Result<(), String> {
+    let (client, token) = {
+        let state = app.state::<AppState>();
+        if is_paired(&state, &chat_id).is_none() {
+            return Err("чат не сопряжён".into());
+        }
+        (
+            state.http.clone(),
+            secrets::get(TOKEN_REF).map_err(err)?.ok_or("токен не задан")?,
+        )
+    };
+    let keyboard = serde_json::json!({
+        "inline_keyboard": [[
+            { "text": "✅ Да", "callback_data": "да" },
+            { "text": "❌ Нет", "callback_data": "нет" },
+        ]]
+    });
+    send_with(&client, &token, &chat_id, &text, Some(keyboard)).await
+}
+
 async fn send(
     client: &reqwest::Client,
     token: &str,
     chat_id: &str,
     text: &str,
 ) -> Result<(), String> {
+    send_with(client, token, chat_id, text, None).await
+}
+
+async fn send_with(
+    client: &reqwest::Client,
+    token: &str,
+    chat_id: &str,
+    text: &str,
+    keyboard: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let mut body = serde_json::json!({ "chat_id": chat_id, "text": text });
+    if let Some(keyboard) = keyboard {
+        body["reply_markup"] = keyboard;
+    }
     let response = client
         .post(format!("https://api.telegram.org/bot{token}/sendMessage"))
-        .json(&serde_json::json!({ "chat_id": chat_id, "text": text }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| format!("не удалось отправить сообщение: {}", e.without_url()))?;
@@ -522,6 +563,8 @@ struct Update {
     text: String,
     /// Голосовое сообщение: идентификатор файла у Telegram.
     voice: Option<String>,
+    /// Нажатие кнопки: его надо подтвердить, иначе кнопка крутится вечно.
+    callback: Option<String>,
 }
 
 async fn updates(
@@ -536,7 +579,7 @@ async fn updates(
             ("timeout", POLL_TIMEOUT.to_string()),
             // Только сообщения: нажатия кнопок и правки нам не нужны, а
             // просить всё значит разбирать то, на что мы всё равно не ответим.
-            ("allowed_updates", "[\"message\"]".into()),
+            ("allowed_updates", "[\"message\",\"callback_query\"]".into()),
         ])
         // Собственный таймаут длиннее серверного: иначе клиент разорвёт
         // соединение раньше, чем Telegram успеет ответить пустым списком.
@@ -562,6 +605,21 @@ async fn updates(
 
 fn parse(raw: &serde_json::Value) -> Option<Update> {
     let id = raw["update_id"].as_i64()?;
+
+    // Нажатие кнопки «Да/Нет» — это ответ того же чата, где стоят кнопки.
+    if let Some(callback) = raw.get("callback_query") {
+        let chat_id = callback["message"]["chat"]["id"].as_i64()?.to_string();
+        let text = callback["data"].as_str()?.trim().to_string();
+        return Some(Update {
+            id,
+            chat_id: chat_id.clone(),
+            name: format!("чат {chat_id}"),
+            text,
+            voice: None,
+            callback: callback["id"].as_str().map(str::to_string),
+        });
+    }
+
     let message = &raw["message"];
     let chat = &message["chat"];
     let chat_id = chat["id"].as_i64()?.to_string();
@@ -588,6 +646,7 @@ fn parse(raw: &serde_json::Value) -> Option<Update> {
         name,
         text,
         voice,
+        callback: None,
     })
 }
 
@@ -597,6 +656,14 @@ async fn handle(app: &AppHandle, client: &reqwest::Client, token: &str, update: 
     {
         let state = app.state::<AppState>();
         let _ = set_setting(&state, KEY_OFFSET, &(update.id + 1).to_string());
+    }
+
+    if let Some(callback) = &update.callback {
+        let _ = client
+            .post(format!("https://api.telegram.org/bot{token}/answerCallbackQuery"))
+            .json(&serde_json::json!({ "callback_query_id": callback }))
+            .send()
+            .await;
     }
 
     let paired = {
@@ -939,6 +1006,19 @@ mod tests {
         ] {
             assert!(parse(&raw).is_none(), "не должно разбираться: {raw}");
         }
+    }
+
+    /// Нажатие кнопки подтверждения приходит как ответ «да» из своего чата.
+    #[test]
+    fn a_button_press_becomes_an_answer() {
+        let raw = serde_json::json!({
+            "update_id": 11,
+            "callback_query": { "id": "cb1", "data": "да", "message": { "chat": { "id": 5 } } }
+        });
+        let update = parse(&raw).expect("нажатие должно разобраться");
+        assert_eq!(update.text, "да");
+        assert_eq!(update.chat_id, "5");
+        assert_eq!(update.callback.as_deref(), Some("cb1"));
     }
 
     /// Голосовое без текста — тоже просьба: его распознают и выполнят.

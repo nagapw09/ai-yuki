@@ -69,6 +69,15 @@ export interface RemoteOrigin {
   fullAccess: boolean
   /** Сообщить на телефон, что ждём подтверждения у компьютера. */
   notify: (text: string) => void
+  /**
+   * Спросить подтверждение прямо на телефоне — кнопками «Да / Нет».
+   *
+   * Без этого опасное действие с телефона не выполнялось никак: подтвердить
+   * его можно было только у компьютера, а человек не дома.
+   */
+  confirm?: (question: string) => Promise<boolean>
+  /** Снять вопрос с телефона, если ответили у компьютера. */
+  dropConfirm?: () => void
 }
 
 /**
@@ -314,16 +323,30 @@ async function performMessage(
         // (docs/REMOTE-CONTROL.md §4): удалённое подтверждение опасного
         // действия означает, что укравший телефон получил права владельца.
         // Но молчать нельзя — иначе с телефона это выглядит как зависание.
-        origin?.notify(
-          `Нужно подтверждение на компьютере: ${tool.name}. ` +
-            'Пока его нет, действие не выполняется.',
-        )
-        const approved = await useChatStore.getState().askConfirmation({
+        const plan = describePlan(tool, input)
+        const atComputer = useChatStore.getState().askConfirmation({
           toolId: tool.id,
           toolName: tool.name,
           risk: tool.risk === 'high' ? 'high' : 'medium',
-          plan: describePlan(tool, input),
+          plan,
         })
+        let approved: boolean
+        if (origin?.confirm) {
+          // Спрашиваем и на телефоне, и у компьютера — считается первый ответ.
+          let fromPhone = false
+          approved = await Promise.race([
+            atComputer,
+            origin.confirm(`Можно выполнить?\n\n${plan}`).then((v) => { fromPhone = true; return v }),
+          ])
+          if (fromPhone) useChatStore.getState().resolveConfirmation(approved)
+          else origin.dropConfirm?.()
+        } else {
+          origin?.notify(
+            `Нужно подтверждение на компьютере: ${tool.name}. ` +
+              'Пока его нет, действие не выполняется.',
+          )
+          approved = await atComputer
+        }
         useUiStore.getState().setOrbState('working')
         return approved ? 'allow' : 'deny'
       },
@@ -417,7 +440,7 @@ function remoteExtra(base: string | undefined, origin: RemoteOrigin): string {
   const note =
     `Эта просьба пришла с телефона через ${origin.channel}, человека у компьютера нет. ` +
     (origin.fullAccess
-      ? 'Доступны все инструменты, но действия высокого риска ждут подтверждения у компьютера — предупреди об этом, если оно понадобится.'
+      ? 'Доступны все инструменты. Рискованные действия человек подтвердит кнопкой прямо в Telegram — это сделает приложение само, спрашивать разрешения текстом не нужно. Чтобы написать кому-то в Telegram Desktop, открой его, найди чат по имени, проверь название чата по интерфейсу и только потом отправляй.'
       : 'Доступна только часть инструментов: напоминания, заметки, память, календарь на чтение, погода, курсы, сведения о системе. Файлы, ввод и управление окнами закрыты. Если просьба требует закрытого — скажи об этом прямо, не изображай выполнение.') +
     ' Отвечай коротко: ответ читают в мессенджере.'
 

@@ -20,6 +20,7 @@
 import {
   activityRecord,
   settingGet,
+  telegramAsk,
   telegramSend,
   TELEGRAM_MESSAGE_EVENT,
   TELEGRAM_PAIRING_EVENT,
@@ -79,7 +80,44 @@ export function startRemote(): () => void {
 /** Не выполняем две удалённые просьбы разом: цикл один, и он не реентерабелен. */
 let busy = false
 
+/** Вопросы «можно выполнить?», ждущие ответа с телефона, по чатам. */
+const waiting = new Map<string, (approved: boolean) => void>()
+
+/** Сколько ждать ответа на телефоне, прежде чем отказаться от действия. */
+const CONFIRM_TIMEOUT_MS = 3 * 60 * 1000
+
+/** «да», «ок», «давай» — согласие; всё остальное — отказ. */
+export function isYes(text: string): boolean {
+  // Не `\b`: в JavaScript он не видит кириллицу, и «да» не было бы согласием.
+  return /^(да|ага|ок|окей|давай|конечно|подтверждаю|разрешаю|yes|y)(?=$|[\s,.!])/i.test(text.trim())
+}
+
+function askOnPhone(chatId: string, question: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      waiting.delete(chatId)
+      void telegramSend(chatId, 'Не дождалась ответа — действие отменено.').catch(() => undefined)
+      resolve(false)
+    }, CONFIRM_TIMEOUT_MS)
+    waiting.set(chatId, (approved) => {
+      clearTimeout(timer)
+      waiting.delete(chatId)
+      resolve(approved)
+    })
+    void telegramAsk(chatId, question).catch(() => undefined)
+  })
+}
+
 async function handle(message: IncomingMessage): Promise<void> {
+  // Ответ на «можно выполнить?» — это не новая просьба, а решение по текущей.
+  const answer = waiting.get(message.chatId)
+  if (answer) {
+    const approved = isYes(message.text)
+    answer(approved)
+    await telegramSend(message.chatId, approved ? 'Выполняю.' : 'Хорошо, не делаю.').catch(() => undefined)
+    return
+  }
+
   if (busy || useChatStore.getState().running) {
     await telegramSend(
       message.chatId,
@@ -100,6 +138,14 @@ async function handle(message: IncomingMessage): Promise<void> {
       fullAccess,
       notify: (text) => {
         void telegramSend(message.chatId, text).catch(() => undefined)
+      },
+      confirm: (question) => askOnPhone(message.chatId, question),
+      dropConfirm: () => {
+        // Решили у компьютера: вопрос на телефоне больше не ждёт ответа.
+        const pending = waiting.get(message.chatId)
+        if (!pending) return
+        pending(false)
+        void telegramSend(message.chatId, 'Решено на компьютере.').catch(() => undefined)
       },
     }
 
