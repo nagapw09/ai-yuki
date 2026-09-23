@@ -364,6 +364,19 @@ pub fn voice_status(state: State<'_, AppState>) -> Result<VoiceStatus, String> {
     })
 }
 
+/// Распознаёт готовую запись — голосовое сообщение Telegram.
+///
+/// Тот же сервис распознавания и те же проверки приватности, что у микрофона:
+/// второй путь со своими настройками разошёлся бы с первым при первой же правке.
+pub async fn transcribe_samples(state: &AppState, samples: &[f32]) -> Result<String, String> {
+    let config = stt_config(state)?;
+    let stt = HttpStt::new(config.base_url, config.api_key, config.model, state.http.clone());
+    stt.transcribe(samples, config.language.as_deref())
+        .await
+        .map(|text| text.trim().to_string())
+        .map_err(err)
+}
+
 /// Имя микрофона по умолчанию.
 ///
 /// Отдельной лёгкой командой: интерфейс спрашивает её раз в несколько секунд,

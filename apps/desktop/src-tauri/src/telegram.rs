@@ -520,6 +520,8 @@ struct Update {
     /// Имя для списка устройств: `@username`, иначе имя человека.
     name: String,
     text: String,
+    /// Голосовое сообщение: идентификатор файла у Telegram.
+    voice: Option<String>,
 }
 
 async fn updates(
@@ -563,9 +565,14 @@ fn parse(raw: &serde_json::Value) -> Option<Update> {
     let message = &raw["message"];
     let chat = &message["chat"];
     let chat_id = chat["id"].as_i64()?.to_string();
-    let text = message["text"].as_str()?.trim().to_string();
+    let text = message["text"].as_str().unwrap_or_default().trim().to_string();
+    // Голосовые и аудиофайлы: и то и другое Telegram отдаёт по file_id.
+    let voice = message["voice"]["file_id"]
+        .as_str()
+        .or_else(|| message["audio"]["file_id"].as_str())
+        .map(str::to_string);
 
-    if text.is_empty() {
+    if text.is_empty() && voice.is_none() {
         return None;
     }
 
@@ -580,6 +587,7 @@ fn parse(raw: &serde_json::Value) -> Option<Update> {
         chat_id,
         name,
         text,
+        voice,
     })
 }
 
@@ -606,6 +614,27 @@ async fn handle(app: &AppHandle, client: &reqwest::Client, token: &str, update: 
                     [CHANNEL, &update.chat_id],
                 )
             });
+        }
+
+        // Голосовое сначала превращается в текст, дальше путь тот же.
+        let mut update = update;
+        if let Some(file_id) = update.voice.take() {
+            match transcribe_voice(app, client, token, &file_id).await {
+                Ok(text) if !text.is_empty() => {
+                    // Человек видит, что именно поняли: ошибка распознавания
+                    // иначе выглядела бы как странный ответ на другую просьбу.
+                    let _ = send(client, token, &update.chat_id, &format!("🎤 {text}")).await;
+                    update.text = text;
+                }
+                Ok(_) => {
+                    let _ = send(client, token, &update.chat_id, "Не расслышала — в голосовом нет речи.").await;
+                    return;
+                }
+                Err(reason) => {
+                    let _ = send(client, token, &update.chat_id, &format!("Не смогла разобрать голосовое: {reason}")).await;
+                    return;
+                }
+            }
         }
 
         // Выполняет окно: там агентный цикл, инструменты и Permission Gate.
@@ -650,6 +679,50 @@ async fn handle(app: &AppHandle, client: &reqwest::Client, token: &str, update: 
          сопряжения и пришлите его сюда.",
     )
     .await;
+}
+
+/// Самое длинное голосовое, которое берём: минута речи — это уже не команда,
+/// а распознавание целого файла заняло бы работу на минуты.
+const VOICE_MAX_BYTES: u64 = 2 * 1024 * 1024;
+
+/// Скачивает голосовое, раскодирует OGG/Opus и распознаёт его.
+///
+/// Распознаёт тот же сервис, что слушает микрофон: локальный whisper, если он
+/// включён, — тогда голос не уходит дальше Telegram.
+async fn transcribe_voice(
+    app: &AppHandle,
+    client: &reqwest::Client,
+    token: &str,
+    file_id: &str,
+) -> Result<String, String> {
+    let meta: serde_json::Value = client
+        .get(format!("https://api.telegram.org/bot{token}/getFile"))
+        .query(&[("file_id", file_id)])
+        .send()
+        .await
+        .map_err(|e| e.without_url().to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let path = meta["result"]["file_path"]
+        .as_str()
+        .ok_or("Telegram не отдал файл")?;
+    if meta["result"]["file_size"].as_u64().unwrap_or(0) > VOICE_MAX_BYTES {
+        return Err("голосовое слишком длинное — запишите покороче".into());
+    }
+
+    let bytes = client
+        .get(format!("https://api.telegram.org/file/bot{token}/{path}"))
+        .send()
+        .await
+        .map_err(|e| e.without_url().to_string())?
+        .bytes()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let samples = yuki_voice::decode_ogg_opus(&bytes).map_err(|e| e.to_string())?;
+    let state = app.state::<AppState>();
+    crate::voice::transcribe_samples(&state, &samples).await
 }
 
 /// Сверяет присланный текст с выданным кодом и сжигает код при совпадении.
@@ -867,5 +940,17 @@ mod tests {
         ] {
             assert!(parse(&raw).is_none(), "не должно разбираться: {raw}");
         }
+    }
+
+    /// Голосовое без текста — тоже просьба: его распознают и выполнят.
+    #[test]
+    fn a_voice_message_is_kept_for_recognition() {
+        let raw = serde_json::json!({
+            "update_id": 9,
+            "message": { "voice": { "file_id": "AwACAgI", "duration": 3 }, "chat": { "id": 5 } }
+        });
+        let update = parse(&raw).expect("голосовое должно разобраться");
+        assert_eq!(update.voice.as_deref(), Some("AwACAgI"));
+        assert!(update.text.is_empty());
     }
 }

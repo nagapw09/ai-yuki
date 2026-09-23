@@ -343,7 +343,8 @@ export function Remote() {
       {status.lastError && <p className="settings__error" role="alert">{status.lastError}</p>}
       <p className="settings__hint">
         Yuki отвечает на сообщения в Telegram: можно попросить что-нибудь из дома
-        или из дороги. <strong>Сообщения проходят через серверы Telegram</strong> —
+        или из дороги — текстом или голосовым (его распознаёт тот же движок, что
+        слушает микрофон). <strong>Сообщения проходят через серверы Telegram</strong> —
         сквозного шифрования между телефоном и этим компьютером здесь нет и быть
         не может. Поэтому канал несовместим с режимом Local Only.
       </p>

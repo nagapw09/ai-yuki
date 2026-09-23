@@ -26,6 +26,7 @@
 pub mod capture;
 pub mod error;
 pub mod mfcc;
+pub mod ogg;
 pub mod session;
 pub mod spotter;
 pub mod stt;
@@ -40,6 +41,7 @@ pub use capture::{
     default_input_name, input_devices, input_format, CaptureHandle, FRAME_MS, TARGET_RATE,
 };
 pub use error::{VoiceError, VoiceResult};
+pub use ogg::decode_ogg_opus;
 pub use session::{strip_wake_phrase, ConversationWindow, ListenMode, Utterance, VoiceEvent, VoiceSession};
 pub use spotter::Spotter;
 pub use stt::{encode_wav, HttpStt, SpeechToText};
