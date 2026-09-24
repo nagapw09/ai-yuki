@@ -25,6 +25,7 @@ export function Companion() {
   const [behavior, setBehavior] = useState('calm')
   const [quality, setQuality] = useState('original')
   const [music, setMusic] = useState(true)
+  const [proactive, setProactive] = useState(false)
   const [voice, setVoice] = useState('')
   const [voices, setVoices] = useState<string[]>([])
   const [clips, setClips] = useState<AnimationClip[]>([])
@@ -49,6 +50,7 @@ export function Companion() {
     setProfiles(list); setStatus(avatar); setName(savedName); setCharacter(persona.custom)
     setClips(moves); setVoices(speech.voices); setBehavior(mode || 'calm'); setVoice(selectedVoice || '')
     setMusic(await settingGet('avatar.music') !== 'off')
+    setProactive(await settingGet('proactive.enabled') === 'on')
     setQuality(await settingGet('avatar.quality') || 'original')
     setMapping(parseMotionMap(await settingGet('avatar.motionmap')))
     setExpressions((await avatarExpressionNames()).filter(name=>!['aa','ih','ou','ee','oh','lookUp','lookDown','lookLeft','lookRight'].includes(name)))
@@ -136,6 +138,8 @@ export function Companion() {
               <div className="companion-segment">{BEHAVIORS.map(([id, label]) => <button key={id} type="button" data-active={behavior === id} disabled={busy} onClick={() => void run(async () => { setBehavior(id); await settingSet('avatar.behavior', id) })}>{label}</button>)}</div></div>
             <div className="companion-row"><div><b>Танцевать под музыку</b><small>Когда в браузере или плеере играет трек</small></div>
               {toggle(music, 'Танцевать под музыку', value => void run(async () => { setMusic(value); await settingSet('avatar.music', value ? 'on' : 'off') }))}</div>
+            <div className="companion-row"><div><b>Сама заводит разговор</b><small>Здоровается утром, зовёт размяться, напоминает про сон. Молчит в играх и видео на весь экран</small></div>
+              {toggle(proactive, 'Сама заводит разговор', value => void run(async () => { setProactive(value); await settingSet('proactive.enabled', value ? 'on' : 'off') }))}</div>
             <div className="companion-row"><div><b>Пропускать клики сквозь персонажа</b><small>Не мешает работать с окнами под ним</small></div>
               {toggle(status?.clickThrough ?? false, 'Пропускать клики', value => void run(async () => { await avatarSetClickThrough(value) }))}</div>
             <div className="companion-row"><div><b>Качество изображения</b><small>Экономный режим уменьшает текстуры и память</small></div>

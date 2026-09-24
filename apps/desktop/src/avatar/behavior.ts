@@ -2,7 +2,7 @@ import type { OrbState } from '../state/types'
 import { advance, choose, cursorCloseness, noticed, DEFAULT_VITALS, type Vitals } from './character'
 
 export type BehaviorMode = 'calm' | 'playful' | 'quiet'
-export interface CompanionContext { musicPlaying: boolean; idleSeconds: number; mediaAvailable: boolean }
+export interface CompanionContext { musicPlaying: boolean; idleSeconds: number; mediaAvailable: boolean; quiet?: boolean }
 export interface BehaviorInput extends CompanionContext {
   state: OrbState
   mode: BehaviorMode

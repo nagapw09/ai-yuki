@@ -2,6 +2,7 @@ import { listen } from '@tauri-apps/api/event'
 import { useCallback, useEffect, useState } from 'react'
 
 import { initTriggers } from './agent/commands'
+import { startProactive } from './agent/proactiveLoop'
 import { sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { startAvatarBroadcast } from './avatar/broadcast'
@@ -49,6 +50,7 @@ export function App() {
     // Сочетания команд и автозапуск (ТЗ §16). Сбой не должен мешать
     // приложению работать: без триггеров команды остаются доступны вручную.
     if (isTauri()) void initTriggers().catch(() => undefined)
+    if (isTauri()) startProactive()
   }, [])
 
   // Постоянное прослушивание имени (ТЗ §37).

@@ -353,6 +353,9 @@ pub struct CompanionContext {
     music_playing: bool,
     idle_seconds: f64,
     media_available: bool,
+    /// Человеку сейчас не до разговоров: полноэкранная игра или видео,
+    /// презентация, экран заблокирован.
+    quiet: bool,
 }
 
 #[tauri::command]
@@ -395,9 +398,15 @@ fn read_context() -> CompanionContext {
         Win32::{
             System::SystemInformation::GetTickCount,
             UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO},
+            UI::Shell::{SHQueryUserNotificationState, QUNS_ACCEPTS_NOTIFICATIONS, QUNS_QUIET_TIME},
         },
     };
     let mut result = CompanionContext::default();
+    // Тот же вопрос, который Windows задаёт перед показом уведомления.
+    // QUIET_TIME — первый час после установки системы, мешать им нечему.
+    if let Ok(state) = unsafe { SHQueryUserNotificationState() } {
+        result.quiet = state != QUNS_ACCEPTS_NOTIFICATIONS && state != QUNS_QUIET_TIME;
+    }
     let mut input = LASTINPUTINFO {
         cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
         ..Default::default()

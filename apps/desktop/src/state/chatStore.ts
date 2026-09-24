@@ -59,6 +59,8 @@ interface ChatState {
   askConfirmation: (request: Omit<PendingConfirmation, 'resolve'>) => Promise<boolean>
   resolveConfirmation: (approved: boolean) => void
   clear: () => void
+  /** Реплика, с которой Yuki начала сама (ТЗ §34); в историю модели не идёт. */
+  note: (text: string) => void
 }
 
 let counter = 0
@@ -141,6 +143,8 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
   },
 
   clear: () => set({ entries: [], history: [], streaming: '', error: null }),
+
+  note: (text) => set((s) => ({ entries: [...s.entries, { id: nextId(), role: 'assistant', text, tools: [] }] })),
 }), {
   name: 'yuki-astra-conversation',
   partialize: (state) => {

@@ -28,6 +28,7 @@ import { useUiStore } from '../state/store'
 import { mcpTools } from '../tools/capabilities'
 import { ALL_TOOLS } from '../tools'
 import { tryRun } from './commands'
+import { takeOffer } from './proactiveLoop'
 import { tryQuick } from './quick'
 import { moodStreamFilter, parseMood, REPLY_STYLE } from './reply'
 import { speakIfVoice } from './voice'
@@ -274,6 +275,9 @@ async function performMessage(
   // Сначала команды (ТЗ §16): записанная последовательность выполняется сразу,
   // без обращения к модели — в этом весь её смысл.
   if (await tryRun(text).catch(() => false)) return null
+
+  // Ответ на то, что Yuki предложила сама: «Запустить рабочий режим?» — «Да».
+  if (!origin && (await takeOffer(text).catch(() => false))) return null
 
   // Затем частые просьбы, которые понятны без модели: «открой браузер»,
   // «стоп», «пауза». С телефона — только при полном доступе: иначе быстрый путь
