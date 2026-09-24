@@ -37,6 +37,7 @@ pub mod tray;
 pub mod tts_server;
 pub mod updater;
 pub mod voice;
+pub mod voice_install;
 pub mod window;
 
 use tauri::Manager;
@@ -239,6 +240,8 @@ pub fn run() {
             companion::companion_surfaces,
             voice::voice_input_name,
             telegram::telegram_ask,
+            voice_install::voice_install,
+            voice_install::voice_install_status,
             // слово пробуждения (ТЗ §37)
             voice::wake_status,
             voice::wake_enroll_record,

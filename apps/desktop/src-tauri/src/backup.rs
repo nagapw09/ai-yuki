@@ -65,6 +65,10 @@ const SKIPPED_COLUMNS: &[&str] = &["embedding"];
 #[serde(rename_all = "camelCase")]
 pub struct BackupSummary {
     pub version: u32,
+    /// Сколько образцов голоса в копии.
+    pub voices: usize,
+    /// История чата: живёт в окне, поэтому окно её и отдаёт, и забирает обратно.
+    pub chat: Option<Value>,
     /// Сколько строк по каждой таблице.
     pub counts: Vec<TableCount>,
     /// Что придётся ввести заново после переноса.
@@ -185,14 +189,83 @@ fn counts(data: &Value) -> Vec<TableCount> {
 
 // ── Команды ─────────────────────────────────────────────────────────────────────
 
+/// Самый большой образец голоса, который берём в копию: образец — это секунды
+/// речи, и файл в десятки мегабайт — скорее ошибка, чем голос.
+const VOICE_MAX_BYTES: u64 = 20 * 1024 * 1024;
+
+/// Настройки, привязанные к этой машине: пути к программам и моделям. На новом
+/// компьютере их нет, и перенесённые как есть они сломали бы голос.
+const MACHINE_SETTINGS: &[&str] = &[
+    "voice.tts.server.python",
+    "voice.tts.server.script",
+    "voice.tts.server.model",
+    "voice.tts.samples",
+];
+
+/// Образцы голоса (`.wav` и текст к ним) из папки образцов.
+fn collect_voices(state: &AppState) -> Vec<Value> {
+    use base64::Engine;
+    let Some(dir) = crate::avatar::setting(state, "voice.tts.samples") else {
+        return Vec::new();
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("wav")))
+        .filter(|p| std::fs::metadata(p).map(|m| m.len() <= VOICE_MAX_BYTES).unwrap_or(false))
+        .filter_map(|p| {
+            let name = p.file_name()?.to_string_lossy().into_owned();
+            let audio = std::fs::read(&p).ok()?;
+            let text = std::fs::read_to_string(p.with_extension("txt")).ok();
+            Some(json!({
+                "name": name,
+                "audio": base64::engine::general_purpose::STANDARD.encode(audio),
+                "text": text,
+            }))
+        })
+        .collect()
+}
+
+/// Раскладывает образцы голоса в папку Yuki. Имена — только сами имена файлов:
+/// путь из чужого файла копии не должен вывести запись за пределы папки.
+fn restore_voices(app: &tauri::AppHandle, voices: &Value) -> Result<usize, String> {
+    use base64::Engine;
+    let Some(list) = voices.as_array() else {
+        return Ok(0);
+    };
+    let dir = crate::voice_install::voices_dir(app)?;
+    std::fs::create_dir_all(&dir).map_err(err)?;
+    let mut restored = 0;
+    for voice in list {
+        let Some(name) = voice["name"].as_str().and_then(|n| std::path::Path::new(n).file_name()) else {
+            continue;
+        };
+        let Some(audio) = voice["audio"].as_str().and_then(|a| base64::engine::general_purpose::STANDARD.decode(a).ok()) else {
+            continue;
+        };
+        let target = dir.join(name);
+        std::fs::write(&target, audio).map_err(err)?;
+        if let Some(text) = voice["text"].as_str() {
+            std::fs::write(target.with_extension("txt"), text).map_err(err)?;
+        }
+        restored += 1;
+    }
+    Ok(restored)
+}
+
 /// Сохраняет копию в файл.
 #[tauri::command]
 pub fn backup_export(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     path: String,
+    chat: Option<Value>,
 ) -> Result<BackupSummary, String> {
     let data = collect(&state.storage)?;
+    let voices = collect_voices(&state);
 
     let document = json!({
         "format": "yuki-backup",
@@ -203,6 +276,8 @@ pub fn backup_export(
         // чего в нём нет.
         "note": "Секреты не входят в копию: они хранятся в системном хранилище ОС.",
         "tables": data,
+        "voices": voices,
+        "chat": chat,
     });
 
     std::fs::write(&path, serde_json::to_vec_pretty(&document).map_err(err)?)
@@ -210,6 +285,8 @@ pub fn backup_export(
 
     Ok(BackupSummary {
         version: FORMAT_VERSION,
+        voices: document["voices"].as_array().map(Vec::len).unwrap_or(0),
+        chat: None,
         counts: counts(&document["tables"]),
         secrets_to_reenter: secrets_to_reenter(&document["tables"]),
     })
@@ -222,6 +299,8 @@ pub fn backup_preview(path: String) -> Result<BackupSummary, String> {
 
     Ok(BackupSummary {
         version: document["version"].as_u64().unwrap_or(0) as u32,
+        voices: document["voices"].as_array().map(Vec::len).unwrap_or(0),
+        chat: None,
         counts: counts(&document["tables"]),
         secrets_to_reenter: secrets_to_reenter(&document["tables"]),
     })
@@ -230,6 +309,7 @@ pub fn backup_preview(path: String) -> Result<BackupSummary, String> {
 /// Восстанавливает данные из файла.
 #[tauri::command]
 pub fn backup_import(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     path: String,
     mode: ImportMode,
@@ -290,8 +370,39 @@ pub fn backup_import(
         })
         .map_err(err)?;
 
+    // Пути старой машины: сервиса голоса и модели здесь нет, пока голос не
+    // установят кнопкой. Оставить их — значит голос, который молча не звучит.
+    let python_here = crate::avatar::setting(&state, "voice.tts.server.python")
+        .is_some_and(|p| std::path::Path::new(&p).exists());
+    state
+        .storage
+        .with_conn(|conn| {
+            for key in MACHINE_SETTINGS {
+                if python_here && *key != "voice.tts.samples" {
+                    continue;
+                }
+                conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+            }
+            if !python_here {
+                conn.execute(
+                    "UPDATE settings SET value = 'system' WHERE key = 'voice.tts.engine'",
+                    [],
+                )?;
+            }
+            Ok(())
+        })
+        .map_err(err)?;
+
+    let voices = restore_voices(&app, &document["voices"])?;
+    if voices > 0 {
+        let dir = crate::voice_install::voices_dir(&app)?;
+        crate::avatar::set_setting(&state, "voice.tts.samples", &dir.display().to_string())?;
+    }
+
     Ok(BackupSummary {
         version: document["version"].as_u64().unwrap_or(0) as u32,
+        voices,
+        chat: document.get("chat").cloned().filter(|c| !c.is_null()),
         counts: counts(&data),
         secrets_to_reenter: secrets_to_reenter(&data),
     })

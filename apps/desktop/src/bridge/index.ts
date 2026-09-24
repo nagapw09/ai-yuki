@@ -591,20 +591,54 @@ export interface TableCount {
 
 export interface BackupSummary {
   version: number
+  /** Сколько образцов голоса в копии. */
+  voices: number
+  /** История чата из копии — окно само положит её на место. */
+  chat?: unknown
   counts: TableCount[]
   /** Что придётся ввести заново: секреты в копию не входят. */
   secretsToReenter: string[]
 }
 
-export const backupExport = (path: string) =>
-  invoke<BackupSummary>('backup_export', { path })
+/** Ключ, под которым окно хранит историю разговора. */
+export const CHAT_STORAGE_KEY = 'yuki-astra-conversation'
+
+/** История чата живёт в окне: её отдаём в копию вместе с данными из базы. */
+export const backupExport = (path: string) => {
+  let chat: unknown = null
+  try {
+    chat = JSON.parse(localStorage.getItem(CHAT_STORAGE_KEY) ?? 'null')
+  } catch {
+    /* повреждённую историю не переносим */
+  }
+  return invoke<BackupSummary>('backup_export', { path, chat })
+}
 
 /** Читает файл и рассказывает, что в нём, ничего не меняя. */
 export const backupPreview = (path: string) =>
   invoke<BackupSummary>('backup_preview', { path })
 
-export const backupImport = (path: string, mode: 'merge' | 'replace') =>
-  invoke<BackupSummary>('backup_import', { path, mode })
+export const backupImport = async (path: string, mode: 'merge' | 'replace') => {
+  const summary = await invoke<BackupSummary>('backup_import', { path, mode })
+  // История чата из копии: при слиянии — только если здесь её ещё нет.
+  if (summary.chat && (mode === 'replace' || !localStorage.getItem(CHAT_STORAGE_KEY))) {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(summary.chat))
+  }
+  return summary
+}
+
+/** Состояние голоса по образцу: установлен ли, идёт ли установка. */
+export interface VoiceInstallStatus {
+  supported: boolean
+  installed: boolean
+  busy: boolean
+  folder: string
+  gpu: boolean
+}
+export const voiceInstallStatus = () => invoke<VoiceInstallStatus>('voice_install_status')
+/** Скачать и включить голос по образцу. Ход — событиями `yuki://voice-install`. */
+export const voiceInstall = () => invoke<void>('voice_install')
+export const VOICE_INSTALL_EVENT = 'yuki://voice-install'
 
 /** Отчёт о состоянии в Markdown. Никуда не отправляется. */
 export const diagnosticsReport = () => invoke<string>('diagnostics_report')

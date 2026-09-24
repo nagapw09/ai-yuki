@@ -42,6 +42,8 @@ opener = "0.7"
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
 reqwest = { version = "0.12", default-features = false }
 zip = { version = "4.6", default-features = false, features = ["deflate-flate2"] }
+# Образцы голоса в файле переноса данных — внутри JSON, текстом.
+base64 = "0.22"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 sysinfo = "0.33"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }

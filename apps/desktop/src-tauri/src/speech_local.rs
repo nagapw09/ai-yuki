@@ -288,6 +288,22 @@ async fn download(
     sha256: &str,
     expected: u64,
 ) -> Result<(), String> {
+    download_with_event(app, EVENT_PROGRESS, url, target, what, sha256, expected).await
+}
+
+/// Скачивает файл, сверяя SHA-256, и сообщает ход событием `event`.
+///
+/// Общая для движка распознавания и сервиса голоса: обоим нужен закреплённый
+/// по сумме файл и одинаковый ход загрузки в мегабайтах.
+pub(crate) async fn download_with_event(
+    app: &AppHandle,
+    event: &str,
+    url: &str,
+    target: &Path,
+    what: &str,
+    sha256: &str,
+    expected: u64,
+) -> Result<(), String> {
     // Свой клиент, а не общий: у общего стоит потолок в десять минут на запрос,
     // рассчитанный на ответ модели. Полгигабайта модели на медленном канале в
     // него не укладываются, и загрузка обрывалась бы у самого конца.
@@ -332,7 +348,7 @@ async fn download(
         if downloaded - reported >= 1_048_576 {
             reported = downloaded;
             let _ = app.emit(
-                EVENT_PROGRESS,
+                event,
                 Progress {
                     what: what.into(),
                     downloaded,
@@ -354,7 +370,7 @@ async fn download(
 
     std::fs::rename(&temporary, target).map_err(err)?;
     let _ = app.emit(
-        EVENT_PROGRESS,
+        event,
         Progress {
             what: what.into(),
             downloaded,

@@ -19,6 +19,8 @@ use crate::AppState;
 pub const SETTING_PYTHON: &str = "voice.tts.server.python";
 /// Скрипт сервиса, например `tools\xtts\server.py`.
 pub const SETTING_SCRIPT: &str = "voice.tts.server.script";
+/// Папка модели, скачанной установщиком: сервис берёт её без сети.
+pub const SETTING_MODEL: &str = "voice.tts.server.model";
 
 static SERVER: Mutex<Option<Child>> = Mutex::new(None);
 #[cfg(windows)]
@@ -53,10 +55,23 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
 
     let port = port_of(&setting("voice.tts.url").unwrap_or_default());
     let mut command = std::process::Command::new(&python);
+    command.arg(&script).arg("--port").arg(port.to_string());
+    // Модель, скачанная установщиком: путь к ней и работа без сети — чтобы
+    // сервис не лез за обновлениями и не зависел от интернета при старте.
+    if let Some(model) = setting(SETTING_MODEL).filter(|m| std::path::Path::new(m).is_dir()) {
+        command.arg("--model").arg(&model).env("HF_HUB_OFFLINE", "1");
+        if let Some(hf) = std::path::Path::new(&model).ancestors().find(|p| p.file_name().is_some_and(|n| n == "hf")) {
+            command.env("HF_HOME", hf);
+        }
+    }
+    // Образец по умолчанию — выбранный в настройках.
+    if let (Some(dir), Some(sample)) = (setting("voice.tts.samples"), setting("voice.tts.sample")) {
+        let reference = std::path::Path::new(&dir).join(sample);
+        if reference.is_file() {
+            command.arg("--ref").arg(reference);
+        }
+    }
     command
-        .arg(&script)
-        .arg("--port")
-        .arg(port.to_string())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());

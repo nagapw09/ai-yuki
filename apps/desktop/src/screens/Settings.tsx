@@ -2690,7 +2690,16 @@ export function DataTransfer() {
                   {count.table}: {count.rows}
                 </li>
               ))}
+            {summary.voices > 0 && (
+              <li className="settings__blocker">образцы голоса: {summary.voices}</li>
+            )}
           </ul>
+          <p className="settings__hint">
+            В копию входят история чата и образцы голоса. Сам голос (программа и
+            модель на несколько гигабайт) на новом компьютере ставится кнопкой
+            «Скачать и включить голос» в разделе «Голос»; модели персонажей и
+            движения переносятся копированием папки <code>companions</code>.
+          </p>
 
           {summary.secretsToReenter.length > 0 && (
             /* Список показывается и при экспорте, и при импорте: человек
@@ -2719,7 +2728,9 @@ export function DataTransfer() {
 
                   const result = await backupImport(path, 'merge')
                   setSummary(result)
-                  return 'данные дополнены из копии'
+                  // История чата восстановлена в хранилище окна — перечитываем её.
+                  if (result.chat) setTimeout(() => window.location.reload(), 1500)
+                  return 'данные дополнены из копии' + (result.voices ? ` · образцов голоса: ${result.voices}` : '')
                 })
               }
             >
@@ -2737,7 +2748,9 @@ export function DataTransfer() {
 
                   const result = await backupImport(path, 'replace')
                   setSummary(result)
-                  return 'данные заменены копией'
+                  // История чата восстановлена в хранилище окна — перечитываем её.
+                  if (result.chat) setTimeout(() => window.location.reload(), 1500)
+                  return 'данные заменены копией' + (result.voices ? ` · образцов голоса: ${result.voices}` : '')
                 })
               }
             >

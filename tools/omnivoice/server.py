@@ -46,11 +46,11 @@ WARM = [
 ]
 
 
-def setup(ref: str, steps: int):
+def setup(ref: str, steps: int, model_path: str = "k2-fsa/OmniVoice"):
     from omnivoice import OmniVoice
 
     device = "cuda:0" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
-    _state["model"] = OmniVoice.from_pretrained("k2-fsa/OmniVoice", device_map=device)
+    _state["model"] = OmniVoice.from_pretrained(model_path, device_map=device)
     _state["ref"] = ref
     _state["steps"] = steps
     model = _state["model"]
@@ -170,11 +170,16 @@ def main():
     parser.add_argument("--port", type=int, default=9880)
     parser.add_argument("--ref", default=r"C:\Users\alex\Documents\Yuki\voices\mita.wav")
     parser.add_argument("--steps", type=int, default=32, help="шаги генерации: меньше — быстрее, но тараторит")
+    parser.add_argument("--model", default="k2-fsa/OmniVoice", help="папка модели или её имя на Hugging Face")
     args, _ = parser.parse_known_args()
-    setup(args.ref, args.steps)
-    synthesize("Привет.", None)  # прогрев
+    setup(args.ref, args.steps, args.model)
+    # Прогрев, только если образец есть: на свежей установке его ещё нет,
+    # а сервис должен подняться и ответить понятной ошибкой, а не упасть.
+    if os.path.isfile(args.ref):
+        synthesize("Привет.", None)
     # Отклики — в фоне: сервис уже отвечает, пока они готовятся.
-    threading.Thread(target=lambda: [synthesize(t, None) for t in WARM], daemon=True).start()
+    if os.path.isfile(args.ref):
+        threading.Thread(target=lambda: [synthesize(t, None) for t in WARM], daemon=True).start()
     # Только петлевой адрес: голос не должен быть доступен соседям по сети.
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"OmniVoice готов: http://127.0.0.1:{args.port}/tts", flush=True)

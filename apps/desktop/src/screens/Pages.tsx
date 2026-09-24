@@ -17,6 +17,7 @@ import {
   LocalSpeech, PersonaSection, Permissions, Privacy, Providers, Remote, Speech, SystemSection,
   Updates, Voice, WakeWord,
 } from './Settings'
+import { VoiceInstaller } from './VoiceInstaller'
 import { VoiceSetup } from './VoiceSetup'
 import './Settings.css'
 
@@ -33,7 +34,7 @@ export function VoicePage() {
   return <SectionPage page="voice" sections={[
     { id: 'wake', label: 'Как позвать', render: () => <><WakeWord /><Voice /><Hotkey /></> },
     { id: 'stt', label: 'Распознавание', render: () => <><LocalSpeech /><VoiceSetup /></> },
-    { id: 'tts', label: 'Голос Yuki', render: () => <Speech /> },
+    { id: 'tts', label: 'Голос Yuki', render: () => <><VoiceInstaller /><Speech /></> },
   ]} />
 }
 
