@@ -2,6 +2,7 @@ import { listen } from '@tauri-apps/api/event'
 import { useCallback, useEffect, useState } from 'react'
 
 import { initTriggers } from './agent/commands'
+import { startAnnouncer } from './agent/announce'
 import { startProactive } from './agent/proactiveLoop'
 import { resumeInterrupted, sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
@@ -51,6 +52,7 @@ export function App() {
     // приложению работать: без триггеров команды остаются доступны вручную.
     if (isTauri()) void initTriggers().catch(() => undefined)
     if (isTauri()) startProactive()
+    if (isTauri()) startAnnouncer()
     if (isTauri()) resumeInterrupted()
   }, [])
 

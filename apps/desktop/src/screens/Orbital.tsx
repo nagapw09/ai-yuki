@@ -137,6 +137,8 @@ function RatesBlock(){
 /** Ключ дорожки: смена любого из полей означает, что играет уже другое. */
 const trackKey=(t:NowPlaying)=>`${t.title}|${t.artist}|${t.source}|${Math.round(t.duration)}`
 
+const GRACE_MS=5000
+
 function NowPlayingCard(){
   const [track,setTrack]=useState<NowPlaying|null>(null),[note,setNote]=useState('')
   // Время считает свой ход от последней сверки с плеером, а не складывается из
@@ -145,7 +147,12 @@ function NowPlayingCard(){
   const anchor=useRef<{pos:number;at:number;key:string}|null>(null)
   const [shown,setShown]=useState(0)
 
+  // При переключении дорожки плеер на секунду-другую пропадает из медиасессий
+  // Windows. Карточку в это время держим: иначе она мигает на каждом «вперёд».
+  const lastSeen=useRef(0)
   const apply=useCallback((next:NowPlaying)=>{
+    if(!next.available&&performance.now()-lastSeen.current<GRACE_MS)return
+    if(next.available)lastSeen.current=performance.now()
     setTrack(next)
     const key=trackKey(next)
     const base=anchor.current
