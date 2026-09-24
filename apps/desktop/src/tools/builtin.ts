@@ -122,6 +122,24 @@ const setVolume: Tool = {
   execute: (input) => bridge.setVolume((input as { level: number }).level),
 }
 
+const setMute: Tool = {
+  id: 'set_mute',
+  name: 'Звук вкл/выкл',
+  description:
+    'Включает или выключает звук (режим «без звука» Windows), не меняя громкость. ' +
+    'muted = true — выключить, false — включить. Если громкость была нулевой, включение ставит 50 %.',
+  permissions: [],
+  risk: 'low',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: { muted: { type: 'boolean' } },
+    required: ['muted'],
+    additionalProperties: false,
+  },
+  execute: (input) => bridge.setMuted((input as { muted: boolean }).muted),
+}
+
 // ── Аватар (ТЗ §12) ─────────────────────────────────────────────────────────────
 
 /**
@@ -649,6 +667,7 @@ export const BUILTIN_TOOLS: readonly Tool[] = [
   focusWindow,
   systemInfo,
   setVolume,
+  setMute,
   avatarAnimate,
   avatarPlace,
   fileSearch,

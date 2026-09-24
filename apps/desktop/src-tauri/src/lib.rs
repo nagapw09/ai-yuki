@@ -150,6 +150,7 @@ pub fn run() {
             commands::system_info,
             commands::get_volume,
             commands::set_volume,
+            commands::set_muted,
             // файлы (ТЗ §8)
             commands::file_search,
             commands::file_read_text,

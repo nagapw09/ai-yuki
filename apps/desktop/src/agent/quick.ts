@@ -66,6 +66,7 @@ export type Intent =
   | { kind: 'open'; tool: 'open_app' | 'open_url'; target: string; label: string }
   | { kind: 'media'; action: 'pause' | 'play' | 'next' | 'previous' }
   | { kind: 'volume'; level: number }
+  | { kind: 'mute'; muted: boolean }
   | { kind: 'avatar'; action: string; reply: string }
   | { kind: 'time' }
   | { kind: 'show'; visible: boolean }
@@ -86,22 +87,25 @@ export function recognize(raw: string): Intent | null {
 
   if (/^(стоп|хватит|замолчи|помолчи|тихо|перестань|отмена|отмени)$/.test(text)) return { kind: 'stop' }
 
-  const open = /^(открой|запусти|включи)\s+(.+)$/.exec(text)
-  if (open) {
-    const app = APPS[open[2]!]
-    // Незнакомое имя модели виднее: «включи музыку» — это не приложение «музыку».
-    if (app) return { kind: 'open', ...app }
-    return null
-  }
-
+  // Звук и плеер — раньше «открой/включи»: иначе «включи звук» и «включи
+  // музыку» разбирались как запуск программы «звук» и уходили модели.
   if (/^(пауза|поставь на паузу|останови музыку|стоп музыка|выключи музыку)$/.test(text)) return { kind: 'media', action: 'pause' }
   if (/^(продолжи|играй|включи музыку|продолжи музыку|сними с паузы)$/.test(text)) return { kind: 'media', action: 'play' }
   if (/^(следующий трек|следующая песня|дальше|следующий|переключи трек)$/.test(text)) return { kind: 'media', action: 'next' }
   if (/^(предыдущий трек|предыдущая песня|назад|верни трек)$/.test(text)) return { kind: 'media', action: 'previous' }
 
-  if (/^(выключи звук|без звука)$/.test(text)) return { kind: 'volume', level: 0 }
+  if (/^(выключи звук|без звука|убери звук|отключи звук)$/.test(text)) return { kind: 'mute', muted: true }
+  if (/^(включи звук|верни звук|звук включи)$/.test(text)) return { kind: 'mute', muted: false }
   const volume = /^(?:громкость|звук|сделай звук|поставь громкость)\s*(?:на)?\s*(\d{1,3})\s*(?:%|процент\S*)?$/.exec(text)
   if (volume) return { kind: 'volume', level: Math.min(100, Number(volume[1])) / 100 }
+
+  const open = /^(открой|запусти|включи)\s+(.+)$/.exec(text)
+  if (open) {
+    const app = APPS[open[2]!]
+    // Незнакомое имя модели виднее: «включи что-нибудь спокойное» — не программа.
+    if (app) return { kind: 'open', ...app }
+    return null
+  }
 
   if (/^(который час|сколько времени|сколько сейчас времени)$/.test(text)) return { kind: 'time' }
 
@@ -188,7 +192,13 @@ export async function tryQuick(said: string): Promise<string | null> {
       return ''
     case 'volume': {
       if (!(await runTool('set_volume', { level: intent.level }))) return null
-      const reply = intent.level === 0 ? 'Звук выключен.' : `Громкость ${Math.round(intent.level * 100)}.`
+      const reply = `Громкость ${Math.round(intent.level * 100)}.`
+      record(said, reply)
+      return reply
+    }
+    case 'mute': {
+      if (!(await runTool('set_mute', { muted: intent.muted }))) return null
+      const reply = intent.muted ? 'Звук выключен.' : 'Звук включён.'
       record(said, reply)
       return reply
     }

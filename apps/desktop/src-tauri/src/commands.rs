@@ -66,6 +66,20 @@ pub fn set_volume(state: State<'_, AppState>, level: f32) -> Result<(), String> 
     state.adapters.system.set_volume(level).map_err(err)
 }
 
+/// Включает или выключает звук, не трогая уровень громкости.
+///
+/// Включая звук при нулевой громкости, ставит половину: иначе «включи звук»
+/// снимало бы крестик, а слышно всё равно ничего не было бы.
+#[tauri::command]
+pub fn set_muted(state: State<'_, AppState>, muted: bool) -> Result<(), String> {
+    let system = &state.adapters.system;
+    system.set_muted(muted).map_err(err)?;
+    if !muted && system.volume().map_err(err)? < 0.02 {
+        system.set_volume(0.5).map_err(err)?;
+    }
+    Ok(())
+}
+
 // ── Файлы (ТЗ §8, §30) ──────────────────────────────────────────────────────────
 
 #[tauri::command]

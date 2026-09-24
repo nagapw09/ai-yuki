@@ -289,8 +289,22 @@ impl SystemAdapter for WindowsAdapter {
         unsafe {
             endpoint
                 .SetMasterVolumeLevelScalar(level, std::ptr::null::<GUID>())
-                .map_err(platform_err)
+                .map_err(platform_err)?;
+            // «Громкость 50» при включённом «без звука» ничего не меняла на слух:
+            // уровень ставился, крестик оставался. Кто просит громкость выше нуля,
+            // хочет слышать.
+            if level > 0.0 {
+                endpoint
+                    .SetMute(false, std::ptr::null::<GUID>())
+                    .map_err(platform_err)?;
+            }
+            Ok(())
         }
+    }
+
+    fn set_muted(&self, muted: bool) -> SystemResult<()> {
+        let endpoint = audio_endpoint()?;
+        unsafe { endpoint.SetMute(muted, std::ptr::null::<GUID>()).map_err(platform_err) }
     }
 
     fn volume(&self) -> SystemResult<f32> {

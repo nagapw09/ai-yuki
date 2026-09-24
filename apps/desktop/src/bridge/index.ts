@@ -118,6 +118,8 @@ export const activeWindow = () => invoke<WindowInfo | null>('active_window')
 export const systemInfo = () => invoke<SystemInfo>('system_info')
 export const getVolume = () => invoke<number>('get_volume')
 export const setVolume = (level: number) => invoke<void>('set_volume', { level })
+/** Режим «без звука» — отдельно от уровня громкости. */
+export const setMuted = (muted: boolean) => invoke<void>('set_muted', { muted })
 
 // ── Файлы (ТЗ §8) ───────────────────────────────────────────────────────────────
 

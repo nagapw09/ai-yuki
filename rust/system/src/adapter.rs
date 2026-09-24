@@ -33,6 +33,12 @@ pub trait SystemAdapter: Send + Sync {
     /// Текущая громкость системного вывода, 0.0–1.0.
     fn volume(&self) -> SystemResult<f32>;
 
+    /// Режим «без звука» — отдельный от уровня громкости: у Windows можно
+    /// выставить 50 % и всё равно ничего не слышать.
+    fn set_muted(&self, _muted: bool) -> SystemResult<()> {
+        Err(crate::SystemError::Unsupported("режим «без звука»"))
+    }
+
     /// Сводка о системе.
     fn system_info(&self) -> SystemResult<SystemInfo>;
 }

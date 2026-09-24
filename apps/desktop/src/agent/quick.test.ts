@@ -17,6 +17,9 @@ describe('быстрые команды', () => {
     expect(recognize('Станцуй, пожалуйста')).toMatchObject({ kind: 'avatar', action: 'builtin:dance' })
     expect(recognize('Который час?')).toEqual({ kind: 'time' })
     expect(recognize('Появись!')).toEqual({ kind: 'show', visible: true })
+    expect(recognize('Включи звук')).toEqual({ kind: 'mute', muted: false })
+    expect(recognize('выключи звук')).toEqual({ kind: 'mute', muted: true })
+    expect(recognize('Включи музыку')).toEqual({ kind: 'media', action: 'play' })
     expect(recognize('спрячься')).toEqual({ kind: 'show', visible: false })
   })
 
