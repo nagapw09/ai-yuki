@@ -118,6 +118,20 @@ export const activeWindow = () => invoke<WindowInfo | null>('active_window')
 export const systemInfo = () => invoke<SystemInfo>('system_info')
 export const getVolume = () => invoke<number>('get_volume')
 export const setVolume = (level: number) => invoke<void>('set_volume', { level })
+
+/** Документ частями с метками места: «стр. 3», «лист Продажи». */
+export interface DocumentPage {
+  kind: string
+  total: number
+  from: number
+  parts: { label: string; text: string }[]
+  more: boolean
+  note: string | null
+}
+export const documentRead = (path: string, from?: number) =>
+  invoke<DocumentPage>('document_read', { path, from: from ?? null })
+export const documentSearch = (path: string, query: string) =>
+  invoke<{ label: string; snippet: string; score: number }[]>('document_search', { path, query })
 /** Режим «без звука» — отдельно от уровня громкости. */
 export const setMuted = (muted: boolean) => invoke<void>('set_muted', { muted })
 

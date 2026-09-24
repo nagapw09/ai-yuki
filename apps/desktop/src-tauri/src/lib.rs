@@ -14,6 +14,7 @@ pub mod catalog;
 pub mod commands;
 pub mod companion;
 pub mod diagnostics;
+pub mod documents;
 pub mod everyday;
 pub mod hotkeys;
 pub mod memory;
@@ -242,6 +243,8 @@ pub fn run() {
             telegram::telegram_ask,
             voice_install::voice_install,
             voice_install::voice_install_status,
+            documents::document_read,
+            documents::document_search,
             // слово пробуждения (ТЗ §37)
             voice::wake_status,
             voice::wake_enroll_record,

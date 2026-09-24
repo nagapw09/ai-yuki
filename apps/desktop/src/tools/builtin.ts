@@ -289,8 +289,8 @@ const fileRead: Tool = {
   id: 'file_read_text',
   name: 'Прочитать файл',
   description:
-    'Читает текстовый файл в UTF-8. Для бинарных форматов (PDF, DOCX, изображения) ' +
-    'не подходит — вернётся ошибка.',
+    'Читает текстовый файл в UTF-8. Для PDF, Word и Excel есть read_document — ' +
+    'он разбирает их по страницам и листам.',
   permissions: ['files'],
   risk: 'low',
   idempotent: true,
@@ -301,6 +301,57 @@ const fileRead: Tool = {
     additionalProperties: false,
   },
   execute: (input) => bridge.fileReadText((input as { path: string }).path),
+}
+
+const readDocument: Tool = {
+  id: 'read_document',
+  name: 'Прочитать документ',
+  description:
+    'Читает PDF, Word (.docx), Excel (.xlsx/.xls/.ods) и текстовые файлы частями с метками ' +
+    'места: «стр. 3», «лист Продажи», «абзацы 1–40». Если more = true — есть продолжение, ' +
+    'проси с from = from + число частей. Отвечая по документу, называй место: «на стр. 2 ' +
+    'написано…». Если note говорит, что это скан — не выдумывай содержимое.',
+  permissions: ['files'],
+  risk: 'low',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Полный путь к файлу' },
+      from: { type: 'integer', minimum: 0, description: 'С какой части читать, по умолчанию 0' },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
+  execute: (input) => {
+    const { path, from } = input as { path: string; from?: number }
+    return bridge.documentRead(path, from)
+  },
+}
+
+const searchDocument: Tool = {
+  id: 'search_document',
+  name: 'Найти в документе',
+  description:
+    'Ищет в PDF, Word, Excel или тексте места, где встречаются слова запроса (учитывает ' +
+    'формы слов). Возвращает отрывки с меткой места. Для большого документа это быстрее, ' +
+    'чем читать целиком: сначала найди, потом дочитай нужную часть через read_document.',
+  permissions: ['files'],
+  risk: 'low',
+  idempotent: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Полный путь к файлу' },
+      query: { type: 'string', description: 'Что искать, обычными словами' },
+    },
+    required: ['path', 'query'],
+    additionalProperties: false,
+  },
+  execute: (input) => {
+    const { path, query } = input as { path: string; query: string }
+    return bridge.documentSearch(path, query)
+  },
 }
 
 const fileWrite: Tool = {
@@ -672,6 +723,8 @@ export const BUILTIN_TOOLS: readonly Tool[] = [
   avatarPlace,
   fileSearch,
   fileRead,
+  readDocument,
+  searchDocument,
   fileWrite,
   fileMove,
   fileDelete,
