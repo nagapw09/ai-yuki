@@ -5,6 +5,8 @@ import {
   memoryDelete,
   memoryList,
   memorySave,
+  settingGet,
+  settingSet,
   type MemoryKind,
   type MemoryRecord,
 } from '../bridge'
@@ -32,6 +34,11 @@ export function Memory() {
   const [records, setRecords] = useState<MemoryRecord[]>([])
   const [error, setError] = useState<string | null>(null)
   const [confirmingClear, setConfirmingClear] = useState(false)
+  const [auto, setAuto] = useState(true)
+
+  useEffect(() => {
+    void settingGet('memory.auto').then((v) => setAuto(v !== 'off')).catch(() => undefined)
+  }, [])
 
   const reload = useCallback(async () => {
     try {
@@ -55,9 +62,25 @@ export function Memory() {
           <div>
             <h2 className="memory__title">Память</h2>
             <p className="memory__hint">
-              Yuki запоминает только то, что сохранила явно. Любую запись можно
-              изменить или удалить — она хранится локально и никуда не отправляется.
+              Всё, что Yuki о вас помнит. Любую запись можно изменить или удалить —
+              память хранится на этом компьютере.
             </p>
+            <label className="memory__auto">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={auto}
+                onChange={(e) => {
+                  const on = e.target.checked
+                  setAuto(on)
+                  void settingSet('memory.auto', on ? 'on' : 'off')
+                }}
+              />
+              <span>
+                Запоминать самой — после разговора выбирает главное: имя, предпочтения,
+                любимые приложения. Разговор для этого проходит через подключённый ИИ.
+              </span>
+            </label>
           </div>
 
           {records.length > 0 &&

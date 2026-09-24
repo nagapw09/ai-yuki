@@ -187,3 +187,5 @@
   background: color-mix(in srgb, var(--accent-error) 14%, transparent);
   color: var(--accent-error);
 }
+.memory__auto{display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:13px;color:var(--text-muted,inherit);cursor:pointer;max-width:560px}
+.memory__auto input{margin-top:2px;accent-color:var(--accent,#7c6cf0)}

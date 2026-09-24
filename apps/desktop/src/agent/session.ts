@@ -28,6 +28,7 @@ import { useUiStore } from '../state/store'
 import { mcpTools } from '../tools/capabilities'
 import { ALL_TOOLS } from '../tools'
 import { tryRun } from './commands'
+import { scheduleMemorize } from './memorize'
 import { takeOffer } from './proactiveLoop'
 import { tryQuick } from './quick'
 import { moodStreamFilter, parseMood, REPLY_STYLE } from './reply'
@@ -408,6 +409,8 @@ async function performMessage(
     if (expression && !origin) void avatarPlay(`emotion:${expression}`).catch(() => undefined)
 
     chat.finishTurn(reply, outcome.messages)
+    // Разговор затихнет — из него выберется то, что стоит помнить (ТЗ §9).
+    scheduleMemorize(isTurnActive)
     ui.flashResult(outcome.completed ? 'success' : 'error')
 
     // Удалённую просьбу вслух не читаем: человека у компьютера нет, и говорить
