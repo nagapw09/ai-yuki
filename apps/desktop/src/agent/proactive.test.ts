@@ -77,3 +77,14 @@ describe('proactive', () => {
     expect(said).toEqual(['memory'])
   })
 })
+
+describe('battery', () => {
+  it('warns once below 15% until charged, even in fullscreen', () => {
+    const low = { battery: { percent: 12, charging: false }, quiet: true }
+    const first = step({ ...INITIAL, greetedDay: '2026-9-24' }, moment(at(15), low), [])
+    expect(first.nudge?.kind).toBe('battery')
+    expect(step(first.state, moment(at(15, 1), low), []).nudge).toBeNull()
+    const charged = step(first.state, moment(at(15, 2), { battery: { percent: 13, charging: true } }), []).state
+    expect(step(charged, moment(at(15, 3), low), []).nudge?.kind).toBe('battery')
+  })
+})

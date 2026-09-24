@@ -69,7 +69,7 @@ tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(windows)'.dependencies]
 yuki-windows = { workspace = true }
-windows = { version = "0.58", features = ["Foundation", "Foundation_Collections", "Media_Control", "Devices_Geolocation", "System_UserProfile", "Win32_System_Performance", "Win32_Graphics_Dxgi", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation", "Win32_UI_Shell"] }
+windows = { version = "0.58", features = ["Foundation", "Foundation_Collections", "Media_Control", "Devices_Geolocation", "System_UserProfile", "Win32_System_Performance", "Win32_Graphics_Dxgi", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation", "Win32_UI_Shell", "Win32_System_Power"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 yuki-macos = { workspace = true }

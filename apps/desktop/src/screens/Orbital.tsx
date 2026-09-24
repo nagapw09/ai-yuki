@@ -20,7 +20,11 @@ import { useUiStore } from '../state/store'
 import './Orbital.css'
 
 export interface OrbitalProps { onSubmit: (text: string) => void; onToggleVoice: () => void }
-interface Metrics { cpu:number|null; gpu:number|null; gpuName:string|null; gpus:{name:string;usage:number}[]; memoryUsed:number; memoryTotal:number }
+interface Metrics { cpu:number|null; gpu:number|null; gpuName:string|null; gpus:{name:string;usage:number}[]; memoryUsed:number; memoryTotal:number; netDown?:number; netUp?:number; battery?:{percent:number;charging:boolean;secondsLeft:number|null}|null }
+/** Байт в секунду → «1,2 МБ/с», «80 КБ/с». */
+export const speed=(n:number)=>n>=1048576?`${(n/1048576).toFixed(1).replace('.',',')} МБ/с`:`${Math.round(n/1024)} КБ/с`
+/** Остаток батареи: «2 ч 10 мин», «45 мин». */
+export const timeLeft=(s:number)=>{const h=Math.floor(s/3600),m=Math.round(s%3600/60);return h?`${h} ч ${m} мин`:`${m} мин`}
 const gb=(n:number)=>(n/1073741824).toFixed(1)
 /** «NVIDIA GeForce RTX 4060 Laptop GPU» → «RTX 4060». */
 const shortGpu=(name:string)=>name.replace(/\((R|TM)\)/g,'').replace(/\b(NVIDIA|Intel|AMD|GeForce|Graphics|Laptop|GPU)\b/g,'').replace(/\s+/g,' ').trim()||name
@@ -73,6 +77,11 @@ export function Orbital({ onToggleVoice }: OrbitalProps) {
       {gpus.length
         ?gpus.map((g,i)=><Gauge key={`${i}-${g.name}`} label="GPU" value={g.usage} note={shortGpu(g.name)} title={g.name}/>)
         :<Gauge label="GPU" value={metrics?.gpu??null} note={metrics?.gpuName?shortGpu(metrics.gpuName):undefined}/>}
+      {metrics?.battery&&<Gauge label="Батарея" value={metrics.battery.percent} note={metrics.battery.charging?'заряжается':metrics.battery.secondsLeft!=null?timeLeft(metrics.battery.secondsLeft):undefined}/>}
+      {metrics?.netDown!=null&&<div className="gauge gauge--net" title="Скорость сети: приём и отдача">
+        <div className="gauge__row"><span>Сеть</span><strong>↓ {speed(metrics.netDown)}</strong></div>
+        <div className="gauge__row gauge__row--sub"><span/><em>↑ {speed(metrics.netUp??0)}</em></div>
+      </div>}
     </aside>
 
     {wakeMissing&&<button className="home__wake" onClick={()=>setScreen('voice')}>Обращение «Юки» не записано — записать</button>}

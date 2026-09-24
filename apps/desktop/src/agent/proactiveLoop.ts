@@ -4,7 +4,9 @@
  * чате и голосом, когда голос включён.
  */
 
-import { avatarPlay, commandList, companionContext, settingGet, systemInfo } from '../bridge'
+import { invoke } from '@tauri-apps/api/core'
+
+import { avatarPlay, commandList, companionContext, settingGet } from '../bridge'
 import { useChatStore } from '../state/chatStore'
 import { useUiStore } from '../state/store'
 import { runById } from './commands'
@@ -42,7 +44,8 @@ async function tick(): Promise<void> {
 
   const [context, info, commands] = await Promise.all([
     companionContext().catch(() => null),
-    systemInfo().catch(() => null),
+    // Те же замеры, что на главной: память и батарея одним вызовом.
+    invoke<{ memoryUsed: number; memoryTotal: number; battery: { percent: number; charging: boolean } | null }>('system_metrics').catch(() => null),
     commandList().catch(() => []),
   ])
   if (!context) return
@@ -56,7 +59,8 @@ async function tick(): Promise<void> {
       quiet: context.quiet ?? false,
       // «listening» — покой в режиме имени, а не занятость.
       busy: isTurnActive() || orb === 'speaking' || orb === 'thinking' || orb === 'working',
-      memoryFree: info && info.totalMemoryBytes > 0 ? info.availableMemoryBytes / info.totalMemoryBytes : null,
+      memoryFree: info && info.memoryTotal > 0 ? 1 - info.memoryUsed / info.memoryTotal : null,
+      battery: info?.battery ?? null,
     },
     commands,
   )

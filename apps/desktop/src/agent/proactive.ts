@@ -22,6 +22,8 @@ export interface Moment {
   readonly busy: boolean
   /** Доля свободной памяти, 0…1; null — неизвестно. */
   readonly memoryFree: number | null
+  /** Батарея ноутбука; null — её нет. */
+  readonly battery?: { readonly percent: number; readonly charging: boolean } | null
 }
 
 export interface ProactiveState {
@@ -35,9 +37,11 @@ export interface ProactiveState {
   readonly lastBreak: number
   readonly lowMemoryTicks: number
   readonly lastMemory: number
+  /** Уже предупредила о батарее; сбрасывается зарядкой. */
+  readonly batteryWarned?: boolean
 }
 
-export type NudgeKind = 'morning' | 'welcome' | 'break' | 'late' | 'memory'
+export type NudgeKind = 'morning' | 'welcome' | 'break' | 'late' | 'memory' | 'battery'
 
 export interface Nudge {
   readonly kind: NudgeKind
@@ -131,12 +135,29 @@ export function step(
   const lowMemory = moment.memoryFree !== null && moment.memoryFree < MEMORY_LOW
   next = { ...next, lowMemoryTicks: lowMemory ? state.lowMemoryTicks + 1 : 0 }
 
+  const battery = moment.battery
+  if (battery && (battery.charging || battery.percent > 25)) next = { ...next, batteryWarned: false }
+
   const canSpeak = !moment.quiet && !moment.busy
   const rested = t - state.lastSpoken >= SPEAK_COOLDOWN
   const say = (nudge: Nudge, patch: Partial<ProactiveState>) => ({
     state: { ...next, ...patch, lastSpoken: nudge.text ? t : next.lastSpoken },
     nudge,
   })
+
+  // Батарея — даже в игре на весь экран: выключившийся ноутбук хуже, чем
+  // реплика посреди матча.
+  if (battery && !battery.charging && battery.percent <= 15 && !next.batteryWarned && !moment.busy) {
+    return {
+      state: { ...next, batteryWarned: true, lastSpoken: t },
+      nudge: {
+        kind: 'battery',
+        text: `Батарея садится — осталось ${battery.percent}%. Подключите зарядку.`,
+        motion: null,
+        offer: null,
+      },
+    }
+  }
 
   if (!canSpeak) return { state: next, nudge: null }
 

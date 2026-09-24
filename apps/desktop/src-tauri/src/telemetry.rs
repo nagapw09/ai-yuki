@@ -2,7 +2,7 @@
 use serde::Serialize;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use sysinfo::{Disks, System};
+use sysinfo::{Disks, Networks, System};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +18,19 @@ pub struct Metrics {
     memory_total: u64,
     sample_seconds: f64,
     disks: Vec<Disk>,
+    /// Байт в секунду за последний замер, все физические адаптеры вместе.
+    net_down: f64,
+    net_up: f64,
+    /// Нет у настольного компьютера — тогда `None`, и панель её не рисует.
+    battery: Option<Battery>,
+}
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Battery {
+    percent: u8,
+    charging: bool,
+    /// Сколько осталось по оценке Windows; при зарядке не известно.
+    seconds_left: Option<u32>,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +50,7 @@ struct Disk {
 struct Sampler {
     system: System,
     disks: Disks,
+    networks: Networks,
     last: Instant,
     cached: Option<Metrics>,
     #[cfg(windows)]
@@ -47,6 +61,7 @@ impl Sampler {
         Self {
             system: System::new(),
             disks: Disks::new_with_refreshed_list(),
+            networks: Networks::new_with_refreshed_list(),
             last: Instant::now(),
             cached: None,
             #[cfg(windows)]
@@ -66,6 +81,18 @@ impl Sampler {
         self.system.refresh_cpu_usage();
         self.system.refresh_memory();
         self.disks.refresh(true);
+        self.networks.refresh(true);
+        let seconds = self.last.elapsed().as_secs_f64().max(0.1);
+        // Виртуальные адаптеры Hyper-V/WSL пересылают тот же трафик ещё раз —
+        // с ними скорость удваивалась бы.
+        let (down, up) = self
+            .networks
+            .iter()
+            .filter(|(name, _)| {
+                let name = name.to_ascii_lowercase();
+                !name.contains("loopback") && !name.starts_with("vethernet") && !name.contains("wsl")
+            })
+            .fold((0u64, 0u64), |(d, u), (_, n)| (d + n.received(), u + n.transmitted()));
 
         // Пока счётчик Windows не прогрелся (первый замер), показываем расчёт
         // sysinfo, чтобы панель не висела с прочерком.
@@ -88,7 +115,10 @@ impl Sampler {
             .cloned();
 
         let value = Metrics {
-            sample_seconds: self.last.elapsed().as_secs_f64().max(0.1),
+            sample_seconds: seconds,
+            net_down: down as f64 / seconds,
+            net_up: up as f64 / seconds,
+            battery: battery(),
             cpu,
             gpu: busiest.as_ref().map(|g| g.usage),
             gpu_name: busiest.map(|g| g.name),
@@ -112,6 +142,28 @@ impl Sampler {
         value
     }
 }
+#[cfg(windows)]
+fn battery() -> Option<Battery> {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut status = SYSTEM_POWER_STATUS::default();
+    unsafe { GetSystemPowerStatus(&mut status) }.ok()?;
+    // 128 — батареи нет, 255 — неизвестно; процент 255 — тоже неизвестно.
+    if status.BatteryFlag & 128 != 0 || status.BatteryFlag == 255 || status.BatteryLifePercent > 100 {
+        return None;
+    }
+    Some(Battery {
+        percent: status.BatteryLifePercent,
+        charging: status.ACLineStatus == 1,
+        seconds_left: (status.BatteryLifeTime != u32::MAX && status.ACLineStatus != 1)
+            .then_some(status.BatteryLifeTime),
+    })
+}
+
+#[cfg(not(windows))]
+fn battery() -> Option<Battery> {
+    None
+}
+
 #[tauri::command]
 pub async fn system_metrics() -> Result<Metrics, String> {
     tauri::async_runtime::spawn_blocking(|| {
