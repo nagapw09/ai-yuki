@@ -29,7 +29,7 @@ import { mcpTools } from '../tools/capabilities'
 import { ALL_TOOLS } from '../tools'
 import { tryRun } from './commands'
 import { scheduleMemorize } from './memorize'
-import { takeOffer } from './proactiveLoop'
+import { propose, takeOffer } from './proactiveLoop'
 import { tryQuick } from './quick'
 import { moodStreamFilter, parseMood, REPLY_STYLE } from './reply'
 import { speakIfVoice } from './voice'
@@ -265,7 +265,62 @@ export async function sendMessage(text: string, origin?: RemoteOrigin): Promise<
     useUiStore.getState().setHeadline(message)
     useUiStore.getState().setOrbState(controller.signal.aborted ? 'idle' : 'error')
     return origin ? `Не получилось: ${message}` : null
-  } finally { if (activeTurn === controller) activeTurn = null }
+  } finally {
+    if (activeTurn === controller) activeTurn = null
+    markInterrupted(null)
+  }
+}
+
+// ── Прерванная просьба (ТЗ §32) ─────────────────────────────────────────────
+//
+// Если Yuki закрыли или она упала посреди хода, при следующем запуске она
+// напомнит о просьбе и спросит, повторить ли. Сама не повторяет: половина
+// действий могла уже выполниться, и второе «отправь привет» — это второй привет.
+
+const INTERRUPTED_KEY = 'yuki-turn-in-progress'
+/** Старше — уже неактуально: «открой почту» через сутки никому не нужно. */
+const INTERRUPTED_TTL = 60 * 60_000
+
+function markInterrupted(text: string | null): void {
+  try {
+    if (text) localStorage.setItem(INTERRUPTED_KEY, JSON.stringify({ text, at: Date.now() }))
+    else localStorage.removeItem(INTERRUPTED_KEY)
+  } catch {
+    // Без хранилища прерванная просьба просто забудется.
+  }
+}
+
+function takeInterrupted(): { text: string; at: number } | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(INTERRUPTED_KEY) ?? 'null') as { text: string; at: number } | null
+    localStorage.removeItem(INTERRUPTED_KEY)
+    return saved
+  } catch {
+    return null
+  }
+}
+
+/** Вызывается при запуске: была ли просьба, оборванная закрытием приложения. */
+export function resumeInterrupted(): void {
+  const saved = takeInterrupted()
+  if (!saved?.text || Date.now() - saved.at > INTERRUPTED_TTL) return
+
+  // Что успело выполниться — из последней реплики, если ход до неё дошёл.
+  const chat = useChatStore.getState()
+  const last = chat.entries.at(-1)
+  const done = last?.role === 'assistant' ? last.tools.filter((t) => t.state === 'ok').map((t) => t.label) : []
+  const text = saved.text
+  const note =
+    `Прошлая просьба прервалась: «${text.length > 80 ? `${text.slice(0, 80)}…` : text}».` +
+    (done.length ? ` Успела: ${done.join(', ')}.` : '') +
+    ' Повторить?'
+  chat.note(note)
+  useUiStore.getState().setHeadline(note)
+  // Час на ответ: человек мог запустить Yuki и отойти.
+  // «Да» само идёт ходом, а ходы по одному: повтор — сразу после него.
+  propose(async () => {
+    setTimeout(() => void sendMessage(text), 0)
+  }, INTERRUPTED_TTL)
 }
 
 async function performMessage(
@@ -295,6 +350,7 @@ async function performMessage(
   const ui = useUiStore.getState()
 
   chat.startTurn(text)
+  markInterrupted(origin ? null : text)
   ui.setOrbState('thinking')
   ui.setHeadline(null)
 

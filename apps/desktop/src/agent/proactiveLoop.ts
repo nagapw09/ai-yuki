@@ -21,7 +21,13 @@ const STATE_KEY = 'yuki-proactive'
 const OFFER_TTL = 2 * 60_000
 
 let started = false
-let offer: { id: string; name: string; until: number } | null = null
+/** Что Yuki предложила и что сделать на «да». */
+let offer: { run: () => Promise<unknown>; until: number } | null = null
+
+/** Предложение, на которое можно ответить «да» или «нет» в ближайшие минуты. */
+export function propose(run: () => Promise<unknown>, ttl = OFFER_TTL): void {
+  offer = { run, until: Date.now() + ttl }
+}
 
 function load(): ProactiveState {
   try {
@@ -74,7 +80,8 @@ async function deliver(nudge: Nudge): Promise<void> {
 
   useChatStore.getState().note(nudge.text)
   useUiStore.getState().setHeadline(nudge.text)
-  offer = nudge.offer ? { ...nudge.offer, until: Date.now() + OFFER_TTL } : null
+  const suggested = nudge.offer
+  offer = suggested ? { run: () => runById(suggested.id), until: Date.now() + OFFER_TTL } : null
   // После реплики голосом открывается окно разговора: «да» можно сказать без имени.
   await speakIfVoice(nudge.text)
 }
@@ -89,7 +96,7 @@ export async function takeOffer(text: string): Promise<boolean> {
   offer = null
   if (Date.now() > pending.until) return false
   if (isYes(text)) {
-    await runById(pending.id)
+    await pending.run()
     return true
   }
   if (/^(нет|не надо|не нужно|потом|позже)(?=$|[\s,.!])/i.test(text.trim())) {

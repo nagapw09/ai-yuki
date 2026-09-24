@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { initTriggers } from './agent/commands'
 import { startProactive } from './agent/proactiveLoop'
-import { sendMessage } from './agent/session'
+import { resumeInterrupted, sendMessage } from './agent/session'
 import { isVoiceActive, startVoice, stopVoice } from './agent/voice'
 import { startAvatarBroadcast } from './avatar/broadcast'
 import { startRemote } from './agent/remote'
@@ -51,6 +51,7 @@ export function App() {
     // приложению работать: без триггеров команды остаются доступны вручную.
     if (isTauri()) void initTriggers().catch(() => undefined)
     if (isTauri()) startProactive()
+    if (isTauri()) resumeInterrupted()
   }, [])
 
   // Постоянное прослушивание имени (ТЗ §37).
