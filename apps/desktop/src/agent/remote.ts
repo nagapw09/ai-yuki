@@ -83,6 +83,19 @@ let busy = false
 /** Вопросы «можно выполнить?», ждущие ответа с телефона, по чатам. */
 const waiting = new Map<string, (approved: boolean) => void>()
 
+/**
+ * Чаты, разрешившие всю текущую задачу разом.
+ *
+ * Доверие живёт до конца просьбы, а не навсегда: следующая просьба снова
+ * спросит. Иначе одно нажатие превратилось бы в бессрочный полный доступ.
+ */
+const trusted = new Set<string>()
+
+/** «да на всё», «на всю задачу» — согласие без вопросов до конца просьбы. */
+export function isYesToAll(text: string): boolean {
+  return /(на вс[её]|всю задачу|без вопросов)/i.test(text)
+}
+
 /** Сколько ждать ответа на телефоне, прежде чем отказаться от действия. */
 const CONFIRM_TIMEOUT_MS = 3 * 60 * 1000
 
@@ -93,6 +106,7 @@ export function isYes(text: string): boolean {
 }
 
 function askOnPhone(chatId: string, question: string): Promise<boolean> {
+  if (trusted.has(chatId)) return Promise.resolve(true)
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       waiting.delete(chatId)
@@ -112,9 +126,14 @@ async function handle(message: IncomingMessage): Promise<void> {
   // Ответ на «можно выполнить?» — это не новая просьба, а решение по текущей.
   const answer = waiting.get(message.chatId)
   if (answer) {
-    const approved = isYes(message.text)
+    const all = isYesToAll(message.text)
+    const approved = all || isYes(message.text)
+    if (all) trusted.add(message.chatId)
     answer(approved)
-    await telegramSend(message.chatId, approved ? 'Выполняю.' : 'Хорошо, не делаю.').catch(() => undefined)
+    await telegramSend(
+      message.chatId,
+      all ? 'Выполняю, больше не спрашиваю до конца задачи.' : approved ? 'Выполняю.' : 'Хорошо, не делаю.',
+    ).catch(() => undefined)
     return
   }
 
@@ -173,6 +192,7 @@ async function handle(message: IncomingMessage): Promise<void> {
     await telegramSend(message.chatId, `Не получилось: ${reason}`).catch(() => undefined)
   } finally {
     busy = false
+    trusted.delete(message.chatId)
   }
 }
 

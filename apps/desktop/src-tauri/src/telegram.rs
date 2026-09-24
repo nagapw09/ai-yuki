@@ -391,10 +391,15 @@ pub async fn telegram_ask(app: AppHandle, chat_id: String, text: String) -> Resu
         )
     };
     let keyboard = serde_json::json!({
-        "inline_keyboard": [[
-            { "text": "✅ Да", "callback_data": "да" },
-            { "text": "❌ Нет", "callback_data": "нет" },
-        ]]
+        "inline_keyboard": [
+            [
+                { "text": "✅ Да", "callback_data": "да" },
+                { "text": "❌ Нет", "callback_data": "нет" },
+            ],
+            // Одно нажатие на всю задачу: «открой Telegram, найди, напиши»
+            // спрашивала бы на каждом шаге.
+            [{ "text": "✅ Да, на всю задачу", "callback_data": "да на всё" }],
+        ]
     });
     send_with(&client, &token, &chat_id, &text, Some(keyboard)).await
 }
