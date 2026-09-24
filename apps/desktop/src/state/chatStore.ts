@@ -146,8 +146,25 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
   partialize: (state) => {
     const recent = state.history.slice(-80)
     const start = recent.findIndex(message => message.role === 'user' && message.content.some(block => block.type === 'text'))
-    return { entries: state.entries.slice(-160), history: (start < 0 ? [] : recent.slice(start)).map(message => ({ ...message,
+    return { entries: state.entries.slice(-160), history: dropDangling(start < 0 ? [] : recent.slice(start)).map(message => ({ ...message,
       content: message.content.map(block => block.type === 'image' ? { type: 'text' as const, text: '[Изображение из предыдущего сеанса не сохранено.]' } : block),
     })) }
   },
 }))
+
+/**
+ * Убирает вызовы инструментов, на которые в истории нет ответа. Такие остаются
+ * от оборванного хода, и модель, увидев незаконченное дело, бросается его
+ * доделывать в ответ на совсем другую просьбу.
+ */
+export function dropDangling(history: Message[]): Message[] {
+  const answered = new Set<string>()
+  for (const message of history) {
+    for (const block of message.content) if (block.type === 'tool_result') answered.add(block.toolUseId)
+  }
+  return history.flatMap((message) => {
+    if (message.role !== 'assistant') return [message]
+    const content = message.content.filter((block) => block.type !== 'tool_use' || answered.has(block.id))
+    return content.length ? [{ ...message, content }] : []
+  })
+}

@@ -383,3 +383,7 @@
 .editor__list{flex:1;min-height:0;overflow:auto;padding:12px}
 .commands__sidebar>.commands__input{flex:0 0 auto;height:34px;margin:0 2px}
 .commands__detail>.empty{flex:1}
+.editor__schedule{display:flex;align-items:center;gap:4px}
+.editor__schedule input[type=time]{width:92px}
+.editor__day{height:28px;min-width:30px;padding:0 6px;border-radius:6px;border:1px solid var(--line-subtle);background:transparent;color:var(--text-muted,inherit);font:inherit;font-size:12px;cursor:pointer}
+.editor__day[data-active=true]{background:var(--accent,#7c6cf0);border-color:transparent;color:#fff}

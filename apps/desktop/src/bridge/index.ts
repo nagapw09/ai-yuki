@@ -1154,9 +1154,13 @@ export interface CommandRecord {
   id: string
   name: string
   description: string
-  triggerKind: 'phrase' | 'hotkey' | 'startup' | 'manual'
+  triggerKind: 'phrase' | 'hotkey' | 'startup' | 'manual' | 'schedule' | 'app'
   phrase: string | null
   hotkey: string | null
+  /** «ЧЧ:ММ|дни», дни 1–7 с понедельника; без дней — каждый день. */
+  schedule?: string | null
+  /** Имя программы: команда выполняется, когда появляется её окно. */
+  app?: string | null
   enabled: boolean
   /** Шаги программы; структура описана в @yuki/core. */
   steps: unknown[]

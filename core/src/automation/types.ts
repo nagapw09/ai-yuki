@@ -16,6 +16,10 @@ export type Trigger =
   | { readonly kind: 'hotkey'; readonly shortcut: string }
   /** При запуске приложения. */
   | { readonly kind: 'startup' }
+  /** По расписанию: «09:00|1,2,3,4,5» (см. schedule.ts). */
+  | { readonly kind: 'schedule'; readonly schedule: string }
+  /** Когда появляется окно программы. */
+  | { readonly kind: 'app'; readonly app: string }
   /** Только вручную, из списка команд. */
   | { readonly kind: 'manual' }
 

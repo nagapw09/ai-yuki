@@ -248,7 +248,10 @@ fn decode(value: Value, request: &ChatRequest, usage: Usage) -> AiResult<ChatRes
             ));
         }
         content.push(ContentBlock::ToolUse {
-            id: format!("cli-{}-{i}", request.messages.len()),
+            // Длина истории не годится в идентификатор: сохранённая история
+            // обрезается до 80 сообщений, и номера начинают повторяться, а
+            // API Anthropic отвергает запрос с одинаковыми id вызовов.
+            id: format!("cli-{}-{i}", unique_stamp()),
             name: call.name,
             input,
         });
@@ -516,6 +519,17 @@ impl Provider for CliProvider {
         }
         Ok(response)
     }
+}
+
+/// Метка, не повторяющаяся между вызовами: время в микросекундах плюс счётчик.
+fn unique_stamp() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let micros = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0);
+    format!("{micros:x}{:x}", COUNTER.fetch_add(1, Ordering::Relaxed))
 }
 
 #[cfg(test)]

@@ -45,7 +45,10 @@ const createCommand: Tool = {
     'без участия модели — мгновенно и без расхода токенов, поэтому в команду ' +
     'имеет смысл складывать то, что повторяется. ' +
     'trigger: phrase — запуск по фразе (укажи phrase), hotkey — по сочетанию ' +
-    '(укажи hotkey вида Ctrl+Alt+W), startup — при запуске Yuki, manual — только вручную. ' +
+    '(укажи hotkey вида Ctrl+Alt+W), schedule — по расписанию (укажи schedule вида ' +
+    '"09:00|1,2,3,4,5": время и дни недели 1–7 с понедельника, без дней — каждый день), ' +
+    'app — когда пользователь запускает программу (укажи app, например "Telegram"), ' +
+    'startup — при запуске Yuki, manual — только вручную. ' +
     'В шагах используй идентификаторы инструментов, которые у тебя есть; ' +
     'результат шага можно сохранить через saveAs и подставить дальше как {{имя}}.',
   permissions: [],
@@ -59,9 +62,11 @@ const createCommand: Tool = {
     properties: {
       name: { type: 'string' },
       description: { type: 'string' },
-      trigger: { type: 'string', enum: ['phrase', 'hotkey', 'startup', 'manual'] },
+      trigger: { type: 'string', enum: ['phrase', 'hotkey', 'schedule', 'app', 'startup', 'manual'] },
       phrase: { type: 'string' },
       hotkey: { type: 'string' },
+      schedule: { type: 'string' },
+      app: { type: 'string' },
       steps: { type: 'array', items: STEP_SCHEMA },
     },
     required: ['name', 'trigger', 'steps'],
@@ -71,9 +76,11 @@ const createCommand: Tool = {
     const args = input as {
       name: string
       description?: string
-      trigger: 'phrase' | 'hotkey' | 'startup' | 'manual'
+      trigger: 'phrase' | 'hotkey' | 'startup' | 'manual' | 'schedule' | 'app'
       phrase?: string
       hotkey?: string
+      schedule?: string
+      app?: string
       steps: unknown[]
     }
 
@@ -88,6 +95,8 @@ const createCommand: Tool = {
       triggerKind: args.trigger,
       phrase: args.phrase ?? null,
       hotkey: args.hotkey ?? null,
+      schedule: args.schedule ?? null,
+      app: args.app ?? null,
       enabled: true,
       steps: args.steps,
     })

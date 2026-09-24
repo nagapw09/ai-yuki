@@ -28,7 +28,7 @@ export interface CommandTemplate {
   readonly name: string
   /** Зачем это нужно — человеку, который выбирает из списка. */
   readonly description: string
-  readonly triggerKind: 'phrase' | 'hotkey' | 'startup' | 'manual'
+  readonly triggerKind: 'phrase' | 'hotkey' | 'startup' | 'manual' | 'schedule' | 'app'
   readonly phrase?: string
   /** Что стоит поправить после добавления. Пусто — можно пользоваться сразу. */
   readonly adjust?: string

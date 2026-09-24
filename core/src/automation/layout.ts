@@ -19,6 +19,7 @@
  * проверялась бы только глазами на каждой сборке.
  */
 
+import { describeSchedule, parseSchedule } from './schedule'
 import type { Step, Trigger } from './types'
 import { listAt, type StepPath } from './tree'
 
@@ -241,6 +242,12 @@ export function triggerLabel(trigger: Trigger): string {
       return trigger.shortcut ? `Сочетание: ${trigger.shortcut}` : 'Сочетание не задано'
     case 'startup':
       return 'При запуске Yuki'
+    case 'schedule': {
+      const schedule = parseSchedule(trigger.schedule)
+      return schedule ? `По расписанию: ${describeSchedule(schedule)}` : 'Время не задано'
+    }
+    case 'app':
+      return trigger.app ? `Когда открыт ${trigger.app}` : 'Программа не задана'
     case 'manual':
       return 'Только вручную'
   }

@@ -7,6 +7,9 @@
  */
 
 import {
+  dayKey,
+  isDue,
+  parseSchedule,
   evaluate,
   type RunOutcome,
   matchCommand,
@@ -23,6 +26,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import {
   activityRecord,
   commandList,
+  listWindows,
   permissionsList,
   settingGet,
   type CommandRecord,
@@ -40,7 +44,11 @@ function toCommand(record: CommandRecord): Command {
         ? { kind: 'hotkey', shortcut: record.hotkey ?? '' }
         : record.triggerKind === 'startup'
           ? { kind: 'startup' }
-          : { kind: 'manual' }
+          : record.triggerKind === 'schedule'
+            ? { kind: 'schedule', schedule: record.schedule ?? '' }
+            : record.triggerKind === 'app'
+              ? { kind: 'app', app: record.app ?? '' }
+              : { kind: 'manual' }
 
   return {
     id: record.id,
@@ -210,4 +218,86 @@ export async function initTriggers(): Promise<void> {
       await execute(command).catch(() => undefined)
     }
   }
+
+  startWatchers()
+}
+
+// ── Расписание и запуск программ ────────────────────────────────────────────
+//
+// Оба триггера проверяются опросом, а не событиями ОС: раз в 15 секунд для
+// времени и раз в 5 секунд для окон — это копейки по сравнению с тем, что уже
+// делает голосовой цикл, зато без хуков в систему.
+
+const SCHEDULE_TICK = 15_000
+const APP_TICK = 5_000
+const LAST_RUN_KEY = 'yuki-command-schedule'
+
+let watching = false
+/** Программы, окна которых были на прошлом шаге: запуск — это появление. */
+let seenApps: Set<string> | null = null
+
+function lastRuns(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_RUN_KEY) ?? '{}') as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+function markRun(id: string, day: string): void {
+  try {
+    localStorage.setItem(LAST_RUN_KEY, JSON.stringify({ ...lastRuns(), [id]: day }))
+  } catch {
+    // Без хранилища команда может повториться после перезапуска — не страшно.
+  }
+}
+
+async function scheduleTick(): Promise<void> {
+  const now = new Date()
+  const runs = lastRuns()
+  for (const command of await loadCommands()) {
+    if (!command.enabled || command.trigger.kind !== 'schedule') continue
+    const schedule = parseSchedule(command.trigger.schedule)
+    if (!schedule || !isDue(schedule, now, runs[command.id] ?? null)) continue
+    // Отмечаем до выполнения: долгая команда не должна стартовать второй раз
+    // на следующем шаге опроса.
+    markRun(command.id, dayKey(now))
+    await execute(command).catch(() => undefined)
+  }
+}
+
+const normalizeApp = (name: string) => name.toLowerCase().replace(/\.exe$/, '').trim()
+
+async function appTick(): Promise<void> {
+  const commands = (await loadCommands()).filter(
+    (c) => c.enabled && c.trigger.kind === 'app' && c.trigger.app.trim(),
+  )
+  if (!commands.length) {
+    seenApps = null
+    return
+  }
+  const windows = await listWindows().catch(() => null)
+  if (!windows) return
+  const now = new Set(windows.map((w) => normalizeApp(w.appName)))
+  const before = seenApps
+  seenApps = now
+  // Первый опрос только запоминает, что уже открыто: программы, запущенные
+  // до Yuki, не должны разом запускать свои команды.
+  if (!before) return
+  for (const command of commands) {
+    if (command.trigger.kind !== 'app') continue
+    const app = normalizeApp(command.trigger.app)
+    const matches = (name: string) => name === app || name.includes(app)
+    const appeared = [...now].some(matches) && ![...before].some(matches)
+    if (appeared) await execute(command).catch(() => undefined)
+  }
+}
+
+function startWatchers(): void {
+  if (watching) return
+  watching = true
+  setInterval(() => void scheduleTick(), SCHEDULE_TICK)
+  setInterval(() => void appTick(), APP_TICK)
+  void scheduleTick()
+  void appTick()
 }

@@ -85,14 +85,14 @@ export function Commands() {
         </div>
         <input className="commands__input" aria-label="Поиск команд" placeholder="Поиск…" value={query} onChange={e => setQuery(e.target.value)} />
         <div className="commands__groups">
-          {(['phrase', 'hotkey', 'startup', 'manual'] as const).map(kind => {
+          {(['phrase', 'hotkey', 'schedule', 'app', 'startup', 'manual'] as const).map(kind => {
             const group = shown(kind)
             return group.length > 0 && <section key={kind}>
               <h3><span>{TRIGGER_LABEL[kind]}</span><b>{group.length}</b></h3>
               {group.map(c => <div className="commands__nav-row" data-selected={!library && editing?.id === c.id} key={c.id}>
                 <button onClick={() => { setLibrary(false); setEditing(c) }}>
                   <strong>{c.name || 'Без названия'}</strong>
-                  <small>{c.triggerKind === 'phrase' && c.phrase ? `«${c.phrase}» · ` : c.hotkey ? `${c.hotkey} · ` : ''}{c.steps.length} действ.</small>
+                  <small>{navHint(c)}{c.steps.length} действ.</small>
                 </button>
                 <input type="checkbox" role="switch" className="commands__switch" aria-label={`Включить ${c.name}`} checked={c.enabled} onChange={e => void toggleEnabled(c, e.target.checked)} />
               </div>)}
@@ -148,6 +148,17 @@ const TRIGGER_LABEL: Record<CommandRecord['triggerKind'], string> = {
   hotkey: 'по сочетанию',
   startup: 'при запуске',
   manual: 'вручную',
+  schedule: 'по расписанию',
+  app: 'с программой',
+}
+
+/** Подсказка под названием в списке: фраза, сочетание, время или программа. */
+function navHint(c: CommandRecord): string {
+  if (c.triggerKind === 'phrase' && c.phrase) return `«${c.phrase}» · `
+  if (c.triggerKind === 'hotkey' && c.hotkey) return `${c.hotkey} · `
+  if (c.triggerKind === 'schedule' && c.schedule) return `${c.schedule.split('|')[0]} · `
+  if (c.triggerKind === 'app' && c.app) return `${c.app} · `
+  return ''
 }
 
 
@@ -274,9 +285,24 @@ function Editor({
         >
           <option value="phrase">По фразе</option>
           <option value="hotkey">По сочетанию</option>
+          <option value="schedule">По расписанию</option>
+          <option value="app">При запуске программы</option>
           <option value="startup">При запуске Yuki</option>
           <option value="manual">Только вручную</option>
         </select>
+        {draft.triggerKind === 'schedule' && (
+          <ScheduleInput value={draft.schedule ?? ''} onChange={(schedule) => setDraft({ ...draft, schedule })} />
+        )}
+        {draft.triggerKind === 'app' && (
+          <input
+            className="commands__input"
+            aria-label="Программа"
+            value={draft.app ?? ''}
+            onChange={(e) => setDraft({ ...draft, app: e.target.value })}
+            placeholder="Имя программы, например Telegram"
+            spellCheck={false}
+          />
+        )}
         {draft.triggerKind === 'phrase' && (
           <input
             className="commands__input"
@@ -499,9 +525,51 @@ function triggerOf(command: CommandRecord): Trigger {
       return { kind: 'hotkey', shortcut: command.hotkey ?? '' }
     case 'startup':
       return { kind: 'startup' }
+    case 'schedule':
+      return { kind: 'schedule', schedule: command.schedule ?? '' }
+    case 'app':
+      return { kind: 'app', app: command.app ?? '' }
     default:
       return { kind: 'manual' }
   }
+}
+
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+
+/** Время и дни недели; без отмеченных дней — каждый день. */
+function ScheduleInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [time = '', days = ''] = value.split('|')
+  const picked = new Set(days.split(',').filter(Boolean).map(Number))
+  const emit = (nextTime: string, nextDays: Set<number>) =>
+    onChange(nextDays.size ? `${nextTime}|${[...nextDays].sort().join(',')}` : nextTime)
+  return (
+    <span className="editor__schedule">
+      <input
+        type="time"
+        className="commands__input"
+        aria-label="Время"
+        value={time}
+        onChange={(e) => emit(e.target.value, picked)}
+      />
+      {WEEKDAYS.map((label, i) => (
+        <button
+          key={label}
+          type="button"
+          className="editor__day"
+          data-active={picked.has(i + 1)}
+          aria-pressed={picked.has(i + 1)}
+          onClick={() => {
+            const next = new Set(picked)
+            if (next.has(i + 1)) next.delete(i + 1)
+            else next.add(i + 1)
+            emit(time, next)
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </span>
+  )
 }
 
 function describe(error: unknown): string {
